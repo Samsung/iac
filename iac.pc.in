@@ -1,0 +1,15 @@
+# IAC reference implementation pkg-config file
+
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: IAC
+Description: Immersive audio codec
+Version: @VERSION@
+Requires:
+Conflicts:
+Libs: -L${libdir} -liac
+Cflags: -I${includedir}/iac
+

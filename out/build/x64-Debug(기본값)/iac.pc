@@ -1,0 +1,15 @@
+# IAC reference implementation pkg-config file
+
+prefix=E:/0_Project_2022/요청/OSG/iac_code/out/install/x64-Debug(기본값)
+exec_prefix=E:/0_Project_2022/요청/OSG/iac_code/out/install/x64-Debug(기본값)
+libdir=E:/0_Project_2022/요청/OSG/iac_code/out/install/x64-Debug(기본값)/lib
+includedir=E:/0_Project_2022/요청/OSG/iac_code/out/install/x64-Debug(기본값)/include
+
+Name: IAC
+Description: Immersive audio codec
+Version: 
+Requires:
+Conflicts:
+Libs: -LE:/0_Project_2022/요청/OSG/iac_code/out/install/x64-Debug(기본값)/lib -liac
+Cflags: -IE:/0_Project_2022/요청/OSG/iac_code/out/install/x64-Debug(기본값)/include/iac
+

@@ -1,0 +1,15 @@
+# ASC and HEQ reference implementation pkg-config file
+# dmpd
+
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: dmpd
+Description: dmpd
+Version: @VERSION@
+Requires:
+Conflicts:
+Libs: -L${libdir} -lasc -lheq
+Cflags: -I${includedir}/iac

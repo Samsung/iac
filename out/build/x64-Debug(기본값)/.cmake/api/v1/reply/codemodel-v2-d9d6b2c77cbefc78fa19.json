@@ -1,0 +1,228 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1
+					],
+					"hasInstallRule" : true,
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.1"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						3
+					]
+				},
+				{
+					"build" : "src/iac_enc/dmpd",
+					"childIndexes" : 
+					[
+						2,
+						6
+					],
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.1"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 1,
+					"source" : "src/iac_enc/dmpd"
+				},
+				{
+					"build" : "src/iac_enc/dmpd/asc",
+					"childIndexes" : 
+					[
+						3
+					],
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.1"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 2,
+					"source" : "src/iac_enc/dmpd/asc",
+					"targetIndexes" : 
+					[
+						0
+					]
+				},
+				{
+					"build" : "src/iac_enc/dmpd/asc/3rdparty",
+					"childIndexes" : 
+					[
+						4,
+						5
+					],
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.1"
+					},
+					"parentIndex" : 2,
+					"projectIndex" : 2,
+					"source" : "src/iac_enc/dmpd/asc/3rdparty"
+				},
+				{
+					"build" : "src/iac_enc/dmpd/asc/3rdparty/decimate",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.1"
+					},
+					"parentIndex" : 3,
+					"projectIndex" : 2,
+					"source" : "src/iac_enc/dmpd/asc/3rdparty/decimate",
+					"targetIndexes" : 
+					[
+						1
+					]
+				},
+				{
+					"build" : "src/iac_enc/dmpd/asc/3rdparty/stft",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.1"
+					},
+					"parentIndex" : 3,
+					"projectIndex" : 2,
+					"source" : "src/iac_enc/dmpd/asc/3rdparty/stft",
+					"targetIndexes" : 
+					[
+						4
+					]
+				},
+				{
+					"build" : "src/iac_enc/dmpd/heq",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.1"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 3,
+					"source" : "src/iac_enc/dmpd/heq",
+					"targetIndexes" : 
+					[
+						2
+					]
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"childIndexes" : 
+					[
+						1
+					],
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "iac",
+					"targetIndexes" : 
+					[
+						3
+					]
+				},
+				{
+					"childIndexes" : 
+					[
+						2,
+						3
+					],
+					"directoryIndexes" : 
+					[
+						1
+					],
+					"name" : "dmpd",
+					"parentIndex" : 0
+				},
+				{
+					"directoryIndexes" : 
+					[
+						2,
+						3,
+						4,
+						5
+					],
+					"name" : "asc",
+					"parentIndex" : 1,
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						4
+					]
+				},
+				{
+					"directoryIndexes" : 
+					[
+						6
+					],
+					"name" : "heq",
+					"parentIndex" : 1,
+					"targetIndexes" : 
+					[
+						2
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 2,
+					"id" : "asc::@720b894d01711e8fb2d1",
+					"jsonFile" : "target-asc-Debug-5854930632ccb8604a70.json",
+					"name" : "asc",
+					"projectIndex" : 2
+				},
+				{
+					"directoryIndex" : 4,
+					"id" : "decimate::@9d2c7deaccce33098626",
+					"jsonFile" : "target-decimate-Debug-1e2ff3ecdd319b562bf1.json",
+					"name" : "decimate",
+					"projectIndex" : 2
+				},
+				{
+					"directoryIndex" : 6,
+					"id" : "heq::@852aaa5f96a1acb1a0a3",
+					"jsonFile" : "target-heq-Debug-730cfffe918f8ea3f485.json",
+					"name" : "heq",
+					"projectIndex" : 3
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "iac::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-iac-Debug-18fa68fac40118abb4ce.json",
+					"name" : "iac",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 5,
+					"id" : "stft::@2de9f730ccc862e2a7b1",
+					"jsonFile" : "target-stft-Debug-6ab969b7ed122092e50a.json",
+					"name" : "stft",
+					"projectIndex" : 2
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "E:/0_Project_2022/요청/OSG/iac_code/out/build/x64-Debug(기본값)",
+		"source" : "E:/0_Project_2022/요청/OSG/iac_code"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 1
+	}
+}
