@@ -6,7 +6,7 @@
 #include <math.h>
 #include <string.h>
 #include "metadata_write.h"
-#include "opus_extension.h"
+#include "audio_defines.h"
 #include "opus_types.h"
 #include "scalable_format.h"
 
@@ -31,6 +31,8 @@ typedef struct {
   int16_t *up_input[CHANNEL_LAYOUT_UMAX];
   float *upmix[CHANNEL_LAYOUT_UMAX];
   int recon_gain_flag;
+  int frame_size;
+  int preskip_size;
 
   float last_sf1[12]; //312 last scalefactor
   float last_sfavg1[12]; //312 last average scalefactor
@@ -41,7 +43,7 @@ typedef struct {
   
   float last_sf[CHANNEL_LAYOUT_UMAX][12];
   float last_sfavg[CHANNEL_LAYOUT_UMAX][12];
-  float up_input_temp[MAX_CHANNELS][FRAME_SIZE];
+  //float up_input_temp[MAX_CHANNELS][FRAME_SIZE];
   float *ch_data[enc_channel_cnt];
   float *buffer[enc_channel_mixed_cnt];
   Mdhr mdhr_l;
@@ -53,12 +55,12 @@ typedef struct {
   int pre_layout;
   unsigned char scalable_map[CHANNEL_LAYOUT_UMAX][enc_channel_cnt];
 
-  float hanning[CHUNK_SIZE / 8];
-  float startWin[CHUNK_SIZE];
-  float stopWin[CHUNK_SIZE];
+  float *hanning;
+  float *startWin;
+  float *stopWin;
 }UpMixer;
 
-UpMixer * upmix_create(int recon_gain_flag, const unsigned char *channel_layout_map);
+UpMixer * upmix_create(int recon_gain_flag, const unsigned char *channel_layout_map, int frame_size, int preskip_size);
 //void upmix_push_buffer(UpMixer *um, unsigned char *ab2ch, unsigned char *tpq4ch, unsigned char *suv6ch);
 void upmix(UpMixer *um);
 void upmix2(UpMixer *um);

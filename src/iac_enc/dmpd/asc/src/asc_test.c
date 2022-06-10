@@ -25,7 +25,7 @@ void save_result(char* filename,int* result, int frame_num,int ori_frame_num,int
         char  ext[] = "_dmix.txt";
         char name[256]={0};
         strncpy(name,filename,sp-filename);
-        strcat(name,ext);
+        strncat(name,ext,strlen(ext));
         
         FILE* fp = fopen(name,"w+");
         int count = 0;
@@ -103,6 +103,7 @@ failure:
 
 int frame_based_process(IA_ASC *asc)
 {
+  int ret = 0;
   void *asc_estimator_feature = asc->asc_estimator_feature;
   float * data_fs = asc->data_fs;
 
@@ -123,6 +124,11 @@ int frame_based_process(IA_ASC *asc)
   uint32_t kernel_s = 5;
 
   float *featureBuffer = malloc(f_size*(kernel_s + 1)*sizeof(float));
+  if(!dout_asc_result||!featureBuffer)
+  {
+    ret = -1;
+    goto FAILED;
+  }
   memset(featureBuffer, 0, f_size*(kernel_s + 1)*sizeof(float));
 
 
@@ -212,11 +218,13 @@ int frame_based_process(IA_ASC *asc)
     // float thre_effect = 0.8;
     //dout_asc_result[i] = get_decision_part(out_asc_d_softmax[out_asc_result_d],out_asc_e_softmax[out_asc_result_e],out_asc_result_d,out_asc_result_e,thre_dialog,thre_effect);
     dout_asc_result[i - kernel_s] = fout_asc_result + 1;
+#ifndef DISABLE_DEBUG_LOG
     printf("frame %d  result %d total %d\n", i, dout_asc_result[i - kernel_s], frame_num);
+#endif
   }
 
   save_result2(asc->fp, dout_asc_result, frame_num, asc->ents, tile_factor);
-
+FAILED:
   if (NULL != sample_e) {
     free(sample_e);
     sample_e = NULL;
@@ -230,6 +238,7 @@ int frame_based_process(IA_ASC *asc)
     free(featureBuffer);
     featureBuffer = NULL;
   }
+  return ret;
 }
 
 

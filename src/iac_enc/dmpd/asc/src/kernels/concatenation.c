@@ -81,7 +81,7 @@ inline void Concatenation(ConcatenationParams* params,
   // Returns kTfLiteOk on success.
   TfLiteStatus Concatenation_Prepare(TfLiteContext* context, TfLiteNode* node)
   {
-      
+    return kTfLiteOk;      
   }
 
   // Execute the node (should read node->inputs and output to node->outputs).
@@ -105,6 +105,7 @@ inline void Concatenation(ConcatenationParams* params,
               *output_ptr++ = input->data.f[j];
           }
       }
+      return kTfLiteOk;
   }
 
   TfLiteRegistration* Register_CONCATENATION() {

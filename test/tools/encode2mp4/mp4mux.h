@@ -26,9 +26,11 @@ typedef struct
 #define MAX_CHANNELS 12
 #endif
 
-#ifndef CHUNK_SIZE
-#define CHUNK_SIZE  960
-#endif
+typedef enum {
+  CODEC_OPUS,
+  CODEC_AAC,
+  CODEC_MAX
+} CODEC_TYPE;
 
 // immersive audio option for flags
 #define IA_MOV_FLAG_RTP_HINT              (1 <<  0)
@@ -157,7 +159,7 @@ typedef struct
       uint32_t coupled_substream_count;
       uint32_t channel_mapping[MAX_CHANNELS];
       uint32_t demixing_matrix[DEMIXING_MATRIX_SIZE_MAX];
-    }amb_layer_config; //AmbisonicsLayerConfiguration
+    }ambix_layer_config; //Ambisonics Layer Config
     struct
     {
       uint32_t loudspeaker_layout;
@@ -167,12 +169,13 @@ typedef struct
       uint32_t substream_count;
       uint32_t coupled_substream_count;
       int16_t loudness;
+      uint16_t output_gain_flags;
       int16_t output_gain;
-    }cha_layer_config[MAX_CHANNEL_LAYOUTS]; //ChannelAudioLayerConfiguration
+    }ch_audio_layer_config[MAX_CHANNEL_LAYOUTS]; //Channel Audio Layer Config
   }ia_static_meta;
   struct
   {
-    uint32_t dmixp_mode[8];
+    uint8_t dmixp_mode[8];
     uint32_t dmixp_mode_count;
     uint32_t dmixp_mode_ponter;// last mode
 
@@ -198,6 +201,8 @@ typedef struct
 	int num_audio_traks;
 	int audio_trak_select;
   int video_trak_select;
+
+  int codec_id;// 0:opus, 1:aac
 
   // below is for fragment mp4 writing.
   int flags; // mp4/fmp4

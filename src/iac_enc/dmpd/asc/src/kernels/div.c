@@ -18,7 +18,7 @@
   // Returns kTfLiteOk on success.
   TfLiteStatus Div_Prepare(TfLiteContext* context, TfLiteNode* node)
   {
-      
+    return kTfLiteOk; 
   }
 
   // Execute the node (should read node->inputs and output to node->outputs).
@@ -39,6 +39,7 @@
     {
       output->data.f[i] = input1->data.f[i]/input2->data.f[0];
     }
+    return kTfLiteOk;
   }
 
   TfLiteRegistration* Register_DIV() {

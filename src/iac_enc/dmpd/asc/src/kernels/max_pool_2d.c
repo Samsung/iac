@@ -155,7 +155,7 @@ TfLiteStatus MaxEval(TfLiteContext* context, TfLiteNode* node) {
   // Returns kTfLiteOk on success.
   TfLiteStatus Max_Pool_Prepare(TfLiteContext* context, TfLiteNode* node)
   {
-      
+    return kTfLiteOk;      
   }
 
   // Execute the node (should read node->inputs and output to node->outputs).
@@ -164,7 +164,7 @@ TfLiteStatus MaxEval(TfLiteContext* context, TfLiteNode* node) {
   {
       MaxEval(context,node);
       LOGE("Max_Pool_Eval\n");
-
+      return kTfLiteOk;
   }
 
   TfLiteRegistration* Register_MAX_POOL() {

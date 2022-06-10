@@ -82,6 +82,7 @@ void free_stft(struct trans *trans)
 struct trans *create_stft(int bins)
 {
 	struct stft *stft = (struct stft *)malloc(sizeof(struct stft));
+	if(!stft)return NULL;
 	stft->base.free = free_stft;
 	stft->base.slide = slide_stft;
 	stft->base.get = get_stft;
@@ -91,7 +92,6 @@ struct trans *create_stft(int bins)
 	stft->samples = samples;
 	stft->in = (float *)malloc(sizeof(float) * samples);
 	stft->tmp = (float *)malloc(sizeof(float) * samples);
-	memset(stft->in, 0, sizeof(float) * samples);
 #ifdef WIN32
 	stft->out = (fftwf_complex *)malloc(sizeof(fftwf_complex) * (bins + 1));
 #else
@@ -100,6 +100,8 @@ struct trans *create_stft(int bins)
 	stft->plan = fftwf_plan_dft_r2c_1d(samples, stft->tmp, stft->out, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 	//stft->plan = fftwf_plan_dft_r2c_1d(samples, stft->tmp, stft->out, FFTW_ESTIMATE | FFTW_UNALIGNED);
 	stft->win = (float *)malloc(sizeof(float) * samples);
+	if(!stft->in||!stft->tmp||!stft->out||!stft->win)goto FAILED;   
+	memset(stft->in, 0, sizeof(float) * samples);
 	float sum = 0.0f;
 	extern float hann_matrix[];
 	for (int i = 0; i < samples; i++) {
@@ -113,5 +115,18 @@ struct trans *create_stft(int bins)
 	//for (int i = 0; i < samples; i++)
 	//	stft->win[i] /= sum;
 	return (struct trans *)&(stft->base);
+FAILED:
+	if(stft->in)
+		free(stft->in);
+	if(stft->tmp)
+		free(stft->tmp);
+	if(stft->out)
+		free(stft->out);
+	if(stft->win)
+		free(stft->win);
+	if(stft)
+		free(stft);
+	return NULL;
+		
 }
 

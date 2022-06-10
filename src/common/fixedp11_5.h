@@ -17,6 +17,7 @@ double fixed_to_float(fixed16_t input, int frac);
 /// Converts between double and q16_t
 float q_to_float(q16_t q, int frac);
 q16_t float_to_q(float q, int frac);
+q16_t float_to_q2(float q, int frac);
 
 /// Converts between double and q8_t
 float qf_to_float(qf_t q, int frac);

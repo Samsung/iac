@@ -5,7 +5,7 @@
 #include "wavreader2.h"
 #include "wavwriter2.h"
 #include "stdio.h"
-#include "opus_extension.h"
+#include "audio_defines.h"
 #include "immersive_audio_encoder.h"
 
 typedef struct {

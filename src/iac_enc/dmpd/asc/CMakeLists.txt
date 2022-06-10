@@ -10,6 +10,8 @@ SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNDEBUG --std=c99 -g -fPIC")
 set(FLATCC_INCLUDE_DIR  "../../../../dep_external/include")
 set(FLATCC_LIB_DIR  "../../../../dep_external/lib")
 
+ADD_DEFINITIONS(-DDISABLE_DEBUG_LOG)
+
 set(sources
     src/common.c
 	src/util.c

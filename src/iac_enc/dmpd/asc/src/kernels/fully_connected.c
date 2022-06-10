@@ -92,7 +92,7 @@ TfLiteStatus FC_EvalFloat(TfLiteContext* context, TfLiteNode* node,
   // Returns kTfLiteOk on success.
   TfLiteStatus FC_Prepare(TfLiteContext* context, TfLiteNode* node)
   {
-      
+    return kTfLiteOk;  
   }
 
   // Execute the node (should read node->inputs and output to node->outputs).
@@ -112,7 +112,7 @@ TfLiteStatus FC_EvalFloat(TfLiteContext* context, TfLiteNode* node,
                                     bias, output);
     
     LOGE("FC_Eval\n");
-
+    return kTfLiteOk;
   }
 
   TfLiteRegistration* Register_FC() {

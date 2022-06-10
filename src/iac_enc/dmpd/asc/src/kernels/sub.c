@@ -19,7 +19,7 @@ void Sub_Free(TfLiteContext* context, void* buffer)
 TfLiteStatus Sub_Prepare(TfLiteContext* context, TfLiteNode* node)
 {
 
-    
+  return kTfLiteOk;   
 }
 
 // Execute the node (should read node->inputs and output to node->outputs).
@@ -49,6 +49,7 @@ TfLiteStatus Sub_Eval(TfLiteContext* context, TfLiteNode* node)
       }
 
     LOGE("Sub_Eval\n");
+    return kTfLiteOk;
 
 }
 

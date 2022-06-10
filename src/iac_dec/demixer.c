@@ -20,42 +20,32 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define _USE_MATH_DEFINES
 #include <math.h>
 
-#include "bitstreamrw.h"
 #include "demixer.h"
-#include "fixedp11_5.h"
 #include "immersive_audio_debug.h"
 #include "immersive_audio_decoder.h"
-#include "channel.h"
-#include "opus_extension.h"
+#include "immersive_audio_utils.h"
 
-#ifndef M_PI
-#define M_PI       3.14159265358979323846
+#ifdef IA_TAG
+#undef IA_TAG
 #endif
 
-#define MAX_MIXED_CHANNEL_NUM  4
-
-
-enum {
-    channel_mixed_s2_l,
-    channel_mixed_s2_r,
-    channel_mixed_s3_l,
-    channel_mixed_s3_r,
-    channel_mixed_s5_l,
-    channel_mixed_s5_r,
-    channel_mixed_s7_l,
-    channel_mixed_s7_r,
-    channel_mixed_h_l,
-    channel_mixed_h_r,
-    channel_mixed_cnt
-};
-
+#define IA_TAG "IADMX"
 
 typedef struct {
     float w_x;
     float w_z;
 } w_info;
+
+/**
+ * alpha and beta are gain values used for S7to5 down-mixer,
+ * gamma for T4to2 downmixer,
+ * delta for S5to3 down-mixer and
+ * w_idx_offset is the offset to generate a gain value w used for T2toTF2 down-mixer.
+ * */
 
 static struct DemixingTypeMat {
     float alpha;
@@ -75,27 +65,43 @@ static struct DemixingTypeMat {
 };
 
 struct Demixer {
-    float hanning[WINDOW_SIZE];
-    float startWin[FRAME_SIZE];
-    float stopWin[FRAME_SIZE];
-    int   last_dmixtypenum;
-    float last_weight_state_value_x_prev; // n-1 packet
-    float last_weight_state_value_x_prev2; // n-2 packet
-    int   cstep; // current step
+    float  *ch_data[IA_CH_COUNT];
+    int     last_dmixtypenum;
+    float   last_weight_state_value_x_prev; // n-1 packet
+    float   last_weight_state_value_x_prev2; // n-2 packet
 
-    float last_sf[channel_layout_type_count][MAX_MIXED_CHANNEL_NUM];
-    float last_sfavg[channel_layout_type_count][MAX_MIXED_CHANNEL_NUM];
-    float *ch_data[channel_cnt];
-    float buffer[channel_mixed_cnt*FRAME_SIZE];
+    int     frame_size;
+    int     skip;
+    float  *hanning_filter;
+    float  *start_window;
+    float  *stop_window;
+    float  *large_buffer;
+    float   ch_last_sf[IA_CH_COUNT];
+    float   ch_last_sfavg[IA_CH_COUNT];
+
+    IAChannelLayoutType     layout;
+    IAChannel               chs_in[IA_CH_LAYOUT_MAX_CHANNELS];
+    IAChannel               chs_out[IA_CH_LAYOUT_MAX_CHANNELS];
+    int                     chs_count;
+
+    struct {
+        struct {
+            IAChannel   ch;
+            float       gain;
+        }               ch_gain[IA_CH_LAYOUT_MAX_CHANNELS];
+        uint8_t         count;
+    }                   chs_gain_list;
+
+    int                 demixing_mode;
+    struct {
+        struct {
+            IAChannel   ch;
+            float       recon_gain;
+        }               ch_recon_gain[IA_CH_RE_COUNT];
+        uint8_t         count;
+        uint32_t        flags;
+    }                   chs_recon_gain_list;
 };
-
-
-typedef int (*DemixFunc)(Demixer*, DemixingParam*);
-typedef void (*EqualizeRMSFunc)(Demixer*, DemixingParam*);
-
-static void demixer_equalizeRMS(Demixer *this, uint32_t layout, int fs,
-        int count, int *channel, uint32_t scales);
-static void demixer_update_last_values(Demixer*, DemixingParam*);
 
 
 #define maxf(a,b) ((a) > (b)? (a):(b))
@@ -126,659 +132,579 @@ static w_info calc_w_v2(int weighttypenum, float w_x_prev)
 }
 
 
-static void gain_up(Demixer *this, int count, int *in, int *out,
-        int frame_size, float gain)
-{
-    int ich, och, i;
-
-    ia_logi("gain-up: count %d, frame size %d, gain %f",
-            count, frame_size, gain);
-    for (int c=0; c<count; ++c) {
-        ich = in[c];
-        och = out[c];
-
-        for (i = 0; i < frame_size; i++)
-            this->buffer[och * frame_size + i] = this->ch_data[ich][i] / gain;
-        this->ch_data[ich] = this->buffer + och * frame_size;
-
-        ia_logt("channel %s(%d) at %p, buffer at %p", get_channel_name(ich),
-                ich, this->ch_data[ich], this->buffer);
-    }
-}
-
-static void gain_up_h (Demixer *this, int frame_size, float g)
-{
-    static int htin[] = {channel_tl, channel_tr};
-    static int hin[] = {channel_hl, channel_hr};
-    int *in = 0;
-    int out[] = {channel_mixed_h_l, channel_mixed_h_r};
-
-    if (this->ch_data[channel_tl])
-        in = htin;
-    else if (this->ch_data[channel_hl])
-        in = hin;
-
-    if (in && g)
-        gain_up(this, 2, in, out, frame_size, g);
-}
-
-static void gain_up_s (Demixer *this, int frame_size, float g)
-{
-    static int s2in[] = {channel_l2, channel_r2};
-    static int s3in[] = {channel_l3, channel_r3};
-    static int s5in[] = {channel_sl5, channel_sr5};
-    static int s2out[] = {channel_mixed_s2_l, channel_mixed_s2_r};
-    static int s3out[] = {channel_mixed_s3_l, channel_mixed_s3_r};
-    static int s5out[] = {channel_mixed_s5_l, channel_mixed_s5_r};
-    int *in, *out;
-    in = out = 0;
-
-    if (this->ch_data[channel_l2]) {
-        in = s2in;
-        out = s2out;
-    } else if (this->ch_data[channel_l3]) {
-        in = s3in;
-        out = s3out;
-    } else if (this->ch_data[channel_sl5]) {
-        in = s5in;
-        out = s5out;
-    }
-
-    if (in && g)
-        gain_up(this, 2, in, out, frame_size, g);
-}
-
-static int demixer_s2to3(Demixer *this, DemixingParam *param)
-{
-    int fs = param->frame_size;
-
-    ia_logd("---- s2to3 ----");
-    for (int i=0; i<fs; i++) {
-        this->buffer[channel_mixed_s3_l * fs + i] =
-            this->ch_data[channel_l2][i] - 0.707 * this->ch_data[channel_c][i];
-        this->buffer[channel_mixed_s3_r * fs + i] =
-            this->ch_data[channel_r2][i] - 0.707 * this->ch_data[channel_c][i];
-    }
-    this->ch_data[channel_l3] = this->buffer + channel_mixed_s3_l * fs;
-    this->ch_data[channel_r3] = this->buffer + channel_mixed_s3_r * fs;
-
-    ia_logt("channel %s(%d) at %p, channel %s(%d) at %p, buffer at %p",
-            get_channel_name(channel_l3), channel_l3, this->ch_data[channel_l3],
-            get_channel_name(channel_r3), channel_r3, this->ch_data[channel_r3],
-            this->buffer);
-    return 0;
-}
-
-static int demixer_s3(Demixer *this, DemixingParam *param)
-{
-    return demixer_s2to3(this, param);
-}
-
-static int demixer_s3to5(Demixer *this, DemixingParam *param)
-{
-    int fs = param->frame_size;
-    int i=0;
-
-    int Typeid = param->demixing_mode;
-    int last_Typeid = this->last_dmixtypenum;
-
-    ia_logt("---- s3to5 ----");
-    ia_logi("Typeid %d, Lasttypeid %d", Typeid, last_Typeid);
-
-    for (; i < PRESKIP_SIZE; i++) {
-        this->buffer[channel_mixed_s5_l * fs + i] =
-            (this->ch_data[channel_l3][i] - this->ch_data[channel_l5][i]) / demixing_type_mat[last_Typeid].delta;
-        this->buffer[channel_mixed_s5_r * fs + i] =
-            (this->ch_data[channel_r3][i] - this->ch_data[channel_r5][i]) / demixing_type_mat[last_Typeid].delta;
-    }
-
-    for (; i < FRAME_SIZE; i++) {
-        this->buffer[channel_mixed_s5_l * fs + i] =
-            (this->ch_data[channel_l3][i] - this->ch_data[channel_l5][i]) / demixing_type_mat[Typeid].delta;
-        this->buffer[channel_mixed_s5_r * fs + i] =
-            (this->ch_data[channel_r3][i] - this->ch_data[channel_r5][i]) / demixing_type_mat[Typeid].delta;
-    }
-
-    this->ch_data[channel_sl5] = this->buffer + channel_mixed_s5_l * fs;
-    this->ch_data[channel_sr5] = this->buffer + channel_mixed_s5_r * fs;
-
-    ia_logt("channel %s(%d) at %p, channel %s(%d) at %p, buffer at %p",
-            get_channel_name(channel_sl5), channel_sl5, this->ch_data[channel_sl5],
-            get_channel_name(channel_sr5), channel_sr5, this->ch_data[channel_sr5],
-            this->buffer);
-
-    return 0;
-}
-
-static int demixer_s5(Demixer *this, DemixingParam *param)
-{
-    if (!this->ch_data[channel_l3])
-        demixer_s3(this, param);
-    return demixer_s3to5(this, param);
-}
-
-static int demixer_s5to7(Demixer *this, DemixingParam *param)
-{
-    int fs = param->frame_size;
-    int i=0;
-
-    int Typeid = param->demixing_mode;
-    int last_Typeid = this->last_dmixtypenum;
-
-    ia_logt("---- s5to7 ----");
-    ia_logi("Typeid %d, Lasttypeid %d", Typeid, last_Typeid);
-
-    for (; i < PRESKIP_SIZE; i++) {
-        this->buffer[channel_mixed_s7_l * fs + i] =
-            (this->ch_data[channel_sl5][i] - this->ch_data[channel_sl7][i] * demixing_type_mat[last_Typeid].alpha) / demixing_type_mat[last_Typeid].beta;
-        this->buffer[channel_mixed_s7_r * fs + i] =
-            (this->ch_data[channel_sr5][i] - this->ch_data[channel_sr7][i] * demixing_type_mat[last_Typeid].alpha) / demixing_type_mat[last_Typeid].beta;
-    }
-
-    for (; i < FRAME_SIZE; i++) {
-        this->buffer[channel_mixed_s7_l * fs + i] =
-            (this->ch_data[channel_sl5][i] - this->ch_data[channel_sl7][i] * demixing_type_mat[Typeid].alpha) / demixing_type_mat[Typeid].beta;
-        this->buffer[channel_mixed_s7_r * fs + i] =
-            (this->ch_data[channel_sr5][i] - this->ch_data[channel_sr7][i] * demixing_type_mat[Typeid].alpha) / demixing_type_mat[Typeid].beta;
-    }
-
-    this->ch_data[channel_bl7] = this->buffer + channel_mixed_s7_l * fs;
-    this->ch_data[channel_br7] = this->buffer + channel_mixed_s7_r * fs;
-
-    ia_logt("channel %s(%d) at %p, channel %s(%d) at %p, buffer at %p",
-            get_channel_name(channel_bl7), channel_bl7, this->ch_data[channel_bl7],
-            get_channel_name(channel_br7), channel_br7, this->ch_data[channel_br7],
-            this->buffer);
-    return 0;
-}
-
-static int demixer_s7(Demixer *this, DemixingParam *param)
-{
-    if (!this->ch_data[channel_sl5])
-        demixer_s5(this, param);
-    return demixer_s5to7(this, param);
-}
-
-static int demixer_ht2to2(Demixer *this, DemixingParam *param)
-{
-    int fs = param->frame_size;
-    int i=0;
-
-    int Typeid = param->demixing_mode;
-    int last_Typeid = this->last_dmixtypenum;
-
-    int32_t WeightTypeNum = demixing_type_mat[param->demixing_mode].w_idx_offset;
-    w_info w = calc_w_v2(WeightTypeNum, this->last_weight_state_value_x_prev);
-    w_info last_w =
-        calc_w_v2(demixing_type_mat[last_Typeid].w_idx_offset, this->last_weight_state_value_x_prev2);
-
-    ia_logt("---- hf2to2 ----");
-    ia_logi("Typeid %d, WeightTypeNum %d, w_x %f, w_z %f, Lasttypeid %d, last_w_x %f, last_w_z %f",
-            Typeid, WeightTypeNum, w.w_x, w.w_z, last_Typeid, last_w.w_x, last_w.w_z);
-
-    for (; i < PRESKIP_SIZE; i++) {
-        this->buffer[channel_mixed_h_l * fs + i] = this->ch_data[channel_tl][i] -
-            demixing_type_mat[last_Typeid].delta * last_w.w_z * this->ch_data[channel_sl5][i];
-        this->buffer[channel_mixed_h_r * fs + i] = this->ch_data[channel_tr][i] -
-            demixing_type_mat[last_Typeid].delta * last_w.w_z * this->ch_data[channel_sr5][i];
-    }
-
-    for (; i < FRAME_SIZE; i++) {
-        this->buffer[channel_mixed_h_l * fs + i] = this->ch_data[channel_tl][i] -
-            demixing_type_mat[Typeid].delta * w.w_z * this->ch_data[channel_sl5][i];
-        this->buffer[channel_mixed_h_r * fs + i] = this->ch_data[channel_tr][i] -
-            demixing_type_mat[Typeid].delta * w.w_z * this->ch_data[channel_sr5][i];
-    }
-
-    this->ch_data[channel_hl] = this->buffer + channel_mixed_h_l * fs;
-    this->ch_data[channel_hr] = this->buffer + channel_mixed_h_r * fs;
-
-    ia_logt("channel %s(%d) at %p, channel %s(%d) at %p, buffer at %p",
-            get_channel_name(channel_hl), channel_hl, this->ch_data[channel_hl],
-            get_channel_name(channel_hr), channel_hr, this->ch_data[channel_hr],
-            this->buffer);
-    return 0;
-}
-
-static int demixer_h2(Demixer *this, DemixingParam *param)
-{
-    return demixer_ht2to2(this, param);
-}
-
-static int demixer_h2to4(Demixer *this, DemixingParam *param)
-{
-    int fs = param->frame_size;
-    int i=0;
-
-    int Typeid = param->demixing_mode;
-    int last_Typeid = this->last_dmixtypenum;
-
-    ia_logt("---- h2to4 ----");
-    ia_logi("Typeid %d, Lasttypeid %d", Typeid, last_Typeid);
-
-    for (; i < PRESKIP_SIZE; i++) {
-        this->buffer[channel_mixed_h_l * fs + i] =
-            (this->ch_data[channel_hl][i] - this->ch_data[channel_hfl][i]) / demixing_type_mat[last_Typeid].gamma;
-        this->buffer[channel_mixed_h_r * fs + i] =
-            (this->ch_data[channel_hr][i] - this->ch_data[channel_hfr][i]) / demixing_type_mat[last_Typeid].gamma;
-    }
-
-    for (; i < FRAME_SIZE; i++) {
-        this->buffer[channel_mixed_h_l * fs + i] =
-            (this->ch_data[channel_hl][i] - this->ch_data[channel_hfl][i]) / demixing_type_mat[Typeid].gamma;
-        this->buffer[channel_mixed_h_r * fs + i] =
-            (this->ch_data[channel_hr][i] - this->ch_data[channel_hfr][i]) / demixing_type_mat[Typeid].gamma;
-    }
-
-    this->ch_data[channel_hbl] = this->buffer + channel_mixed_h_l * fs;
-    this->ch_data[channel_hbr] = this->buffer + channel_mixed_h_r * fs;
-
-    ia_logt("channel %s(%d) at %p, channel %s(%d) at %p, buffer at %p",
-            get_channel_name(channel_hbl), channel_hbl, this->ch_data[channel_hbl],
-            get_channel_name(channel_hbr), channel_hbr, this->ch_data[channel_hbr],
-            this->buffer);
-    return 0;
-}
-
-static int demixer_h4(Demixer *this, DemixingParam *param)
-{
-    if (!this->ch_data[channel_hl])
-        demixer_h2(this, param);
-    return demixer_h2to4(this, param);
-}
-
-
-int demixer_demix_200(Demixer *this, DemixingParam *param)
-{
-    ia_logd("---- demix2 ----");
-    if (!this->cstep)
-        gain_up_s(this, param->frame_size, param->gain[this->cstep]);
-    return 0;
-}
-
-int demixer_demix_312(Demixer *this, DemixingParam *param)
-{
-    ia_logd("---- demix312 ----");
-    if (!this->cstep)
-        gain_up_s(this, param->frame_size, param->gain[this->cstep]);
-    gain_up_h(this, param->frame_size, param->gain[this->cstep]);
-    if (!this->ch_data[channel_l3])
-        demixer_s3(this, param);
-    return 0;
-}
-
-int demixer_demix_510(Demixer *this, DemixingParam *param)
-{
-    ia_logd("---- demix510 ----");
-    if (!this->cstep)
-        gain_up_s(this, param->frame_size, param->gain[this->cstep]);
-    if (!this->ch_data[channel_sl5])
-        demixer_s5(this, param);
-    return 0;
-}
-
-int demixer_demix_512(Demixer *this, DemixingParam *param)
-{
-    ia_logd("---- demix512 ----");
-    if (!this->cstep)
-        gain_up_s(this, param->frame_size, param->gain[this->cstep]);
-    if (!this->ch_data[channel_tl] && this->ch_data[channel_hl])
-        gain_up_h(this, param->frame_size, param->gain[this->cstep]);
-    if (!this->ch_data[channel_sl5])
-        demixer_s5(this, param);
-    if (!this->ch_data[channel_hl])
-        demixer_h2(this, param);
-    return 0;
-}
-
-int demixer_demix_514(Demixer *this, DemixingParam *param)
-{
-    ia_logd("---- demix514 ----");
-    if (!this->cstep)
-        gain_up_s(this, param->frame_size, param->gain[this->cstep]);
-    if (!this->ch_data[channel_sl5])
-        demixer_s5(this, param);
-    if (!this->ch_data[channel_hbl])
-        demixer_h4(this, param);
-    return 0;
-}
-
-int demixer_demix_710(Demixer *this, DemixingParam *param)
-{
-    ia_logd("---- demix710 ----");
-    if (!this->ch_data[channel_bl7])
-        demixer_s7(this, param);
-    return 0;
-}
-
-int demixer_demix_712(Demixer *this, DemixingParam *param)
-{
-    ia_logd("---- demix712 ----");
-    if (!this->ch_data[channel_tl] && this->ch_data[channel_hl])
-        gain_up_h(this, param->frame_size, param->gain[this->cstep]);
-    if (!this->ch_data[channel_bl7])
-        demixer_s7(this, param);
-    if (!this->ch_data[channel_hl])
-        demixer_h2(this, param);
-    return 0;
-}
-
-int demixer_demix_714(Demixer *this, DemixingParam *param)
-{
-    ia_logd("---- demix714 ----");
-    if (!this->ch_data[channel_bl7])
-        demixer_s7(this, param);
-    if (!this->ch_data[channel_hbl])
-        demixer_h4(this, param);
-    return 0;
-}
-
-static DemixFunc demix_func[] = {
-    0,
-    demixer_demix_200,
-    demixer_demix_510,
-    demixer_demix_512,
-    demixer_demix_514,
-    demixer_demix_710,
-    demixer_demix_712,
-    demixer_demix_714,
-    demixer_demix_312,
+enum {
+    CH_MX_S_L,
+    CH_MX_S_R,
+    CH_MX_S5_L,
+    CH_MX_S5_R,
+    CH_MX_T_L,
+    CH_MX_T_R,
+    CH_MX_COUNT
 };
 
-#define ADD_MIXED_CHANNELS_NAME(t, n) add_mixed_##t##n##channels
-#define ADD_MIXED_CHANNELS_FUNC(t, n, ch, chl, chr) \
-static int ADD_MIXED_CHANNELS_NAME(t, n)(Demixer* this, int* array) \
-{ \
-    int cnt = 0; \
-    if (channel_##ch != channel_##chl && this->ch_data[channel_##ch] && \
-            this->ch_data[channel_##chl]) { \
-        array[cnt++] = channel_##chl; \
-        array[cnt++] = channel_##chr; \
-    } \
-    return cnt; \
+
+static int dmx_s2 (Demixer *ths)
+{
+    if (!ths->ch_data[IA_CH_L2])
+        return IA_ERR_INTERNAL;
+
+    /**
+     * S1to2 de-mixer: R2 = 2 x Mono - L2
+     * */
+    if (!ths->ch_data[IA_CH_R2]) {
+        float      *r = 0;
+
+        if (!ths->ch_data[IA_CH_MONO])
+            return IA_ERR_INTERNAL;
+
+        ia_logd("---- s1to2 ----");
+
+        r = &ths->large_buffer[ths->frame_size * CH_MX_S_R];
+
+        for (int i=0; i<ths->frame_size; ++i)
+            r[i] = 2 * ths->ch_data[IA_CH_MONO][i] - ths->ch_data[IA_CH_L2][i];
+
+        ths->ch_data[IA_CH_R2] = r;
+
+        ia_logd("reconstructed channel %s(%d) at %p, buffer at %p",
+                ia_channel_name(IA_CH_R2), IA_CH_R2, ths->ch_data[IA_CH_R2],
+                ths->large_buffer);
+    }
+    return 0;
 }
 
-ADD_MIXED_CHANNELS_FUNC(s, 3, l2, l3, r3)
-ADD_MIXED_CHANNELS_FUNC(s, 5, l3, sl5, sr5)
-ADD_MIXED_CHANNELS_FUNC(s, 7, sl5, bl7, br7)
-ADD_MIXED_CHANNELS_FUNC(h, 0, tl, tl, tr)
-ADD_MIXED_CHANNELS_FUNC(h, 2, tl, hl, hr)
-ADD_MIXED_CHANNELS_FUNC(h, 4, hl, hbl, hbr)
-
-static int g_recon_channel[] = {
-    rg_channel_l,
-    rg_channel_r,
-    rg_channel_c,
-    rg_channel_lfe,
-    rg_channel_lss,
-    rg_channel_rss,
-    rg_channel_lrs,
-    rg_channel_rrs,
-    rg_channel_ltf,
-    rg_channel_rtf,
-    rg_channel_ltb,
-    rg_channel_rtb,
-    rg_channel_l,
-    rg_channel_l,
-    rg_channel_r,
-    rg_channel_ltf,
-    rg_channel_rtf,
-    rg_channel_l,
-    rg_channel_r,
-    rg_channel_ls,
-    rg_channel_rs,
-    rg_channel_ltf,
-    rg_channel_rtf,
-};
-
-static uint32_t get_scales (DemixingParam *param, int num, int *array)
+static int dmx_s3 (Demixer *ths)
 {
-    uint32_t scales = 0;
-    int rch;
-    int shift = 0;
-    for (int i=0; i<num; ++i) {
-        rch = g_recon_channel[array[i]];
-        if (param->recon_gain[rch]) {
-            scales = scales | param->recon_gain[rch] << shift;
-            shift += 8;
+    /**
+     * S2to3 de-mixer: L3 = L2 - 0.707 x C and R3 = R2 - 0.707 x C
+     * */
+    if (!ths->ch_data[IA_CH_R3]) {
+        float       *l, *r;
+        uint32_t    fs = ths->frame_size;
+
+        if (dmx_s2(ths))
+            return IA_ERR_INTERNAL;
+
+        if (!ths->ch_data[IA_CH_C])
+            return IA_ERR_INTERNAL;
+
+        ia_logt("---- s2to3 ----");
+
+        l = &ths->large_buffer[CH_MX_S_L * fs];
+        r = &ths->large_buffer[CH_MX_S_R * fs];
+
+        for (int i=0; i<fs; i++) {
+            l[i] = ths->ch_data[IA_CH_L2][i] - 0.707 * ths->ch_data[IA_CH_C][i];
+            r[i] = ths->ch_data[IA_CH_R2][i] - 0.707 * ths->ch_data[IA_CH_C][i];
+        }
+        ths->ch_data[IA_CH_L3] = l;
+        ths->ch_data[IA_CH_R3] = r;
+
+        ia_logd("reconstructed channel %s(%d) at %p, channel %s(%d) at %p, buffer at %p",
+                ia_channel_name(IA_CH_L3), IA_CH_L3, ths->ch_data[IA_CH_L3],
+                ia_channel_name(IA_CH_R3), IA_CH_R3, ths->ch_data[IA_CH_R3],
+                ths->large_buffer);
+    }
+
+    return 0;
+}
+
+
+static int dmx_s5(Demixer *ths)
+{
+    /**
+     * S3to5 de-mixer: Ls = 1/d(k) x (L3 - L5) and Rs = 1/d(k) x (R3 - R5)
+     * */
+    if (!ths->ch_data[IA_CH_SR5]) {
+        float       *l, *r;
+        uint32_t    fs = ths->frame_size;
+
+        int Typeid = ths->demixing_mode;
+        int last_Typeid = ths->last_dmixtypenum;
+        int i = 0;
+
+        if (dmx_s3(ths))
+            return IA_ERR_INTERNAL;
+
+        if (!ths->ch_data[IA_CH_L5] || !ths->ch_data[IA_CH_R5])
+            return IA_ERR_INTERNAL;
+
+        ia_logt("---- s3to5 ----");
+        ia_logd("Typeid %d, Lasttypeid %d", Typeid, last_Typeid);
+
+        l = &ths->large_buffer[CH_MX_S5_L * fs];
+        r = &ths->large_buffer[CH_MX_S5_R * fs];
+
+        for (; i < ths->skip; i++) {
+            l[i] = (ths->ch_data[IA_CH_L3][i] - ths->ch_data[IA_CH_L5][i]) / demixing_type_mat[last_Typeid].delta;
+            r[i] = (ths->ch_data[IA_CH_R3][i] - ths->ch_data[IA_CH_R5][i]) / demixing_type_mat[last_Typeid].delta;
+        }
+
+        for (; i < fs; i++) {
+            l[i] = (ths->ch_data[IA_CH_L3][i] - ths->ch_data[IA_CH_L5][i]) / demixing_type_mat[Typeid].delta;
+            r[i] = (ths->ch_data[IA_CH_R3][i] - ths->ch_data[IA_CH_R5][i]) / demixing_type_mat[Typeid].delta;
+        }
+
+        ths->ch_data[IA_CH_SL5] = l;
+        ths->ch_data[IA_CH_SR5] = r;
+
+        ia_logd("reconstructed channel %s(%d) at %p, channel %s(%d) at %p, buffer at %p",
+                ia_channel_name(IA_CH_SL5), IA_CH_SL5, ths->ch_data[IA_CH_SL5],
+                ia_channel_name(IA_CH_SR5), IA_CH_SR5, ths->ch_data[IA_CH_SR5],
+                ths->large_buffer);
+    }
+    return 0;
+}
+
+static int dmx_s7(Demixer *ths)
+{
+    /**
+     * S5to7 de-mixer: Lrs = 1/ß(k) x (Ls - a(k) x Lss) and Rrs = 1/ß(k) x (Rs - a(k) x Rss)
+     * */
+    if (!ths->ch_data[IA_CH_BR7]) {
+        float       *l, *r;
+        uint32_t    fs = ths->frame_size;
+
+        int i=0;
+        int Typeid = ths->demixing_mode;
+        int last_Typeid = ths->last_dmixtypenum;
+
+        if (dmx_s5(ths) < 0)
+            return IA_ERR_INTERNAL;
+
+        if (!ths->ch_data[IA_CH_SL7] || !ths->ch_data[IA_CH_SR7])
+            return IA_ERR_INTERNAL;
+
+
+        ia_logt("---- s5to7 ----");
+        ia_logd("Typeid %d, Lasttypeid %d", Typeid, last_Typeid);
+
+        l = &ths->large_buffer[CH_MX_S_L * fs];
+        r = &ths->large_buffer[CH_MX_S_R * fs];
+
+        for (; i < ths->skip; i++) {
+            l[i] = (ths->ch_data[IA_CH_SL5][i] - ths->ch_data[IA_CH_SL7][i] * demixing_type_mat[last_Typeid].alpha) / demixing_type_mat[last_Typeid].beta;
+            r[i] = (ths->ch_data[IA_CH_SR5][i] - ths->ch_data[IA_CH_SR7][i] * demixing_type_mat[last_Typeid].alpha) / demixing_type_mat[last_Typeid].beta;
+        }
+
+        for (; i < ths->frame_size; i++) {
+            l[i] = (ths->ch_data[IA_CH_SL5][i] - ths->ch_data[IA_CH_SL7][i] * demixing_type_mat[Typeid].alpha) / demixing_type_mat[Typeid].beta;
+            r[i] = (ths->ch_data[IA_CH_SR5][i] - ths->ch_data[IA_CH_SR7][i] * demixing_type_mat[Typeid].alpha) / demixing_type_mat[Typeid].beta;
+        }
+
+        ths->ch_data[IA_CH_BL7] = l;
+        ths->ch_data[IA_CH_BR7] = r;
+
+        ia_logd("reconstructed channel %s(%d) at %p, channel %s(%d) at %p, buffer at %p",
+                ia_channel_name(IA_CH_BL7), IA_CH_BL7, ths->ch_data[IA_CH_BL7],
+                ia_channel_name(IA_CH_BR7), IA_CH_BR7, ths->ch_data[IA_CH_BR7],
+                ths->large_buffer);
+    }
+    return 0;
+}
+
+
+static int dmx_h2 (Demixer *ths)
+{
+    /**
+     * TF2toT2 de-mixer: Ltf2 = Ltf3 - w(k) x (L3 - L5) and Rtf2 = Rtf3 - w(k) x (R3 - R5)
+     * */
+    if (!ths->ch_data[IA_CH_HR]) {
+        float       *l, *r;
+        uint32_t    fs = ths->frame_size;
+        int i=0;
+
+        int Typeid = ths->demixing_mode;
+        int last_Typeid = ths->last_dmixtypenum;
+        int32_t WeightTypeNum;
+
+        if (!ths->ch_data[IA_CH_TL] || !ths->ch_data[IA_CH_TR])
+            return IA_ERR_INTERNAL;
+
+        if (dmx_s5(ths))
+            return IA_ERR_INTERNAL;
+
+
+        WeightTypeNum = demixing_type_mat[ths->demixing_mode].w_idx_offset;
+        w_info w = calc_w_v2(WeightTypeNum, ths->last_weight_state_value_x_prev);
+        w_info last_w =
+            calc_w_v2(demixing_type_mat[last_Typeid].w_idx_offset, ths->last_weight_state_value_x_prev2);
+
+        ia_logt("---- hf2to2 ----");
+        ia_logd("Typeid %d, WeightTypeNum %d, w_x %f, w_z %f, Lasttypeid %d, last_w_x %f, last_w_z %f",
+                Typeid, WeightTypeNum, w.w_x, w.w_z, last_Typeid, last_w.w_x, last_w.w_z);
+
+        l = &ths->large_buffer[CH_MX_T_L * fs];
+        r = &ths->large_buffer[CH_MX_T_R * fs];
+
+        for (; i < ths->skip; i++) {
+            l[i] = ths->ch_data[IA_CH_TL][i] -
+                demixing_type_mat[last_Typeid].delta * last_w.w_z * ths->ch_data[IA_CH_SL5][i];
+            r[i] = ths->ch_data[IA_CH_TR][i] -
+                demixing_type_mat[last_Typeid].delta * last_w.w_z * ths->ch_data[IA_CH_SR5][i];
+        }
+
+        for (; i < ths->frame_size; i++) {
+            l[i] = ths->ch_data[IA_CH_TL][i] -
+                demixing_type_mat[Typeid].delta * last_w.w_z * ths->ch_data[IA_CH_SL5][i];
+            r[i] = ths->ch_data[IA_CH_TR][i] -
+                demixing_type_mat[Typeid].delta * last_w.w_z * ths->ch_data[IA_CH_SR5][i];
+        }
+
+        ths->ch_data[IA_CH_HL] = l;
+        ths->ch_data[IA_CH_HR] = r;
+
+        ia_logt("channel %s(%d) at %p, channel %s(%d) at %p, buffer at %p",
+                ia_channel_name(IA_CH_HL), IA_CH_HL, ths->ch_data[IA_CH_HL],
+                ia_channel_name(IA_CH_HR), IA_CH_HR, ths->ch_data[IA_CH_HR],
+                ths->large_buffer);
+
+    }
+    return 0;
+}
+
+static int dmx_h4 (Demixer *ths)
+{
+    /**
+     * Ltb = 1/?(k) x (Ltf2 - Ltf4) and Rtb = 1/?(k) x (Rtf2 - Rtf4)
+     * */
+    if (!ths->ch_data[IA_CH_HBR]) {
+        float       *l, *r;
+        uint32_t    fs = ths->frame_size;
+        int i=0;
+        int Typeid = ths->demixing_mode;
+        int last_Typeid = ths->last_dmixtypenum;
+
+        if (dmx_h2(ths))
+            return IA_ERR_INTERNAL;
+
+        if (!ths->ch_data[IA_CH_HFR] || !ths->ch_data[IA_CH_HFL])
+            return IA_ERR_INTERNAL;
+
+
+        ia_logt("---- h2to4 ----");
+        ia_logd("Typeid %d, Lasttypeid %d", Typeid, last_Typeid);
+
+        l = &ths->large_buffer[CH_MX_T_L * fs];
+        r = &ths->large_buffer[CH_MX_T_R * fs];
+
+        for (; i < ths->skip; i++) {
+            l[i] = (ths->ch_data[IA_CH_HL][i] - ths->ch_data[IA_CH_HFL][i]) / demixing_type_mat[last_Typeid].gamma;
+            r[i] = (ths->ch_data[IA_CH_HR][i] - ths->ch_data[IA_CH_HFR][i]) / demixing_type_mat[last_Typeid].gamma;
+        }
+
+        for (; i < ths->frame_size; i++) {
+            l[i] = (ths->ch_data[IA_CH_HL][i] - ths->ch_data[IA_CH_HFL][i]) / demixing_type_mat[Typeid].gamma;
+            r[i] = (ths->ch_data[IA_CH_HR][i] - ths->ch_data[IA_CH_HFR][i]) / demixing_type_mat[Typeid].gamma;
+        }
+
+        ths->ch_data[IA_CH_HBL] = l;
+        ths->ch_data[IA_CH_HBR] = r;
+
+        ia_logt("channel %s(%d) at %p, channel %s(%d) at %p, buffer at %p",
+                ia_channel_name(IA_CH_HBL), IA_CH_HBL, ths->ch_data[IA_CH_HBL],
+                ia_channel_name(IA_CH_HBR), IA_CH_HBR, ths->ch_data[IA_CH_HBR],
+                ths->large_buffer);
+
+    }
+    return 0;
+}
+
+static int dmx_channel (Demixer *ths, IAChannel ch)
+{
+    int ret = IA_ERR_INTERNAL;
+    ia_logd ("demix channel %s(%d) pos %p", ia_channel_name(ch), ch,
+            ths->ch_data[ch]);
+
+    if (ths->ch_data[ch])
+        return IA_OK;
+
+    switch (ch) {
+        case IA_CH_R2:
+            ret = dmx_s2(ths);
+            break;
+        case IA_CH_L3:
+        case IA_CH_R3:
+            ret = dmx_s3(ths);
+            break;
+        case IA_CH_SL5:
+        case IA_CH_SR5:
+            ret = dmx_s5(ths);
+            break;
+        case IA_CH_BL7:
+        case IA_CH_BR7:
+            ret = dmx_s7(ths);
+            break;
+        case IA_CH_HL:
+        case IA_CH_HR:
+            ret = dmx_h2(ths);
+            break;
+        case IA_CH_HBL:
+        case IA_CH_HBR:
+            ret = dmx_h4(ths);
+            break;
+        default:
+            break;
+    }
+    return ret;
+}
+
+static void dmx_gainup (Demixer *ths)
+{
+    for (int c=0; c<ths->chs_gain_list.count; ++c) {
+        for (int i=0; i<ths->frame_size; ++i) {
+            if (ths->ch_data[ths->chs_gain_list.ch_gain[c].ch]) {
+                ths->ch_data[ths->chs_gain_list.ch_gain[c].ch][i] /=
+                    ths->chs_gain_list.ch_gain[c].gain;
+            }
         }
     }
-    return scales;
 }
 
-#define ERMS_FUNC_NAME(S, L, H) demixer_equalizeRMS_##S##L##H
-#define ERMS_FUNC(S, L, H) \
-static void ERMS_FUNC_NAME(S, L, H)(Demixer* this, DemixingParam* param) \
-{ \
-    int mixch_list[MAX_MIXED_CHANNEL_NUM]; \
-    uint32_t scales; \
-    int ret = 0; \
-    ia_logd("---- equalizeRMS%d%d%d ----", S, L, H); \
-    ret = ADD_MIXED_CHANNELS_NAME(s, S)(this, mixch_list); \
-    ret += ADD_MIXED_CHANNELS_NAME(h, H)(this, &mixch_list[ret]); \
-    for (int i=0; i<ret; ++i) {\
-        ia_logd("mixed channel %s(%d), recon gain channel %s(%d)", \
-                get_channel_name(mixch_list[i]), mixch_list[i], \
-                get_recon_gain_channel_name(g_recon_channel[mixch_list[i]]), \
-                g_recon_channel[mixch_list[i]]); \
-    } \
-    scales = get_scales(param, ret, mixch_list); \
-    demixer_equalizeRMS(this, channel_layout_type_##S##_##L##_##H, \
-            param->frame_size, ret, mixch_list, scales); \
+static int dmx_demix (Demixer *ths)
+{
+    int chcnt = ia_channel_layout_get_channels_count (ths->layout);
+
+    for (int c=0; c<chcnt; ++c) {
+        if (dmx_channel(ths, ths->chs_out[c]) < 0)
+            return IA_ERR_INTERNAL;
+    }
+    return IA_OK;
 }
 
-ERMS_FUNC(3,1,2)
-ERMS_FUNC(5,1,0)
-ERMS_FUNC(5,1,2)
-ERMS_FUNC(5,1,4)
-ERMS_FUNC(7,1,0)
-ERMS_FUNC(7,1,2)
-ERMS_FUNC(7,1,4)
-
-static EqualizeRMSFunc equalizeRMS_func[] = {
-    0, 0,
-    ERMS_FUNC_NAME(5, 1, 0),
-    ERMS_FUNC_NAME(5, 1, 2),
-    ERMS_FUNC_NAME(5, 1, 4),
-    ERMS_FUNC_NAME(7, 1, 0),
-    ERMS_FUNC_NAME(7, 1, 2),
-    ERMS_FUNC_NAME(7, 1, 4),
-    ERMS_FUNC_NAME(3, 1, 2),
-};
-
-void demixer_equalizeRMS(Demixer *this, uint32_t layout, int fs,
-        int count, int *channel, uint32_t scales)
+static void dmx_rms (Demixer *ths)
 {
     float N = 7; //7 frame
     float sf, sfavg;
     float filtBuf;
     float *out;
-    int bitshift = 0;
-    int ch;
-    qf_t scale;
+    IAChannel ch;
 
     ia_logt("---- demixer_equalizeRMS ----");
-    if (fs != FRAME_SIZE) {
-        ia_logw("Frame size (%d) is not %d", fs, FRAME_SIZE);
-        return;
-    }
 
-    for (int i = 0; i < count; i++) {
-        ch = channel[i];
-        scale = (scales >> bitshift) & 0xFF;
-
-        out = this->ch_data[ch];
-        sf = qf_to_float(scale, 8);
+    for (int c = 0; c < ths->chs_recon_gain_list.count; c++) {
+        ch = ths->chs_recon_gain_list.ch_recon_gain[c].ch;
+        sf = ths->chs_recon_gain_list.ch_recon_gain[c].recon_gain;
+        out = ths->ch_data[ch];
 
         if (N > 0) {
-            sfavg = (2 / (N + 1)) * sf + (1 - 2 / (N + 1)) *
-                this->last_sfavg[layout][i];
+            sfavg = (2 / (N + 1)) * sf + (1 - 2 / (N + 1)) * ths->ch_last_sfavg[ch];
         } else {
             sfavg = sf;
         }
 
-        ia_logt("channel %s(%d) is smoothed with %d(0x%0x) -> %f.",
-                get_channel_name(ch), ch, scale, scale, sf);
+        ia_logd("channel %s(%d) is smoothed within %f.", ia_channel_name(ch),
+                ch, sf);
         /* different scale factor in overapping area */
-        for (int j = 0; j < fs; j++) {
-            filtBuf = this->last_sfavg[layout][i] *
-                this->stopWin[j] + sfavg * this->startWin[j];
-            out[j] *= filtBuf;
+        for (int i = 0; i < ths->frame_size; i++) {
+            filtBuf = ths->ch_last_sfavg[ch] *
+                ths->stop_window[i] + sfavg * ths->start_window[i];
+            out[i] *= filtBuf;
         }
 
-        this->last_sf[layout][i] = sf;
-        this->last_sfavg[layout][i] = sfavg;
-        bitshift += 8;
+        ths->ch_last_sf[ch] = sf;
+        ths->ch_last_sfavg[ch] = sfavg;
     }
+}
+
+
+Demixer *demixer_open(uint32_t frame_size, uint32_t delay)
+{
+    Demixer *ths = 0;
+    IAErrCode ec = IA_OK;
+    ths = (Demixer *) ia_mallocz (sizeof(Demixer));
+    if (ths) {
+
+        int preskip = delay % frame_size;
+        int windowLen = frame_size / 8;
+        int overlapLen = windowLen / 2;
+
+        if (preskip < overlapLen) {
+            ec = IA_ERR_UNIMPLEMENTED;
+            ia_loge ("%s : I don't know how to do for overlab more than preskip.",
+                    ia_error_code_string(ec));
+            goto termination;
+        }
+
+        ia_logt("Demixer %p size %ld", ths, sizeof(Demixer));
+
+        ths->last_dmixtypenum = 0;
+        ths->last_weight_state_value_x_prev = 0.0; // n-1 packet
+        ths->last_weight_state_value_x_prev2 = 0.0; // n-2 packet
+        ths->frame_size = frame_size;
+        ths->skip = preskip;
+        ths->layout = IA_CH_LAYOUT_TYPE_INVALID;
+
+        ths->hanning_filter = (float *)malloc(sizeof (float) * windowLen);
+        ths->start_window = (float *)malloc(sizeof (float) * frame_size);
+        ths->stop_window = (float *)malloc(sizeof (float) * frame_size);
+        ths->large_buffer =
+            (float *)malloc(sizeof (float) * CH_MX_COUNT * frame_size);
+
+        if (!ths->hanning_filter || !ths->start_window || !ths->stop_window
+                || !ths->large_buffer) {
+            ec = IA_ERR_ALLOC_FAIL;
+            ia_loge ("%s : hanning window, start & stop windows.",
+                    ia_error_code_string(ec));
+            goto termination;
+        }
+        /**
+         * init hanning window.
+         * */
+        for (int i = 0; i < windowLen; i++)
+            ths->hanning_filter[i] = (0.5 * (1.0 - cos(2.0*M_PI*(double)i / (double)(windowLen - 1))));
+
+        for (int i = 0; i < preskip - overlapLen; i++) {
+            ths->start_window[i] = 0;
+            ths->stop_window[i] = 1;
+        }
+
+        for (int i = preskip - overlapLen, j = 0; i < preskip; i++, j++) {
+            ths->start_window[i] = ths->hanning_filter[j];
+            ths->stop_window[i] = ths->hanning_filter[j+overlapLen];
+        }
+
+        for (int i = preskip; i < frame_size; i++) {
+            ths->start_window[i] = 1;
+            ths->stop_window[i] = 0;
+        }
+
+        for (int i=0; i<IA_CH_COUNT; ++i) {
+            ths->ch_last_sf[i] = 1.0;
+            ths->ch_last_sfavg[i] = 1.0;
+        }
+    }
+
+termination:
+
+    if (ec != IA_OK) {
+        demixer_close (ths);
+        ths = 0;
+    }
+    return ths;
 
 }
 
-void demixer_update_last_values(Demixer *this, DemixingParam *param)
+
+void demixer_close (Demixer *ths)
 {
-    ia_logd("update demixer parameters: ");
-    ia_logd("dmixtypenum: %d -> %d", this->last_dmixtypenum, param->demixing_mode);
+    if (ths->hanning_filter)
+        free (ths->hanning_filter);
+
+    if (ths->start_window)
+        free (ths->start_window);
+
+    if (ths->stop_window)
+        free (ths->stop_window);
+
+    if (ths->large_buffer)
+        free (ths->large_buffer);
+    free (ths);
+}
+
+
+int demixer_set_channel_layout (Demixer *ths, IAChannelLayoutType layout)
+{
+    if (ia_channel_layout_get_channels(layout, ths->chs_out,
+                IA_CH_LAYOUT_MAX_CHANNELS) > 0) {
+        ths->layout = layout;
+        return IA_OK;
+    }
+    return IA_ERR_BAD_ARG;
+}
+
+
+int demixer_set_channels_order (Demixer *ths, IAChannel *chs, int count)
+{
+    memcpy (ths->chs_in, chs, sizeof(IAChannel) * count);
+    ths->chs_count = count;
+    return IA_OK;
+}
+
+int demixer_set_output_gain (Demixer *ths, IAChannel *chs, float *gain,
+                             int count)
+{
+    for (int i=0; i<count; ++i) {
+        ths->chs_gain_list.ch_gain[i].ch = chs[i];
+        ths->chs_gain_list.ch_gain[i].gain = gain[i];
+        ia_logi("channel %s(%d) gain is %f", ia_channel_name(chs[i]), chs[i],
+                gain[i]);
+    }
+    ths->chs_gain_list.count = count;
+    return IA_OK;
+}
+
+int demixer_set_demixing_mode (Demixer *ths, int mode)
+{
+    ia_logd("dmixtypenum: %d -> %d", ths->last_dmixtypenum, mode);
     ia_logd("weight_state_value_x_prev2: %f -> %f",
-            this->last_weight_state_value_x_prev2,
-            this->last_weight_state_value_x_prev);
+            ths->last_weight_state_value_x_prev2,
+            ths->last_weight_state_value_x_prev);
 
-    this->last_dmixtypenum = param->demixing_mode;
-    this->last_weight_state_value_x_prev2 = this->last_weight_state_value_x_prev;
-    w_info w = calc_w_v2(demixing_type_mat[param->demixing_mode].w_idx_offset,
-            this->last_weight_state_value_x_prev);
+    ths->last_dmixtypenum = ths->demixing_mode;
+    ths->last_weight_state_value_x_prev2 = ths->last_weight_state_value_x_prev;
 
+    w_info w = calc_w_v2(demixing_type_mat[ths->demixing_mode].w_idx_offset,
+            ths->last_weight_state_value_x_prev);
     ia_logd("last_weight_state_value_x_prev: %f -> %f",
-            this->last_weight_state_value_x_prev, w.w_x);
-    this->last_weight_state_value_x_prev = w.w_x;
+            ths->last_weight_state_value_x_prev, w.w_x);
+    ths->last_weight_state_value_x_prev = w.w_x;
+
+    ths->demixing_mode = mode;
+    return 0;
 }
 
-
-
-
-Demixer* demixer_create(void)
+int demixer_set_recon_gain (Demixer *ths, int count,
+                            IAChannel *chs, float *recon_gain, uint32_t flags)
 {
-    Demixer *this = NULL;
-    this = (Demixer *)malloc(sizeof(struct Demixer));
-    ia_logt("Demixer %p size %ld", this, sizeof(struct Demixer));
-    if (this)
-        demixer_init(this);
-    return this;
-}
-
-int demixer_init(Demixer *this)
-{
-    int preskip = 312;
-    int windowLen = FRAME_SIZE / 8;
-    int n = windowLen;
-    int overlapLen = windowLen / 2;
-    memset(this, 0x00, sizeof(Demixer));
-
-    this->last_dmixtypenum = 0;
-    this->last_weight_state_value_x_prev = 0.0; // n-1 packet
-    this->last_weight_state_value_x_prev2 = 0.0; // n-2 packet
-
-    /**
-     * init hanning window.
-     * */
-    for (int i = 0; i < n; i++) {
-        this->hanning[i] = (0.5 * (1.0 - cos(2.0*M_PI*(double)i / (double)(n - 1))));
-    }
-
-    /* [0, 252<312-60>) */
-    for (int i = 0; i < preskip - overlapLen; i++) {
-        this->startWin[i] = 0;
-        this->stopWin[i] = 1;
-    }
-
-    /* [252, 312) */
-    for (int i = preskip - overlapLen, j = 0; i < preskip; i++, j++) {
-        this->startWin[i] = this->hanning[j];
-        this->stopWin[i] = this->hanning[j+overlapLen];
-    }
-
-    /* [312, 960) */
-    for (int i = preskip; i < FRAME_SIZE; i++) {
-        this->startWin[i] = 1;
-        this->stopWin[i] = 0;
-    }
-
-    for (int i=0; i<channel_layout_type_count; ++i) {
-        for (int j=0; j<MAX_MIXED_CHANNEL_NUM; ++j) {
-            this->last_sf[i][j] = 1.0;
-            this->last_sfavg[i][j] = 1.0;
+    if (flags && flags ^ ths->chs_recon_gain_list.flags) {
+        for (int i=0; i<count; ++i) {
+            ths->chs_recon_gain_list.ch_recon_gain[i].ch = chs[i];
         }
+        ths->chs_recon_gain_list.count = count;
     }
-
-    return (0);
+    for (int i=0; i<count; ++i) {
+        ths->chs_recon_gain_list.ch_recon_gain[i].recon_gain = recon_gain[i];
+    }
+    return IA_OK;
 }
 
-int demixer_demix(Demixer *this, void *buf, int frame_size, void *pcm,
-        DemixingParam *param)
+int demixer_demixing (Demixer *ths, float *dst, float *src, uint32_t size)
 {
-    int ret = 0;
-    int channel;
+    IAChannel ch;
 
-    float *data = (float *)buf;
-    float *out = (float *)pcm;
-    const uint8_t *playout;
-    int chs, layout;
+    if (size != ths->frame_size)
+        return IA_ERR_BAD_ARG;
 
-    if (frame_size != FRAME_SIZE) {
-        ia_loge("the decoded frame size (%d) is not %d", frame_size, FRAME_SIZE);
-        return -1;
+    if (ia_channel_layout_get_channels_count (ths->layout) != ths->chs_count)
+        return IA_ERR_INTERNAL;
+
+    memset (ths->ch_data, 0, sizeof (float *) * IA_CH_COUNT);
+    for (int c=0; c<ths->chs_count; ++c) {
+        ths->ch_data[ths->chs_in[c]] = src + size * c;
     }
 
-    layout = param->layout[param->steps - 1];
-    ia_logi("target layout %d and need %d steps", layout, param->steps);
-    if (!demix_func[layout]) {
-        ia_loge("Can not support layout (%d) to demix.", layout);
-        return -1;
-    }
+    ia_logt ("prepare.");
+    dmx_gainup(ths);
+    ia_logt ("gainup.");
+    if (dmx_demix (ths) < 0)
+        return IA_ERR_INTERNAL;
+    ia_logt ("demix.");
+    dmx_rms(ths);
+    ia_logt ("rms.");
 
-    memset(this->ch_data, 0x00, sizeof(float *) * channel_cnt);
-
-    chs = get_layout_channel_count(layout);
-    ia_logi("demixing: frame size %d", frame_size);
-    for (int ch = 0; ch<chs; ++ch) {
-        channel = param->channel_order[ch];
-        this->ch_data[channel] = &data[ch * frame_size];
-        ia_logt("input mixed channel %s(%d) at %p",
-                get_channel_name(channel), channel, &data[ch * frame_size]);
-    }
-
-    param->frame_size = frame_size;
-    for (int s = 0; s<param->steps; ++s)  {
-        ia_logt("demix channels with layout %d", param->layout[s]);
-        this->cstep = s;
-        if (demix_func[param->layout[s]])
-            demix_func[param->layout[s]](this, param);
-    }
-
-    if (equalizeRMS_func[layout] && param->recon_gain_flag)
-        equalizeRMS_func[layout] (this, param);
-    /* else { */
-        /* ia_logw("Can not support layout (%d) to smooth.", layout); */
-    /* } */
-
-    playout = get_layout_channels(layout);
-    for (int ch = 0; ch<chs; ++ch) {
-        channel = playout[ch];
-        if (!this->ch_data[channel]) {
-            ia_loge("channel %d doesn't has data.", playout[ch]);
+    for (int c = 0; c<ths->chs_count; ++c) {
+        ch = ths->chs_out[c];
+        if (!ths->ch_data[ch]) {
+            ia_loge("channel %s(%d) doesn't has data.", ia_channel_name(ch), ch);
             continue;
         }
-        ia_logt("output channel %s(%d) at %p", get_channel_name(channel),
-                channel, this->ch_data[channel]);
-        memcpy((void *)&out[ch * frame_size], (void *)this->ch_data[channel],
-                sizeof(float) * frame_size);
+        ia_logt("output channel %s(%d) at %p",
+                ia_channel_name(ch), ch, ths->ch_data[ch]);
+        memcpy((void *)&dst[c * size], (void *)ths->ch_data[ch],
+                sizeof(float) * size);
     }
-    demixer_update_last_values (this, param);
-    return ret;
+    ia_logt ("reorder.");
+    return IA_OK;
 }
 
-void demixer_destroy(Demixer *this)
-{
-    ia_logt("Demixer %p", this);
-    if (this) {
-        free(this);
-    }
-}

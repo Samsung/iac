@@ -14,9 +14,9 @@ make clean
 cmake -DCMAKE_INSTALL_PREFIX=${BUILD_LIBS}  .
 make 
 
-#3, build test/tools/encode2mp4
+#3, build test/tools/mp4iacplay
 
-cd ../mp4opusplay
+cd ../mp4iacplay
 make clean
 cmake -DCMAKE_INSTALL_PREFIX=${BUILD_LIBS}  .
 make 

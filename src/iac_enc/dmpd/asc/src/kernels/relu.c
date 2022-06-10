@@ -18,7 +18,7 @@
   // Returns kTfLiteOk on success.
   TfLiteStatus Relu_Prepare(TfLiteContext* context, TfLiteNode* node)
   {
-      
+    return kTfLiteOk;      
   }
 
   // Execute the node (should read node->inputs and output to node->outputs).
@@ -45,7 +45,7 @@
       }
 
       LOGE("Relu_Eval\n");
-
+      return kTfLiteOk;
   }
 
   TfLiteRegistration* Register_RELU() {

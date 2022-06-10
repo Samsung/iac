@@ -18,7 +18,7 @@
   // Returns kTfLiteOk on success.
   TfLiteStatus Sum_Prepare(TfLiteContext* context, TfLiteNode* node)
   {
-      
+    return kTfLiteOk;   
   }
 
   // Execute the node (should read node->inputs and output to node->outputs).
@@ -36,6 +36,7 @@
       }
 
       output->data.f[0] = sum;
+      return kTfLiteOk;
   }
 
   TfLiteRegistration* Register_SUM() {

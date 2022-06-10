@@ -327,7 +327,8 @@ resultData_s _processframeloudness(AudioLoudMeter *thisp, float *in, int msize25
   float frameMeanSquare = 0;
   float framePeakSqr = 0;
   float frameTruePeakSqr = 0;
-  resultData_s processResult;
+  resultData_s processResult;  
+  if(!clone)goto FAILED;
   if (thisp->IsIntegrating == 1)
   {
     for (int ch = 0; ch < thisp->numChannels; ch++)
@@ -342,6 +343,15 @@ resultData_s _processframeloudness(AudioLoudMeter *thisp, float *in, int msize25
     {
       float *squared = (float*)malloc(sizeof(float) * in_frlen); 
       float *squared_bs1770 = (float*)malloc(sizeof(float) * in_frlen);
+      if(!squared||!squared_bs1770){
+	  	if(clone)
+			free(clone);
+		if(squared)
+			free(squared);
+		if(squared_bs1770)
+			free(squared_bs1770);
+		goto FAILED;
+	  }
       for (int channel = 0; channel < thisp->numChannels; channel++)
       {
         float channelWeight = thisp->getChannelWeight(thisp,channel);
@@ -399,17 +409,20 @@ resultData_s _processframeloudness(AudioLoudMeter *thisp, float *in, int msize25
         thisp->stepMeanSquareUpdated.pushBack(&(thisp->stepMeanSquareUpdated),stepSquareSum / (float)msize25pct);
         thisp->frameMeanSquareLength = 0;
       }
-      free (squared);
-      free (squared_bs1770);
+	  if(squared)
+	  	free (squared);
+	  if(squared_bs1770)
+	  	free (squared_bs1770);
     }
   }
   if (clone != NULL)
-    free(clone);
+	  free(clone);
+FAILED:
 
   processResult.meanSquare = frameMeanSquare;
   processResult.peaksqr = framePeakSqr;
   processResult.truepeaksqr = frameTruePeakSqr;
-
+  
   return (processResult);
 }
 
@@ -431,7 +444,8 @@ void _processmomentaryloudness(AudioLoudMeter *thisp, int msize25pct)
 
   float blockIntegrationCount = 0;
   float *blockLoudness = NULL;
-  blockLoudness = (float*)malloc(thisp->blockStepCount * sizeof(float));// 
+  blockLoudness = (float*)malloc(thisp->blockStepCount * sizeof(float));//
+  if(!blockLoudness)return; 
   for (int i = 0; i < thisp->blockStepCount; i++)
     blockLoudness[i] = 0;
 

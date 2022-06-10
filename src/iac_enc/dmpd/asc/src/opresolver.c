@@ -4,7 +4,9 @@
 
 TfLiteStatus Init_OpResolver(OpResolver * op_resolver)
 {
+#ifndef DISABLE_DEBUG_LOG
 	printf("Init_OpResolver\n");
+#endif
 	op_resolver->register_op_size = 0;
 	op_resolver->register_op_capasity = MAX_OP_NUM;//hard coded, ensure register_op_capasity >= register_op_size
 	op_resolver->registrations =  (TfLiteRegistration*)malloc(sizeof(TfLiteRegistration)*op_resolver->register_op_capasity);
@@ -29,18 +31,24 @@ TfLiteStatus Init_OpResolver(OpResolver * op_resolver)
 	Rigister_Op(op_resolver,tflite_BuiltinOperator_DIV, Register_DIV());
 	Rigister_Op(op_resolver,tflite_BuiltinOperator_RESHAPE, Register_RESHAPE());
 	Rigister_Op(op_resolver,tflite_BuiltinOperator_CONCATENATION, Register_CONCATENATION());
+	return kTfLiteOk;
 }
 
 TfLiteStatus Delete_OpResolver(OpResolver * op_resolver)
 {
+#ifndef DISABLE_DEBUG_LOG
 	printf("Delete_OpResolver\n");
+#endif
 	if(op_resolver->registrations )
 		free(op_resolver->registrations);
+    return kTfLiteOk;
 }
 
 TfLiteStatus Rigister_Op(OpResolver * op_resolver,tflite_BuiltinOperator_enum_t op,  TfLiteRegistration* new_registration)
 {
+#ifndef DISABLE_DEBUG_LOG
 	printf("Rigister_Op op type = %d\n", op);
+#endif
 	if(op_resolver->register_op_size < op_resolver->register_op_capasity)
 	{
 		TfLiteRegistration* registation = op_resolver->registrations + op_resolver->register_op_size;
@@ -62,10 +70,13 @@ TfLiteStatus Rigister_Op(OpResolver * op_resolver,tflite_BuiltinOperator_enum_t 
 
 TfLiteStatus Print_OpResolver(OpResolver * op_resolver)
 {
+#ifndef DISABLE_DEBUG_LOG
 	printf("register op size = %d\n",op_resolver->register_op_size);
+#endif
 	for(int i=0;i<op_resolver->register_op_size;i++){
 		printf("builtin_code = %d\n", op_resolver->registrations[i].builtin_code);	
 	}
+	return kTfLiteOk;
 }
 
 TfLiteRegistration* FindOp(OpResolver * op_resolver, tflite_BuiltinOperator_enum_t op, int version)  

@@ -11,19 +11,25 @@ void  Init_Subgraph(Subgraph* subgraph)
 
 void Print_Subgraph(Subgraph* subgraph)
 {
+#ifndef DISABLE_DEBUG_LOG
 	printf("tensors_size = %d,nodes_and_registrations_size = %d \n",subgraph->tensors_size,subgraph->nodes_and_registrations_size);
+#endif
 	//print inputs outputs
 	
 	//print tensors
 	for(int i=0;i< subgraph->tensors_size;i++)
 	{
+#ifndef DISABLE_DEBUG_LOG
 		printf("print tensor index = %d\n",i);
+#endif
 		Print_TfLiteTensor( &subgraph->tensors_[i]); //util.h
 	}
 	//print nodes;
 	for(int i=0;i<subgraph->nodes_and_registrations_size;i++)
 	{
+#ifndef DISABLE_DEBUG_LOG
 		printf("op index  %d\n",subgraph->nodes_and_registrations_[i].registration.builtin_code);
+#endif
 	}
 }
 
@@ -31,8 +37,9 @@ void Print_Subgraph(Subgraph* subgraph)
 
 void Delete_Subgraph(Subgraph* subgraph)
 {
+#ifndef DISABLE_DEBUG_LOG
 	printf("Delete_Subgraph\n");
-
+#endif
 	//if(subgraph->name_) free(subgraph->name_) ; 
 	//TfLiteContext context_ ; //=NULL
 	
@@ -105,7 +112,9 @@ void Delete_Subgraph(Subgraph* subgraph)
 
 TfLiteStatus SetInputs(Subgraph* subgraph , int* inputs, int size)
 {
+#ifndef DISABLE_DEBUG_LOG
 	printf("Subgraph::SetInputs\n");
+#endif
 	if(size <=0)
 	{
 		printf("SetInputs size is %d\n",size);
@@ -128,7 +137,9 @@ TfLiteStatus SetInputs(Subgraph* subgraph , int* inputs, int size)
  
 TfLiteStatus SetOutputs(Subgraph* subgraph , int* outputs, int size )
 {
+#ifndef DISABLE_DEBUG_LOG
 	printf("Subgraph::SetOutputs\n");
+#endif
 	if(size <=0)
 	{
 		printf("SetOutputs size is %d\n",size);
@@ -230,7 +241,7 @@ TfLiteStatus ReserveNodes(Subgraph* subgraph, int size)
 		free(subgraph->nodes_and_registrations_);
 	}
 	subgraph->nodes_and_registrations_ = (NodeRegistration*)malloc(sizeof(NodeRegistration) * size);//TODO
-  
+  if(!subgraph->nodes_and_registrations_)return kTfLiteError;
   memset(subgraph->nodes_and_registrations_, 0x00, sizeof(NodeRegistration));
   for (int i = 0; i < size; i++)
   {
@@ -238,13 +249,16 @@ TfLiteStatus ReserveNodes(Subgraph* subgraph, int size)
     memset(&(nodes_and_registrations_->node), 0x00, sizeof(TfLiteNode));
     memset(&(nodes_and_registrations_->registration), 0x00, sizeof(TfLiteRegistration));
   }
+  return kTfLiteOk;
 }
 
 									 
 TfLiteStatus AddTensors(Subgraph* subgraph,int tensors_to_add)
                           //int* first_new_tensor_index )//first_new_tensor_index = NULL
 {
+#ifndef DISABLE_DEBUG_LOG
 	printf("Subgraph::AddTensors, ternsor size = %d\n",tensors_to_add);
+#endif
 	if(tensors_to_add <= 0)
 		return kTfLiteOk;
 	
@@ -254,7 +268,7 @@ TfLiteStatus AddTensors(Subgraph* subgraph,int tensors_to_add)
 	}
 	subgraph->tensors_size = tensors_to_add + subgraph->tensors_size ;
 	subgraph->tensors_ = ( TfLiteTensor* )malloc( sizeof(TfLiteTensor) * subgraph->tensors_size );
-	
+	if(!subgraph->tensors_)return kTfLiteError;
 	for (size_t i = 0; i < subgraph->tensors_size; i++) {
 		memset(&subgraph->tensors_[i], 0, sizeof(subgraph->tensors_[i]));
 		subgraph->tensors_[i].buffer_handle = kTfLiteNullBufferHandle;
@@ -277,7 +291,9 @@ TfLiteStatus AddNodeWithParameters(Subgraph* subgraph,
                                      int node_index )
 									 
 {
+#ifndef DISABLE_DEBUG_LOG
 	printf("Subgraph::AddNodeWithParameters node index=%d\n", node_index);
+#endif
 	if(registration == NULL)
 		printf("Subgraph::AddNodeWithParameters error,node index=%d registration=NULL\n",node_index);
 	/*
@@ -421,7 +437,9 @@ TfLiteStatus SetTensorParametersReadOnly(Subgraph* subgraph,
       size_t bytes, //const Allocation* allocation = nullptr,
       TfLiteSparsity* sparsity)
 {
+#ifndef DISABLE_DEBUG_LOG
 	printf("Subgraph::SetTensorParametersReadOnly,index=%d,name=%s\n",tensor_index,name);
+#endif
 	/*
 	// Ensure quantization cleanup on failure.
 	ScopedTfLiteQuantization scoped_quantization(&quantization);
@@ -484,7 +502,9 @@ TfLiteStatus SetTensorParametersReadWrite(Subgraph* subgraph,
       bool is_variable/* = false*/, const size_t rank_dims_signature,
       const int* dims_signature )
 {	
+#ifndef DISABLE_DEBUG_LOG
 	printf("Subgraph::SetTensorParametersReadWrite,index=%d,name=%s\n",tensor_index,name);
+#endif
 	/*
 	ScopedTfLiteQuantization scoped_quantization(&quantization);
 	if (state_ == kStateInvokableAndImmutable) {

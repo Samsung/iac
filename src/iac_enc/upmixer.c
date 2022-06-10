@@ -9,9 +9,7 @@ static union trans2char
   float f;
   unsigned char c[4];
 };
-//float hanning[CHUNK_SIZE / 8] = {0.0f,};
-//float startWin[CHUNK_SIZE] = { 0.0f, };
-//float stopWin[CHUNK_SIZE] = { 0.0f, };
+
 static float DmixTypeMat[][4] = {
   { 1.0f, 1.0f, 0.707f, 0.707f },     //type1
   { 0.707f, 0.707f, 0.707f, 0.707f },  //type2
@@ -70,20 +68,21 @@ static float calc_w_v2(int weighttypenum, float w_x_prev, float *w_x)
   return (w_z);
 }
 
-void conv_upmixpcm(unsigned char *pcmbuf, void* dspbuf, int nch, int shift)
+void conv_upmixpcm(unsigned char *pcmbuf, void* dspbuf, int nch, int shift, int frame_size)
 {
   int16_t *buff = (int16_t*)pcmbuf;
 
-  float(*outbuff)[FRAME_SIZE] = (float(*)[FRAME_SIZE])dspbuf;
+  float(*outbuff)[IA_FRAME_MAXSIZE] = (float(*)[IA_FRAME_MAXSIZE])dspbuf;
   for (int i = 0; i < nch; i++)
   {
-    for (int j = 0; j < FRAME_SIZE; j++)
+    for (int j = 0; j < frame_size; j++)
     {
       outbuff[i + shift][j] = (float)(buff[i + j*nch]) / 32768.0f; /// why / 32768.0f??
     }
   }
 }
 
+#if 0
 static void conv_writtenfloat_(float pcmbuf[][FRAME_SIZE], void *wavbuf, int nch, int shift)
 {
   unsigned char *wbuf = (unsigned char *)wavbuf;
@@ -100,6 +99,7 @@ static void conv_writtenfloat_(float pcmbuf[][FRAME_SIZE], void *wavbuf, int nch
     }
   }
 }
+
 
 void upmix_gain(UpMixer *um, int count, int *in, int channel_layout)
 {
@@ -126,11 +126,12 @@ void upmix_gain(UpMixer *um, int count, int *in, int channel_layout)
     }
   }
 }
+#endif
 
 static int upmix_s2to3(UpMixer *um, float *w_x)
 {
 
-  for (int i = 0; i<FRAME_SIZE; i++) 
+  for (int i = 0; i<um->frame_size; i++)
   {
     um->buffer[enc_channel_mixed_s3_l][i] =
       um->ch_data[enc_channel_l2][i] - 0.707 * um->ch_data[enc_channel_c][i];
@@ -143,8 +144,31 @@ static int upmix_s2to3(UpMixer *um, float *w_x)
   return 0;
 }
 
+static int upmix_s1to2(UpMixer *um, float *w_x)
+{
+
+  for (int i = 0; i<um->frame_size; i++)
+  {
+    um->buffer[enc_channel_mixed_s2_l][i] =
+      um->ch_data[enc_channel_l2][i];
+    um->buffer[enc_channel_mixed_s2_r][i] =
+      (um->ch_data[enc_channel_mono][i] - 0.5 * um->ch_data[enc_channel_l2][i]) * 2.0;
+  }
+  um->ch_data[enc_channel_l2] = um->buffer[enc_channel_mixed_s2_l];
+  um->ch_data[enc_channel_r2] = um->buffer[enc_channel_mixed_s2_r];
+
+  return 0;
+}
+
+static int upmix_s2(UpMixer *um, float *w_x)
+{
+  return upmix_s1to2(um, w_x);
+}
+
 static int upmix_s3(UpMixer *um, float *w_x)
 {
+  if (!um->ch_data[enc_channel_r2])
+    upmix_s2(um, w_x);
   return upmix_s2to3(um, w_x);
 }
 
@@ -156,16 +180,16 @@ static int upmix_s3to5(UpMixer *um, float *w_x)
   int DmixTypeNum = current.dmix_matrix_type;
   int Typeid = DmixTypeNum - 1;
 
-  for (int i = 0; i<FRAME_SIZE; i++)
+  for (int i = 0; i<um->frame_size; i++)
   {
-    for (int i = 0; i < FRAME_SIZE; i++)
+    for (int i = 0; i < um->frame_size; i++)
     {
-      if (i < PRESKIP_SIZE)
+      if (i < um->preskip_size)
       {
         um->buffer[enc_channel_mixed_s5_l][i] = (um->ch_data[enc_channel_l3][i] - um->ch_data[enc_channel_l5][i]) / DmixTypeMat[last_Typeid][3];
         um->buffer[enc_channel_mixed_s5_r][i] = (um->ch_data[enc_channel_r3][i] - um->ch_data[enc_channel_r5][i]) / DmixTypeMat[last_Typeid][3];
       }
-      if (i >= PRESKIP_SIZE)
+      if (i >= um->preskip_size)
       {
         um->buffer[enc_channel_mixed_s5_l][i] = (um->ch_data[enc_channel_l3][i] - um->ch_data[enc_channel_l5][i]) / DmixTypeMat[Typeid][3];
         um->buffer[enc_channel_mixed_s5_r][i] = (um->ch_data[enc_channel_r3][i] - um->ch_data[enc_channel_r5][i]) / DmixTypeMat[Typeid][3];
@@ -195,16 +219,16 @@ static int upmix_s5to7(UpMixer *um, float *w_x)
   int DmixTypeNum = current.dmix_matrix_type;
   int Typeid = DmixTypeNum - 1;
 
-  for (int i = 0; i<FRAME_SIZE; i++)
+  for (int i = 0; i<um->frame_size; i++)
   {
-    for (int i = 0; i < FRAME_SIZE; i++)
+    for (int i = 0; i < um->frame_size; i++)
     {
-      if (i < PRESKIP_SIZE)
+      if (i < um->preskip_size)
       {
         um->buffer[enc_channel_mixed_s7_l][i] = (um->ch_data[enc_channel_sl5][i] - um->ch_data[enc_channel_sl7][i] * DmixTypeMat[last_Typeid][0]) / DmixTypeMat[last_Typeid][1];
         um->buffer[enc_channel_mixed_s7_r][i] = (um->ch_data[enc_channel_sr5][i] - um->ch_data[enc_channel_sr7][i] * DmixTypeMat[last_Typeid][0]) / DmixTypeMat[last_Typeid][1];
       }
-      if (i >= PRESKIP_SIZE)
+      if (i >= um->preskip_size)
       {
         um->buffer[enc_channel_mixed_s7_l][i] = (um->ch_data[enc_channel_sl5][i] - um->ch_data[enc_channel_sl7][i] * DmixTypeMat[Typeid][0]) / DmixTypeMat[Typeid][1];
         um->buffer[enc_channel_mixed_s7_r][i] = (um->ch_data[enc_channel_sr5][i] - um->ch_data[enc_channel_sr7][i] * DmixTypeMat[Typeid][0]) / DmixTypeMat[Typeid][1];
@@ -235,14 +259,14 @@ static int upmix_hf2to2(UpMixer *um, float *w_x)
   int Typeid = DmixTypeNum - 1;
   float w_z = calc_w_v2(WeightTypeNum, um->last_weight_state_value_x_prev, w_x);
 
-  for (int i = 0; i < FRAME_SIZE; i++)
+  for (int i = 0; i < um->frame_size; i++)
   {
-    if (i < PRESKIP_SIZE) // 0-311
+    if (i < um->preskip_size) // 0-311
     {
       um->buffer[enc_channel_mixed_h_l][i] = um->ch_data[enc_channel_tl][i] - DmixTypeMat[last_Typeid][3] * last_w_z * um->ch_data[enc_channel_sl5][i];
       um->buffer[enc_channel_mixed_h_r][i] = um->ch_data[enc_channel_tr][i] - DmixTypeMat[last_Typeid][3] * last_w_z * um->ch_data[enc_channel_sr5][i];
     }
-    if (i >= PRESKIP_SIZE)
+    if (i >= um->preskip_size)
     {
       um->buffer[enc_channel_mixed_h_l][i] = um->ch_data[enc_channel_tl][i] - DmixTypeMat[Typeid][3] * w_z * um->ch_data[enc_channel_sl5][i];
       um->buffer[enc_channel_mixed_h_r][i] = um->ch_data[enc_channel_tr][i] - DmixTypeMat[Typeid][3] * w_z * um->ch_data[enc_channel_sr5][i];
@@ -270,14 +294,14 @@ static int upmix_h2to4(UpMixer *um, float *w_x)
   int Typeid = DmixTypeNum - 1;
   float w_z = calc_w_v2(WeightTypeNum, um->last_weight_state_value_x_prev, w_x);
 
-  for (int i = 0; i < FRAME_SIZE; i++)
+  for (int i = 0; i < um->frame_size; i++)
   {
-    if (i < PRESKIP_SIZE) // 0-311
+    if (i < um->preskip_size) // 0-311
     {
       um->buffer[enc_channel_mixed_h_bl][i] = (um->ch_data[enc_channel_hl][i] - um->ch_data[enc_channel_hfl][i]) / DmixTypeMat[last_Typeid][2];
       um->buffer[enc_channel_mixed_h_br][i] = (um->ch_data[enc_channel_hr][i] - um->ch_data[enc_channel_hfr][i]) / DmixTypeMat[last_Typeid][2];
     }
-    if (i >= PRESKIP_SIZE)
+    if (i >= um->preskip_size)
     {
       um->buffer[enc_channel_mixed_h_bl][i] = (um->ch_data[enc_channel_hl][i] - um->ch_data[enc_channel_hfl][i]) / DmixTypeMat[Typeid][2];
       um->buffer[enc_channel_mixed_h_br][i] = (um->ch_data[enc_channel_hr][i] - um->ch_data[enc_channel_hfr][i]) / DmixTypeMat[Typeid][2];
@@ -297,10 +321,16 @@ static int upmix_h4(UpMixer *um, float *w_x)
   return upmix_h2to4(um, w_x);
 }
 
+void upmix_to100(UpMixer *um, float *w_x)
+{
+  int in[] = { enc_channel_mono };
+}
 
 void upmix_to200(UpMixer *um, float *w_x)
 {
   int in[] = { enc_channel_l2, enc_channel_r2 };
+  if (!um->ch_data[enc_channel_r2])
+    upmix_s2(um, w_x);
   //int out[] = { enc_channel_mixed_s2_l, enc_channel_mixed_s2_r };
 
   //upmix_gain(um, 2, in, CHANNEL_LAYOUT_U200);
@@ -370,7 +400,7 @@ void upmix_to714(UpMixer *um, float *w_x)
 void upmix_smooth(UpMixer *um, int layout, int count, int *channel)
 {
 
-  float filtBuf[12][CHUNK_SIZE];
+  float filtBuf[12][IA_FRAME_MAXSIZE];
   float N = 7.0;
   int  bitshift = 0;
   int  mask = 0xff;
@@ -392,7 +422,7 @@ void upmix_smooth(UpMixer *um, int layout, int count, int *channel)
     {
       sfavg[i] = sf;
     }
-    for (int j = 0; j < CHUNK_SIZE; j++)
+    for (int j = 0; j < um->frame_size; j++)
     {
       filtBuf[i][j] = um->last_sfavg[layout][i] * um->stopWin[j] + sfavg[i] * um->startWin[j];
     }
@@ -406,7 +436,7 @@ void upmix_smooth(UpMixer *um, int layout, int count, int *channel)
     {
       ch = channel[i];
       out = um->ch_data[ch];
-      for (int j = 0; j < CHUNK_SIZE; j++)
+      for (int j = 0; j < um->frame_size; j++)
       {
         out[j] = out[j] * filtBuf[i][j];
       }
@@ -422,6 +452,16 @@ static int upmix_add_mixed_s3_channels(UpMixer *um, int* array)
     array[cnt++] = enc_channel_r3;
     um->scalable_map[CHANNEL_LAYOUT_U312][enc_channel_l3] = 1;
     um->scalable_map[CHANNEL_LAYOUT_U312][enc_channel_r3] = 1;
+  }
+  return cnt;
+}
+
+static int upmix_add_mixed_s2_channels(UpMixer *um, int* array)
+{
+  int cnt = 0;
+  if (um->ch_data[enc_channel_mono] && um->ch_data[enc_channel_l2]) {
+    array[cnt++] = enc_channel_r2;
+    um->scalable_map[CHANNEL_LAYOUT_U200][enc_channel_r2] = 1;
   }
   return cnt;
 }
@@ -497,6 +537,16 @@ void smooth_to312(UpMixer *um)
 
 }
 
+void smooth_to200(UpMixer *um)
+{
+  int mixch_list[MAX_CHANNELS];
+  int ret = 0;
+
+  ret = upmix_add_mixed_s2_channels(um, mixch_list);
+  upmix_smooth(um, CHANNEL_LAYOUT_U200, ret, mixch_list);
+
+}
+
 void smooth_to510(UpMixer *um)
 {
   int mixch_list[MAX_CHANNELS];
@@ -569,7 +619,7 @@ typedef struct
 
 
 static creator_t g_upmix[] = {
-  { CHANNEL_LAYOUT_U100, NULL },
+  { CHANNEL_LAYOUT_U100, upmix_to100 },
   { CHANNEL_LAYOUT_U200, upmix_to200 },
   { CHANNEL_LAYOUT_U510, upmix_to510 },
   { CHANNEL_LAYOUT_U512, upmix_to512 },
@@ -583,7 +633,7 @@ static creator_t g_upmix[] = {
 
 static creator_t g_factorsmooth[] = {
   { CHANNEL_LAYOUT_U100, NULL },
-  { CHANNEL_LAYOUT_U200, NULL },
+  { CHANNEL_LAYOUT_U200, smooth_to200 },
   { CHANNEL_LAYOUT_U510, smooth_to510 },
   { CHANNEL_LAYOUT_U512, smooth_to512 },
   { CHANNEL_LAYOUT_U514, smooth_to514 },
@@ -595,24 +645,32 @@ static creator_t g_factorsmooth[] = {
 };
 
 
-UpMixer * upmix_create(int recon_gain_flag, const unsigned char *channel_layout_map)
+UpMixer * upmix_create(int recon_gain_flag, const unsigned char *channel_layout_map, int frame_size, int preskip_size)
 {
   UpMixer *um = (UpMixer *)malloc(sizeof(UpMixer));
+  if(!um)return NULL;
   memset(um, 0x00, sizeof(UpMixer));
   um->recon_gain_flag = recon_gain_flag;
   um->pre_layout = CHANNEL_LAYOUT_UMAX;
   memcpy(um->channel_layout_map, channel_layout_map, CHANNEL_LAYOUT_UMAX);
+  um->frame_size = frame_size;
+  um->preskip_size = preskip_size;
 
   for (int i = 0; i < CHANNEL_LAYOUT_UMAX; i++)
   {
     int layout = um->channel_layout_map[i];
     if (layout == CHANNEL_LAYOUT_UMAX)
       break;
-    um->upmix[layout] = (float *)malloc(FRAME_SIZE * MAX_CHANNELS * sizeof(float));
-    memset(um->upmix[layout], 0x00, FRAME_SIZE * MAX_CHANNELS * sizeof(float));
+    um->upmix[layout] = (float *)malloc(um->frame_size * MAX_CHANNELS * sizeof(float));
+    if(!um->upmix[layout])goto FAILED;
+    memset(um->upmix[layout], 0x00, um->frame_size * MAX_CHANNELS * sizeof(float));
   }
 
-  int frameLen = CHUNK_SIZE / 8;
+  um->hanning = (float *)malloc(um->frame_size/8 * sizeof(float));
+  um->startWin = (float *)malloc(um->frame_size * sizeof(float));
+  um->stopWin = (float *)malloc(um->frame_size * sizeof(float));
+
+  int frameLen = um->frame_size / 8;
   float den = (float)(frameLen - 1);
   //create hanning window
   for (int i = 0; i < frameLen; i++)
@@ -620,17 +678,17 @@ UpMixer * upmix_create(int recon_gain_flag, const unsigned char *channel_layout_
     um->hanning[i] = 0.5*(1.0 - cos(2 * M_PI*i / den));
   }
   int overlapLen = frameLen / 2;
-  for (int i = 0; i < CHUNK_SIZE; i++)
+  for (int i = 0; i < um->frame_size; i++)
   {
-    if (i < PRESKIP_SIZE - overlapLen)
+    if (i < um->preskip_size - overlapLen)
     {
       um->startWin[i] = 0.0f;
       um->stopWin[i] = 1.0f;
     }
-    else if (i >= (PRESKIP_SIZE - overlapLen) && i < PRESKIP_SIZE)
+    else if (i >= (um->preskip_size - overlapLen) && i < um->preskip_size)
     {
-      um->startWin[i] = um->hanning[i - (PRESKIP_SIZE - overlapLen)];
-      um->stopWin[i] = um->hanning[i - PRESKIP_SIZE + 2 * overlapLen];
+      um->startWin[i] = um->hanning[i - (um->preskip_size - overlapLen)];
+      um->stopWin[i] = um->hanning[i - um->preskip_size + 2 * overlapLen];
     }
     else
     {
@@ -662,8 +720,9 @@ UpMixer * upmix_create(int recon_gain_flag, const unsigned char *channel_layout_
 
   for (int i = 0; i < enc_channel_mixed_cnt; i++)
   {
-    um->buffer[i] = (float *)malloc(FRAME_SIZE * sizeof(float));
-    memset(um->buffer[i], 0x00, FRAME_SIZE * sizeof(float));
+    um->buffer[i] = (float *)malloc(um->frame_size * sizeof(float));
+	if(!um->buffer[i])goto FAILED;
+    memset(um->buffer[i], 0x00, um->frame_size * sizeof(float));
   }
 
   int idx = 0, ret = 0;;
@@ -675,7 +734,7 @@ UpMixer * upmix_create(int recon_gain_flag, const unsigned char *channel_layout_
     int layout = um->channel_layout_map[i];
     if (layout == CHANNEL_LAYOUT_UMAX)
       break;
-    ret = enc_get_new_channels(last_cl_layout, layout, new_channels);
+    ret = enc_get_new_channels2(last_cl_layout, layout, new_channels);
 
     for (int i = idx, j = 0; j<ret; ++i, ++j) {
       um->channel_order[i] = new_channels[j];
@@ -685,6 +744,23 @@ UpMixer * upmix_create(int recon_gain_flag, const unsigned char *channel_layout_
     last_cl_layout = layout;
   }
   return um;
+FAILED:
+  for (int i = 0; i < CHANNEL_LAYOUT_UMAX; i++)
+  {
+    int layout = um->channel_layout_map[i];
+    if (layout == CHANNEL_LAYOUT_UMAX)
+      break;
+    if(um->upmix[layout])
+		free(um->upmix[layout]);
+  }
+  for (int i = 0; i < enc_channel_mixed_cnt; i++)
+  {
+    if(um->buffer[i])
+      free(um->buffer[i]);
+  }
+  if(um)
+    free(um);
+  return NULL;
 }
 
 void upmix_destroy(UpMixer *um)
@@ -701,11 +777,17 @@ void upmix_destroy(UpMixer *um)
       if (um->buffer[i])
         free(um->buffer[i]);
     }
+    if (um->hanning)
+      free(um->hanning);
+    if (um->startWin)
+      free(um->startWin);
+    if (um->stopWin)
+      free(um->stopWin);
     free(um);
   }
 }
 
-void upmix_gain_up(UpMixer *um, float pcmbuf[][FRAME_SIZE], int nch, const unsigned char *gain_down_map)
+void upmix_gain_up(UpMixer *um, float pcmbuf[][IA_FRAME_MAXSIZE], int nch, const unsigned char *gain_down_map)
 {
 
   Mdhr current = um->mdhr_c, last = um->mdhr_l;
@@ -713,26 +795,26 @@ void upmix_gain_up(UpMixer *um, float pcmbuf[][FRAME_SIZE], int nch, const unsig
 
   int loop = 0;
   int layout = um->channel_layout_map[loop];
-  float last_dmix_gain = qf_to_float(last.dmixgain[layout], 8);
-  float dmix_gain = qf_to_float(current.dmixgain[layout], 8);
+  float last_dmix_gain = q_to_float(last.dmixgain[layout], 8);
+  float dmix_gain = q_to_float(current.dmixgain[layout], 8);
   for (int i = 0; i < nch; i++)
   {
     if (i >= channel_map714[layout])
     {
       loop++;
       layout = um->channel_layout_map[loop];
-      last_dmix_gain = qf_to_float(last.dmixgain[layout], 8);
-      dmix_gain = qf_to_float(current.dmixgain[layout], 8);
+      last_dmix_gain = q_to_float(last.dmixgain[layout], 8);
+      dmix_gain = q_to_float(current.dmixgain[layout], 8);
     }
     if (gain_down_map[i])
     {
-      for (int j = 0; j < FRAME_SIZE; j++)
+      for (int j = 0; j < um->frame_size; j++)
       {
-        if (j < PRESKIP_SIZE)
+        if (j < um->preskip_size)
         {
           pcmbuf[i][j] = pcmbuf[i][j] / last_dmix_gain;
         }
-        if (j >= PRESKIP_SIZE)
+        if (j >= um->preskip_size)
         {
           pcmbuf[i][j] = pcmbuf[i][j] / dmix_gain;
         }
@@ -751,6 +833,7 @@ void upmix3(UpMixer *um, const unsigned char *gain_down_map)
   int last_layout = 0;
   uint8_t *playout;
   int channel;
+  float dspInBuf[12][IA_FRAME_MAXSIZE];
 
   for (int i = 0; i < enc_channel_cnt; i++)
   {
@@ -762,18 +845,18 @@ void upmix3(UpMixer *um, const unsigned char *gain_down_map)
     int layout = um->channel_layout_map[i];
     if (layout == CHANNEL_LAYOUT_UMAX)
       break;
-    conv_upmixpcm(um->up_input[layout], um->up_input_temp, channel_map714[layout] - pre_ch, start_ch);
+    conv_upmixpcm(um->up_input[layout], dspInBuf, channel_map714[layout] - pre_ch, start_ch, um->frame_size);
     start_ch += (channel_map714[layout] - pre_ch);
     pre_ch = channel_map714[layout];
     last_layout = layout;
   }
 
   int chs = enc_get_layout_channel_count(last_layout);
-  upmix_gain_up(um, um->up_input_temp, chs, gain_down_map);
+  upmix_gain_up(um, dspInBuf, chs, gain_down_map);
   for (int i = 0; i < chs; i++)
   {
     int channel = um->channel_order[i];
-    um->ch_data[channel] = um->up_input_temp[i];
+    um->ch_data[channel] = dspInBuf[i];
     //printf("%s (%d) \n", up_get_channel_name(channel), channel);
   }
 
@@ -813,7 +896,7 @@ void upmix3(UpMixer *um, const unsigned char *gain_down_map)
         printf("channel %d doesn't has data.\n", playout[ch]);
         continue;
       }
-      memcpy(&(um->upmix[layout][ch*FRAME_SIZE]), um->ch_data[channel], sizeof(float) * FRAME_SIZE);
+      memcpy(&(um->upmix[layout][ch*um->frame_size]), um->ch_data[channel], sizeof(float) * um->frame_size);
     }
   }
 

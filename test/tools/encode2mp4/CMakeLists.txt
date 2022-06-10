@@ -18,12 +18,12 @@ include_directories(
 set(sources
     dmemory.c
     main.c
-    opus_header.c
     wavreader.c
     wavwriter.c
-    mp4mux.cpp
-    bitstreamrw.cpp
+    mp4mux.c
+    bitstreamrw.c
     progressbar.c
+    obuwrite.c
 )
 
 link_directories(
