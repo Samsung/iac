@@ -1,7 +1,6 @@
 #ifndef __GAINDOWN_H_
 #define __GAINDOWN_H_
 #include "opus_extension.h"
-#include "opus_types.h"
 #include "stdint.h"
 
 #ifndef CHANNEL_LAYOUT_GMAX
@@ -23,7 +22,8 @@ typedef enum {
 
 void tpq_downgain(float *inbuf, void *outbuf, int nch, float sdn);
 void ab_downgain(int16_t* inbuffer, int inbuffer_ch, int16_t* inbuffer_tpq, int tpq_ch, void *outbuf1, void *outbuf2, float sdn, int dmix_type, int weight_type);
-void gaindown(float *downmix_s[CHANNEL_LAYOUT_GMAX], const unsigned char *channel_layout_map, const unsigned char *gain_down_map, uint16_t *dmixgain);
+void gaindown(float *downmix_s[CHANNEL_LAYOUT_GMAX],
+  const unsigned char *channel_layout_map, const unsigned char *gain_down_map, uint16_t *dmixgain, int frame_size);
 void gaindown2(float *downmix_s[CHANNEL_LAYOUT_GMAX],
-  const unsigned char *channel_layout_map, const unsigned char *gain_down_map, uint16_t *dmixgain);
+  const unsigned char *channel_layout_map, const unsigned char *gain_down_map, uint16_t *dmixgain, int frame_size);
 #endif

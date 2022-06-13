@@ -22,7 +22,9 @@ typedef enum  {
 #define MAX_DELAYSIZE 4096
 #define CHUNK_SIZE 960
 #define FRAME_SIZE 960
-#define MAX_PACKET_SIZE  (MAX_CHANNELS*sizeof(int16_t)*FRAME_SIZE) // 960*2/channel
+
+#define IA_FRAME_MAXSIZE 1024
+#define MAX_PACKET_SIZE  (MAX_CHANNELS*sizeof(int16_t)*IA_FRAME_MAXSIZE) // IA_FRAME_MAXSIZE*2/channel
 
 
 #endif

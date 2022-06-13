@@ -6,15 +6,19 @@
 #include <stdio.h>
 #include <string.h>
 
-#define IA_TAG "immersive_audio"
+#ifndef IA_TAG
+#define IA_TAG "IA"
+#endif
+
 #define IA_DBG_E 0x01
 #define IA_DBG_W 0x02
 #define IA_DBG_I 0x04
 #define IA_DBG_D 0x08
 #define IA_DBG_T 0x10
 
-#define IA_DBG_LEVEL (IA_DBG_E|IA_DBG_W)
+// #define IA_DBG_LEVEL (IA_DBG_E|IA_DBG_W)
 // #define IA_DBG_LEVEL (IA_DBG_E|IA_DBG_W|IA_DBG_I)
+#define IA_DBG_LEVEL (IA_DBG_E|IA_DBG_W|IA_DBG_I|IA_DBG_D)
 // #define IA_DBG_LEVEL (IA_DBG_E|IA_DBG_W|IA_DBG_D|IA_DBG_I|IA_DBG_T)
 
 #ifndef __MODULE__
@@ -24,7 +28,7 @@
 #define ia_log(level, slevel, fmt, arg...) \
     do { \
         if (IA_DBG_LEVEL & level) { \
-            fprintf(stderr, "[%s:%s:%s(%d):%s]>" fmt "\n", IA_TAG, slevel, __MODULE__, __LINE__, __FUNCTION__, ##arg); \
+            fprintf(stderr, "[%6s:%s:%s(%d):%s]>" fmt "\n", IA_TAG, slevel, __MODULE__, __LINE__, __FUNCTION__, ##arg); \
         } \
     } while (0)
 

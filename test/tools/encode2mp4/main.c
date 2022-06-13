@@ -2,19 +2,19 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
-#include <immersive_audio_encoder.h>
+#include "immersive_audio_encoder.h"
+
 #include "wavreader.h"
 #include "wavwriter.h"
 #include "mp4mux.h"
 #include "opus_header.h"
+#include "aac_header.h"
 #include "progressbar.h"
 
 #include <time.h>
-#define PRESKIP_SIZE 312
-#define CHUNK_SIZE 960 
-#define FRAME_SIZE 960 
-#define MAX_CHANNELS 12
-#define MAX_PACKET_SIZE  (MAX_CHANNELS*sizeof(int16_t)*FRAME_SIZE) // 960*2/channel
+#define IA_FRAME_MAXSIZE 1024
+#define MAX_PACKET_SIZE  (MAX_CHANNELS*sizeof(int16_t)*IA_FRAME_MAXSIZE) // IA_FRAME_MAXSIZE*2/channel
+
 
 typedef struct {
   FILE *wav;
@@ -33,13 +33,16 @@ typedef struct {
 void print_usage(char* argv[])
 {
   fprintf(stderr, "Usage:\n");
-  fprintf(stderr, "%s <Input wav file> <Input channel layout> <Channel layout combinations> <Recon Gain Flag (0/1)> <Output Gain Flag (0/1)> <FMP4 Flag (0/1)>\n", argv[0]);
-  fprintf(stderr, "Example:  encode2mp4  replace_audio.wav  7.1.4 2.0.0/3.1.2/5.1.2  1  1  0\n");
-
+  fprintf(stderr, "-codec   : <opus/aac>\n");
+  fprintf(stderr, "-mode    : <input channel layout/channel layout combinations>\n");
+  fprintf(stderr, "<input wav file>\n");
+  fprintf(stderr, "<output mp4 file>\n\n");
+  fprintf(stderr, "Example:\nencode2mp4 -codec opus -mode 7.1.4/2.0.0+3.1.2+5.1.2 replace_audio.wav replace_audio.mp4\n");
 }
 
 int main(int argc, char *argv[])
 {
+
 #if 1
   if (argc < 7) {
     print_usage(argv);
@@ -51,48 +54,75 @@ int main(int argc, char *argv[])
   CHANNEL_LAYOUT channel_layout_in = CHANNEL_LAYOUT_MAX;
   unsigned char channel_layout_cb[CHANNEL_LAYOUT_MAX];
 
-
-  char *in_file = argv[1];
-
-  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
-  {
-    if (!strncmp(channel_layout_string[i], argv[2], 5))
-    {
-      printf("Input channel layout:%s\n", channel_layout_string[i]);
-      channel_layout_in = i;
-      break;
-    }
-  }
-  if (channel_layout_in == CHANNEL_LAYOUT_MAX)
-  {
-    printf(stderr, "Please check input channel layout format\n");
-    return 0;
-  }
-
-
-  int channel_cb_ptr = 0;
+  int recon_gain_flag = 1;
+  int output_gain_flag = 1;
+  int codec_id = 0;
+  int is_fragment_mp4 = 0;
+  char *in_file, *out_file;
+  int args = 1;
   int index = 0;
-  printf("Channel layout combinations: ");
-  while (channel_cb_ptr < strlen(argv[3]))
+  while (args < argc)
   {
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+    if (argv[args][0] == '-')
     {
-      if (!strncmp(channel_layout_string[i], argv[3] + channel_cb_ptr, 5))
+      if (argv[args][1] == 'c')
       {
-        printf("%s ", channel_layout_string[i]);
-        channel_layout_cb[index] = i;
-        index++;
+        args++;
+        if (!strncmp(argv[args], "opus", 4))
+          codec_id = 0;
+        else if (!strncmp(argv[args], "aac", 3))
+          codec_id = 1;
+      }
+      else if (argv[args][1] == 'm')
+      {
+        args++;
+        for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+        {
+          if (!strncmp(channel_layout_string[i], argv[args], 5))
+          {
+            printf("\nInput channel layout:%s\n", channel_layout_string[i]);
+            channel_layout_in = i;
+            break;
+          }
+        }
+        if (channel_layout_in == CHANNEL_LAYOUT_MAX)
+        {
+          printf(stderr, "Please check input channel layout format\n");
+          return 0;
+        }
+
+        int channel_cb_ptr = 0;
+        printf("Channel layout combinations: ");
+        while (channel_cb_ptr < strlen(argv[args] + 6))
+        {
+          for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+          {
+            if (!strncmp(channel_layout_string[i], argv[args] + 6 + channel_cb_ptr, 5))
+            {
+              printf("%s ", channel_layout_string[i]);
+              channel_layout_cb[index] = i;
+              index++;
+            }
+          }
+          channel_cb_ptr += 6;
+        }
+        printf("\n \n");
+
+        channel_layout_cb[index] = CHANNEL_LAYOUT_MAX;
+        if (index == 0)
+        {
+          recon_gain_flag = 0;
+          output_gain_flag = 0;
+        }
       }
     }
-    channel_cb_ptr += 6;
+    else 
+    {
+      in_file = argv[args++];
+      out_file = argv[args];
+    }
+    args++;
   }
-  printf("\n \n");
-
-  channel_layout_cb[index] = CHANNEL_LAYOUT_MAX;
-
-  int recon_gain_flag = atoi(argv[4]);
-  int output_gain_flag = atoi(argv[5]);
-  int is_fragment_mp4 = atoi(argv[6]);
 
 #else
   CHANNEL_LAYOUT channel_layout_in = CHANNEL_LAYOUT_714;
@@ -104,33 +134,41 @@ int main(int argc, char *argv[])
 
   //unsigned char channel_layout_cb[CHANNEL_LAYOUT_MAX]
   //  = { CHANNEL_LAYOUT_200 ,CHANNEL_LAYOUT_510 ,CHANNEL_LAYOUT_710 ,CHANNEL_LAYOUT_MAX , };
-  //char *in_file = "sine1k";
+  //char *in_file = "sine1k.wav";
   char *in_file = "replace_audio.wav";
   int recon_gain_flag = 1;
   int output_gain_flag = 1;
   int is_fragment_mp4 = 0;
+  int codec_id = IA_DEP_CODEC_OPUS;
+
+  char out_file[256];
+  char *ptr;
+  char prefix[256] = { 0 };
+  ptr = strrchr(in_file, '.');
+  if (ptr == 0) {
+    if (strlen(in_file)<256)
+      strncpy(prefix, in_file, strlen(in_file));
+  }
+  else {
+    if (ptr - in_file<256)
+      strncpy(prefix, in_file, ptr - in_file);
+  }
+  sprintf(out_file, "%s.mp4", prefix);
 
 #endif
 
 
 
-  FILE *outf_mp4 = NULL;
   MOVMuxContext *movm;
-  char mp4out[256];
-  char *ptr;
-  char prefix[256] = {0};
-  ptr = strrchr(in_file, '.');
-  if (ptr == 0) {
-    strncpy(prefix, in_file, strlen(in_file));
-  } else {
-    strncpy(prefix, in_file, ptr - in_file);
-  }
-  sprintf(mp4out, "%s.mp4", prefix);
-  if ((movm = mov_write_open(mp4out)) == NULL)
+  if ((movm = mov_write_open(out_file)) == NULL)
   {
     fprintf(stderr, "Couldn't create MP4 output file.\n");
     return (0);
   }
+
+  //********************** dep codec test***************************//
+  movm->codec_id = codec_id;
+  //********************** dep codec test***************************//
 
   //********************** fragment mp4 test***************************//
   if(is_fragment_mp4)
@@ -148,8 +186,9 @@ int main(int argc, char *argv[])
 
   //////////////////////read PCM data from wav[start]///////////////////////////
   void *in_wavf = NULL;
-  char in_wav[255];
-  strncpy(in_wav, in_file, strlen(in_file));
+  char in_wav[255] = {0};
+  if(strlen(in_file)<255)
+    strncpy(in_wav, in_file, strlen(in_file));
   //sprintf(in_wav, "%s.wav", in_file);
   in_wavf = wav_read_open(in_wav);
   if (!in_wavf)
@@ -168,50 +207,35 @@ int main(int argc, char *argv[])
   fprintf(stderr, "input wav: format[%d] channels[%d] sample_rate[%d] bits_per_sample[%d] data_length[%d]\n",
     format, channels, sample_rate, bits_per_sample, data_length);
 
-  int bsize_of_samples = CHUNK_SIZE * channels * bits_per_sample / 8;
+  int chunk_size = 0;
+  if(codec_id == IA_DEP_CODEC_OPUS)
+    chunk_size = 960;
+  else if (codec_id == IA_DEP_CODEC_AAC)
+    chunk_size = 1024;
+
+  int bsize_of_samples = chunk_size * channels * bits_per_sample / 8;
   int bsize_of_1sample = channels * bits_per_sample / 8;
-  int bsize_of_1ch_float_samples = CHUNK_SIZE * sizeof(float);
-  int bsize_of_float_samples = CHUNK_SIZE * channels * sizeof(float);
+  int bsize_of_1ch_float_samples = chunk_size * sizeof(float);
+  int bsize_of_float_samples = chunk_size * channels * sizeof(float);
   unsigned char * wav_samples = (unsigned char*)malloc(bsize_of_samples *sizeof(unsigned char));
 
-
+  clock_t start_t, stop_t;
   /**
-  * 1. Create channel group encoder handle.
+  * 1. Create immersive encoder handle.
   * */
   int error = 0;
   IAEncoder *ia_enc = immersive_audio_encoder_create(sample_rate,
     channel_layout_in, // orignal channels
     channel_layout_cb,  // channel layout combination
-    IA_APPLICATION_AUDIO, //IA_APPLICATION_AUDIO
+    codec_id,  //0:opus, 1:aac
     &error);
 
   /**
-  * 2. multistream encoder control and channel group encoder control.
+  * 2. immersive encoder control.
   * */
-  unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
-  unsigned char channel_layout_map[CHANNEL_LAYOUT_MAX] = { CHANNEL_LAYOUT_MAX , };
-  int channel_groups = 0;
-  for (channel_groups = 0; channel_groups < CHANNEL_LAYOUT_MAX; channel_groups++)
-  {
-    channel_layout_map[channel_groups] = channel_layout_cb[channel_groups];
-    if (channel_layout_cb[channel_groups] == CHANNEL_LAYOUT_MAX)
-      break;
-  }
-  channel_layout_map[channel_groups] = channel_layout_in;
-  channel_groups++;
-  channel_layout_map[channel_groups] = CHANNEL_LAYOUT_MAX;
-
-  int32_t preskip;
-  immersive_audio_encoder_ctl(ia_enc, IA_SET_BITRATE((int)(64000)));
-  immersive_audio_encoder_ctl(ia_enc, IA_SET_BANDWIDTH(IA_BANDWIDTH_FULLBAND));
-  immersive_audio_encoder_ctl(ia_enc, IA_SET_VBR(1));
-  immersive_audio_encoder_ctl(ia_enc, IA_SET_COMPLEXITY((int)(10)));
-  immersive_audio_encoder_ctl(ia_enc, IA_GET_LOOKAHEAD(&preskip));
-  immersive_audio_encoder_ctl(ia_enc, IA_SET_FORCE_MODE(IA_MODE_CELT_ONLY));
-
   immersive_audio_encoder_ctl(ia_enc, IA_SET_RECON_GAIN_FLAG((int)(recon_gain_flag)));
   immersive_audio_encoder_ctl(ia_enc, IA_SET_OUTPUT_GAIN_FLAG((int)output_gain_flag));
-  immersive_audio_encoder_ctl(ia_enc, IA_SET_SUBSTREAM_SIZE_FLAG(0));
+  //immersive_audio_encoder_ctl(ia_enc, IA_SET_SUBSTREAM_SIZE_FLAG(0));
   immersive_audio_encoder_ctl(ia_enc, IA_SET_SCALE_FACTOR_MODE((int)(2)));
   //immersive_audio_encoder_ctl(ia_enc, IA_SET_TEMP_DOWNMIX_FILE, in_file); //temp code. Need to remove in the future
 
@@ -220,23 +244,25 @@ int main(int argc, char *argv[])
   * */
   if (index > 0) // non-scalable
   {
+    start_t = clock();
     immersive_audio_encoder_dmpd_start(ia_enc);
     int pcm_frames = wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
     while (pcm_frames)
     {
-      immersive_audio_encoder_dmpd_process(ia_enc, wav_samples, 960);
+      immersive_audio_encoder_dmpd_process(ia_enc, wav_samples, chunk_size);
       pcm_frames = wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
 
     }
     immersive_audio_encoder_dmpd_stop(ia_enc);
+    stop_t = clock();
+    printf("dmpd total time %f(s)\n",(float)(stop_t-start_t)/CLOCKS_PER_SEC);
   }
 
   if (in_wavf)
     wav_read_close(in_wavf);
 
-  clock_t start_t, stop_t;
-  start_t = clock();
 
+  start_t = clock();
   /**
   * 4. loudness and gain pre-process.
   * */
@@ -253,7 +279,7 @@ int main(int argc, char *argv[])
   current = 0;
   while (pcm_frames)
   {
-    immersive_audio_encoder_loudness_gain(ia_enc, wav_samples, 960);
+    immersive_audio_encoder_loudness_gain(ia_enc, wav_samples, chunk_size);
 
     pcm_frames = wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
     wr = (wav_reader_s *)in_wavf;
@@ -281,19 +307,35 @@ int main(int argc, char *argv[])
 
   //audio trak
   unsigned char sub_bitstream_count_map[] = { 1,1,4,5,6,5,6,7,4 };
+  unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
   mov_audio_track *audio_t = movm->audio_trak;
   audio_t[0].samplerate = 48000;
   audio_t[0].channels = channel_map714[channel_layout_in];
   audio_t[0].bits = 16;
-  audio_t[0].aiac.codec_id = 0;
-  audio_t[0].aiac.sub_bitstream_count = sub_bitstream_count_map[channel_layout_in]; //
+  //audio_t[0].aiac.codec_id = 0;
+  //audio_t[0].aiac.sub_bitstream_count = sub_bitstream_count_map[channel_layout_in]; //
   // codec specific info
-  OpusHeader *header = (OpusHeader *)audio_t[0].aiac.csc;
-  header->output_channel_count = channel_map714[channel_layout_in];
-  header->preskip = 312;
-  header->input_sample_rate = 48000;
-  header->output_gain = 0;
-  header->channel_mapping_family = 255;
+  if (movm->codec_id == IA_DEP_CODEC_OPUS)
+  {
+    OpusHeader *header = (OpusHeader *)audio_t[0].aiac.csc;
+    header->output_channel_count = 2;
+    header->preskip = 312;
+    header->input_sample_rate = 48000;
+    header->output_gain = 0;
+    header->channel_mapping_family = 0;
+  }
+  else if (movm->codec_id == IA_DEP_CODEC_AAC)
+  {
+    AacHeader *header = (AacHeader *)audio_t[0].aiac.csc;
+    header->sample_rate = 48000;
+    header->object_type = 2;
+    header->sampling_index = 3;//48khz
+    header->chan_config = 2; // 2 channels
+  }
+  else
+  {
+    printf("wrong codec input\n");
+  }
 
   /**
   * 6. get immersive audio static metadata info.
@@ -302,16 +344,16 @@ int main(int argc, char *argv[])
   audio_t[0].ia_static_meta.ambisonics_mode = ia_static_metadata.ambisonics_mode;
   audio_t[0].ia_static_meta.channel_audio_layer = ia_static_metadata.channel_audio_layer;
   audio_t[0].ia_static_meta.ambisonics_mode = ia_static_metadata.ambisonics_mode;
-  audio_t[0].ia_static_meta.substream_size_is_present_flag = ia_static_metadata.substream_size_is_present_flag;
   for (int i = 0; i < ia_static_metadata.channel_audio_layer; i++)
   {
-    audio_t[0].ia_static_meta.cha_layer_config[i].loudspeaker_layout = ia_static_metadata.channel_audio_layer_config[i].loudspeaker_layout;
-    audio_t[0].ia_static_meta.cha_layer_config[i].output_gain_is_present_flag = ia_static_metadata.channel_audio_layer_config[i].output_gain_is_present_flag;
-    audio_t[0].ia_static_meta.cha_layer_config[i].recon_gain_is_present_flag = ia_static_metadata.channel_audio_layer_config[i].recon_gain_is_present_flag;
-    audio_t[0].ia_static_meta.cha_layer_config[i].substream_count = ia_static_metadata.channel_audio_layer_config[i].substream_count;
-    audio_t[0].ia_static_meta.cha_layer_config[i].coupled_substream_count = ia_static_metadata.channel_audio_layer_config[i].coupled_substream_count;
-    audio_t[0].ia_static_meta.cha_layer_config[i].loudness = ia_static_metadata.channel_audio_layer_config[i].loudness;
-    audio_t[0].ia_static_meta.cha_layer_config[i].output_gain = ia_static_metadata.channel_audio_layer_config[i].output_gain;
+    audio_t[0].ia_static_meta.ch_audio_layer_config[i].loudspeaker_layout = ia_static_metadata.channel_audio_layer_config[i].loudspeaker_layout;
+    audio_t[0].ia_static_meta.ch_audio_layer_config[i].output_gain_is_present_flag = ia_static_metadata.channel_audio_layer_config[i].output_gain_is_present_flag;
+    audio_t[0].ia_static_meta.ch_audio_layer_config[i].recon_gain_is_present_flag = ia_static_metadata.channel_audio_layer_config[i].recon_gain_is_present_flag;
+    audio_t[0].ia_static_meta.ch_audio_layer_config[i].substream_count = ia_static_metadata.channel_audio_layer_config[i].substream_count;
+    audio_t[0].ia_static_meta.ch_audio_layer_config[i].coupled_substream_count = ia_static_metadata.channel_audio_layer_config[i].coupled_substream_count;
+    audio_t[0].ia_static_meta.ch_audio_layer_config[i].loudness = ia_static_metadata.channel_audio_layer_config[i].loudness;
+    audio_t[0].ia_static_meta.ch_audio_layer_config[i].output_gain_flags = ia_static_metadata.channel_audio_layer_config[i].output_gain_flags;
+    audio_t[0].ia_static_meta.ch_audio_layer_config[i].output_gain = ia_static_metadata.channel_audio_layer_config[i].output_gain;
   }
   /////////////////////////audio trak setting, end//////////////////////////////////////////////
 
@@ -326,8 +368,8 @@ int main(int argc, char *argv[])
   int demix_mode = 0;
   while (pcm_frames)
   {
-    int encoded_size = immersive_audio_encode(ia_enc, wav_samples, CHUNK_SIZE, encode_ia, &demix_mode, MAX_PACKET_SIZE);
-    mov_write_audio2(movm, 0, encode_ia, encoded_size, 960, demix_mode);
+    int encoded_size = immersive_audio_encode(ia_enc, wav_samples, chunk_size, encode_ia, &demix_mode, MAX_PACKET_SIZE);
+    mov_write_audio2(movm, 0, encode_ia, encoded_size, chunk_size, demix_mode);
 
     pcm_frames = wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
     frame_count ++;

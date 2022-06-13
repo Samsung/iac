@@ -42,29 +42,6 @@ static float calc_w(int weighttypenum)
   return (w_z);
 }
 
-void downmix_714toM312(float dspInBuf[][FRAME_SIZE], void * dspOutBuf, int dmix_type, int weight_type)
-{
-  float(*dspOut)[FRAME_SIZE] = (float(*)[FRAME_SIZE])dspOutBuf;
-  int type_id = dmix_type - 1;
-
-  float w_z = calc_w(weight_type);
-
-  for (int i = 0; i < FRAME_SIZE; i++)
-  {
-    float MSL = DmixTypeMat[type_id][0] * dspInBuf[gSL][i] + DmixTypeMat[type_id][1] * dspInBuf[gBL][i];
-    float MSR = DmixTypeMat[type_id][0] * dspInBuf[gSR][i] + DmixTypeMat[type_id][1] * dspInBuf[gBR][i];
-    float MHL = dspInBuf[gHL][i] + DmixTypeMat[type_id][2] * dspInBuf[gHBL][i];
-    float MHR = dspInBuf[gHR][i] + DmixTypeMat[type_id][2] * dspInBuf[gHBR][i];
-
-    dspOut[gML3][i] = dspInBuf[gL][i] + DmixTypeMat[type_id][3] * MSL;
-    dspOut[gMR3][i] = dspInBuf[gR][i] + DmixTypeMat[type_id][3] * MSR;
-    dspOut[gMC][i] = dspInBuf[gC][i];
-    dspOut[gMLFE][i] = dspInBuf[gLFE][i];
-    dspOut[gMHL3][i] = DmixTypeMat[type_id][3] * w_z * MSL + MHL;
-    dspOut[gMHR3][i] = DmixTypeMat[type_id][3] * w_z * MSR + MHR;
-  }
-}
-
 static float calc_w_v2(int weighttypenum, float w_x_prev, float *w_x)
 {
   // weighttypenum == 0: 0,  weighttypenum != 0: 1.0 ???
@@ -94,272 +71,14 @@ static float calc_w_v2(int weighttypenum, float w_x_prev, float *w_x)
   return (w_z);
 }
 
-void downmix_714toM312_v2(float dspInBuf[][FRAME_SIZE], void * dspOutBuf, int dmix_type, int weight_type, float w_x_prev, float *w_x)
-{
-  float(*dspOut)[FRAME_SIZE] = (float(*)[FRAME_SIZE])dspOutBuf;
-  int type_id = dmix_type - 1;
-
-  float w_z = calc_w_v2(weight_type, w_x_prev, w_x);
-
-  for (int i = 0; i < FRAME_SIZE; i++)
-  {
-    float MSL = DmixTypeMat[type_id][0] * dspInBuf[gSL][i] + DmixTypeMat[type_id][1] * dspInBuf[gBL][i];
-    float MSR = DmixTypeMat[type_id][0] * dspInBuf[gSR][i] + DmixTypeMat[type_id][1] * dspInBuf[gBR][i];
-    float MHL = dspInBuf[gHL][i] + DmixTypeMat[type_id][2] * dspInBuf[gHBL][i];
-    float MHR = dspInBuf[gHR][i] + DmixTypeMat[type_id][2] * dspInBuf[gHBR][i];
-
-    dspOut[gML3][i] = dspInBuf[gL][i] + DmixTypeMat[type_id][3] * MSL;
-    dspOut[gMR3][i] = dspInBuf[gR][i] + DmixTypeMat[type_id][3] * MSR;
-    dspOut[gMC][i] = dspInBuf[gC][i];
-    dspOut[gMLFE][i] = dspInBuf[gLFE][i];
-    dspOut[gMHL3][i] = DmixTypeMat[type_id][3] * w_z * MSL + MHL;
-    dspOut[gMHR3][i] = DmixTypeMat[type_id][3] * w_z * MSR + MHR;
-  }
-}
-
-void downmix_714toM512(float dspInBuf[][FRAME_SIZE], void* dspOutBuf, int dmix_type, int weight_type, float w_x_prev, float *w_x)
-{
-  float(*dspOut)[FRAME_SIZE] = (float(*)[FRAME_SIZE])dspOutBuf;
-  int type_id = dmix_type - 1;
-  for (int i = 0; i < FRAME_SIZE; i++)
-  {
-    float MSL = DmixTypeMat[type_id][0] * dspInBuf[gSL][i] + DmixTypeMat[type_id][1] * dspInBuf[gBL][i];
-    float MSR = DmixTypeMat[type_id][0] * dspInBuf[gSR][i] + DmixTypeMat[type_id][1] * dspInBuf[gBR][i];
-    float MHL = dspInBuf[gHL][i] + DmixTypeMat[type_id][2] * dspInBuf[gHBL][i];
-    float MHR = dspInBuf[gHR][i] + DmixTypeMat[type_id][2] * dspInBuf[gHBR][i];
-
-    dspOut[gML5][i] = dspInBuf[gL][i];
-    dspOut[gMR5][i] = dspInBuf[gR][i];
-    dspOut[gMC][i] = dspInBuf[gC][i];
-    dspOut[gMLFE][i] = dspInBuf[gLFE][i];
-
-    dspOut[gMSL5][i] = MSL;
-    dspOut[gMSR5][i] = MSR;
-    dspOut[gMHL5][i] = MHL;
-    dspOut[gMHR5][i] = MHR;
-  }
-}
-
-void downmix_714toM510(float dspInBuf[][FRAME_SIZE], void* dspOutBuf, int dmix_type, int weight_type, float w_x_prev, float *w_x)
-{
-  float(*dspOut)[FRAME_SIZE] = (float(*)[FRAME_SIZE])dspOutBuf;
-  int type_id = dmix_type - 1;
-  for (int i = 0; i < FRAME_SIZE; i++)
-  {
-    float MSL = DmixTypeMat[type_id][0] * dspInBuf[gSL][i] + DmixTypeMat[type_id][1] * dspInBuf[gBL][i];
-    float MSR = DmixTypeMat[type_id][0] * dspInBuf[gSR][i] + DmixTypeMat[type_id][1] * dspInBuf[gBR][i];
-
-    dspOut[gML5][i] = dspInBuf[gL][i];
-    dspOut[gMR5][i] = dspInBuf[gR][i];
-    dspOut[gMC][i] = dspInBuf[gC][i];
-    dspOut[gMLFE][i] = dspInBuf[gLFE][i];
-
-    dspOut[gMSL5][i] = MSL;
-    dspOut[gMSR5][i] = MSR;
-  }
-}
-
-void downmix_714toM514(float dspInBuf[][FRAME_SIZE], void* dspOutBuf, int dmix_type, int weight_type, float w_x_prev, float *w_x)
-{
-  float(*dspOut)[FRAME_SIZE] = (float(*)[FRAME_SIZE])dspOutBuf;
-  int type_id = dmix_type - 1;
-  for (int i = 0; i < FRAME_SIZE; i++)
-  {
-    float MSL = DmixTypeMat[type_id][0] * dspInBuf[gSL][i] + DmixTypeMat[type_id][1] * dspInBuf[gBL][i];
-    float MSR = DmixTypeMat[type_id][0] * dspInBuf[gSR][i] + DmixTypeMat[type_id][1] * dspInBuf[gBR][i];
-
-    dspOut[gML5][i] = dspInBuf[gL][i];
-    dspOut[gMR5][i] = dspInBuf[gR][i];
-    dspOut[gMC][i] = dspInBuf[gC][i];
-    dspOut[gMLFE][i] = dspInBuf[gLFE][i];
-
-    dspOut[gMSL5][i] = MSL;
-    dspOut[gMSR5][i] = MSR;
-    dspOut[gMHFL5][i] = dspInBuf[gHL][i];
-    dspOut[gMHFR5][i] = dspInBuf[gHR][i];
-    dspOut[gMHBL5][i] = dspInBuf[gHBL][i];
-    dspOut[gMHBR5][i] = dspInBuf[gHBR][i];
-  }
-}
-
-void downmix_714toM710(float dspInBuf[][FRAME_SIZE], void* dspOutBuf, int dmix_type, int weight_type, float w_x_prev, float *w_x)
-{
-  float(*dspOut)[FRAME_SIZE] = (float(*)[FRAME_SIZE])dspOutBuf;
-  for (int i = 0; i < FRAME_SIZE; i++)
-  {
-    for (int j = 0; j < 8; j++)
-    {
-      dspOut[j][i] = dspInBuf[j][i];
-    }
-  }
-}
-
-void downmix_714toM712(float dspInBuf[][FRAME_SIZE], void* dspOutBuf, int dmix_type, int weight_type, float w_x_prev, float *w_x)
-{
-  float(*dspOut)[FRAME_SIZE] = (float(*)[FRAME_SIZE])dspOutBuf;
-  int type_id = dmix_type - 1;
-  for (int i = 0; i < FRAME_SIZE; i++)
-  {
-    for (int j = 0; j < 8; j++)
-    {
-      dspOut[j][i] = dspInBuf[j][i];
-    }
-    float MHL = dspInBuf[gHL][i] + DmixTypeMat[type_id][2] * dspInBuf[gHBL][i];
-    float MHR = dspInBuf[gHR][i] + DmixTypeMat[type_id][2] * dspInBuf[gHBR][i];
-
-    dspOut[gHL][i] = MHL;
-    dspOut[gHR][i] = MHR;
-  }
-}
-
-void downmix_714toM714(float dspInBuf[][FRAME_SIZE], void* dspOutBuf, int dmix_type, int weight_type, float w_x_prev, float *w_x)
-{
-  float(*dspOut)[FRAME_SIZE] = (float(*)[FRAME_SIZE])dspOutBuf;
-  for (int i = 0; i < FRAME_SIZE; i++)
-  {
-    for (int j = 0; j < 12; j++)
-    {
-      dspOut[j][i] = dspInBuf[j][i];
-    }
-  }
-}
-
-void downmix_714toM312_ko(float dspInBuf[][FRAME_SIZE], void* dspOutBuf, int dmix_type, int weight_type)
-{
-  downmix_714toM312(dspInBuf, dspOutBuf, dmix_type, weight_type);
-}
-
-void downmix_714toM312_ko_v2(float dspInBuf[][FRAME_SIZE], void * dspOutBuf, int dmix_type, int weight_type, float w_x_prev, float *w_x)
-{
-  downmix_714toM312_v2(dspInBuf, dspOutBuf, dmix_type, weight_type, w_x_prev, w_x);
-}
-
-void downmix_714toM200(float dspInBuf[][FRAME_SIZE], void* dspOutBuf, int dmix_type, int weight_type, float w_x_prev, float *w_x)
-{
-  float(*dspOut)[FRAME_SIZE] = (float(*)[FRAME_SIZE])dspOutBuf;
-  float dspOutBuf312[6][FRAME_SIZE];
-  downmix_714toM312_ko_v2(dspInBuf, dspOutBuf312, dmix_type, weight_type, w_x_prev, w_x);
-  for (int i = 0; i < FRAME_SIZE; i++)
-  {
-    dspOut[gA][i] = dspOutBuf312[gML3][i] + 0.707*dspOutBuf312[gMC][i];
-    dspOut[gB][i] = dspOutBuf312[gMR3][i] + 0.707*dspOutBuf312[gMC][i];
-  }
-}
-
-void downmix_714toMstereo(float dspInBuf[][FRAME_SIZE], void* dspOutBuf, int dmix_type, int weight_type, float w_x_prev, float *w_x)
-{
-  float(*dspOut)[FRAME_SIZE] = (float(*)[FRAME_SIZE])dspOutBuf;
-  float dspOutBuf200[2][FRAME_SIZE];
-  downmix_714toM200(dspInBuf, dspOutBuf200, dmix_type, weight_type, w_x_prev, w_x);
-  for (int i = 0; i < FRAME_SIZE; i++)
-  {
-    dspOut[0][i] = 0.5*dspOutBuf200[gA][i] + 0.5*dspOutBuf200[gB][i];
-  }
-}
-
-void downmix_714toS312_ko(float dspInBuf[][FRAME_SIZE], void* dspOutBuf, int dmix_type, int weight_type)
-{
-  float(*dspOut)[FRAME_SIZE] = (float(*)[FRAME_SIZE])dspOutBuf;
-  float dspOutBuf312[6][FRAME_SIZE];
-  downmix_714toM312_ko(dspInBuf, dspOutBuf312, dmix_type, weight_type);
-  for (int i = 0; i < FRAME_SIZE; i++)
-  {
-
-    dspOut[gA][i] = dspOutBuf312[gML3][i] + 0.707*dspOutBuf312[gMC][i];
-    dspOut[gB][i] = dspOutBuf312[gMR3][i] + 0.707*dspOutBuf312[gMC][i];
-
-    dspOut[gT][i] = dspOutBuf312[gMC][i];
-    dspOut[gP][i] = dspOutBuf312[gMLFE][i];
-
-    dspOut[gQ1][i] = dspOutBuf312[gMHL3][i];
-    dspOut[gQ2][i] = dspOutBuf312[gMHR3][i];
-  }
-}
-
-void downmix_714toS312_ko_v2(float dspInBuf[][FRAME_SIZE], void* dspOutBuf, int dmix_type, int weight_type, float w_x_prev, float *w_x)
-{
-  float(*dspOut)[FRAME_SIZE] = (float(*)[FRAME_SIZE])dspOutBuf;
-  float dspOutBuf312[6][FRAME_SIZE];
-  downmix_714toM312_ko_v2(dspInBuf, dspOutBuf312, dmix_type, weight_type, w_x_prev, w_x);
-  for (int i = 0; i < FRAME_SIZE; i++)
-  {
-
-    dspOut[gA][i] = dspOutBuf312[gML3][i] + 0.707*dspOutBuf312[gMC][i];
-    dspOut[gB][i] = dspOutBuf312[gMR3][i] + 0.707*dspOutBuf312[gMC][i];
-
-    dspOut[gT][i] = dspOutBuf312[gMC][i];
-    dspOut[gP][i] = dspOutBuf312[gMLFE][i];
-
-    dspOut[gQ1][i] = dspOutBuf312[gMHL3][i];
-    dspOut[gQ2][i] = dspOutBuf312[gMHR3][i];
-  }
-}
-
-void downmix_714toSUV_ko(float dspInBuf[][FRAME_SIZE], void* dspOutBuf)
-{
-  float(*dspOut)[FRAME_SIZE] = (float(*)[FRAME_SIZE])dspOutBuf;
-  for (int i = 0; i < FRAME_SIZE; i++)
-  {
-    dspOut[0][i] = dspInBuf[gL][i]; //#S1
-    dspOut[1][i] = dspInBuf[gR][i]; //#S2
-    dspOut[2][i] = dspInBuf[gSL][i]; //#U1
-    dspOut[3][i] = dspInBuf[gSR][i]; //#U2
-    dspOut[4][i] = dspInBuf[gHL][i]; //#V1
-    dspOut[5][i] = dspInBuf[gHR][i]; //#V2
-  }
-}
-
-void downmix_714toSxxx(float dspInBuf[][FRAME_SIZE], void* dspOutBuf, int dmix_type, int weight_type, float w_x_prev, float *w_x)
-{
-  float(*dspOut)[FRAME_SIZE] = (float(*)[FRAME_SIZE])dspOutBuf;
-  for (int i = 0; i < FRAME_SIZE; i++)
-  {
-    dspOut[0][i] = dspInBuf[gL][i]; //#S1
-    dspOut[1][i] = dspInBuf[gR][i]; //#S2
-    dspOut[2][i] = dspInBuf[gSL][i]; //#U1
-    dspOut[3][i] = dspInBuf[gSR][i]; //#U2
-    dspOut[4][i] = dspInBuf[gHL][i]; //#V1
-    dspOut[5][i] = dspInBuf[gHR][i]; //#V2
-  }
-}
-#if 0
-void conv_writtenpcm(float pcmbuf[][FRAME_SIZE], void *wavbuf, int nch, int shift)
-{
-  int16_t *wbuf = (int16_t *)wavbuf;
-  for (int i = 0; i < nch; i++)
-  {
-    for (int j = 0; j < FRAME_SIZE; j++)
-    {
-      wbuf[i + j*nch] = (int16_t)(pcmbuf[i + shift][j] * 32767.0);
-    }
-  }
-}
-
-void conv_writtenfloat(float pcmbuf[][FRAME_SIZE], void *wavbuf, int nch, int shift)
-{
-  unsigned char *wbuf = (unsigned char *)wavbuf;
-  for (int i = 0; i < nch; i++)
-  {
-    for (int j = 0; j < FRAME_SIZE; j++)
-    {
-      union trans2char trans;
-      trans.f = pcmbuf[i + shift][j];
-      wbuf[(i + j*nch) * 4] = trans.c[0];
-      wbuf[(i + j*nch) * 4 + 1] = trans.c[1];
-      wbuf[(i + j*nch) * 4 + 2] = trans.c[2];
-      wbuf[(i + j*nch) * 4 + 3] = trans.c[3];
-    }
-  }
-}
-#endif
-void conv_downmixpcm(unsigned char *pcmbuf, void* dspbuf, int nch)
+void conv_downmixpcm(unsigned char *pcmbuf, void* dspbuf, int nch, int frame_size)
 {
   int16_t *buff = (int16_t*)pcmbuf;
 
-  float(*outbuff)[FRAME_SIZE] = (float(*)[FRAME_SIZE])dspbuf;
+  float(*outbuff)[IA_FRAME_MAXSIZE] = (float(*)[IA_FRAME_MAXSIZE])dspbuf;
   for (int i = 0; i < nch; i++)
   {
-    for (int j = 0; j < FRAME_SIZE; j++)
+    for (int j = 0; j < frame_size; j++)
     {
       outbuff[i][j] = (float)(buff[i + j*nch]) / 32768.0f; /// why / 32768.0f??
     }
@@ -372,29 +91,41 @@ void conv_downmixpcm(unsigned char *pcmbuf, void* dspbuf, int nch)
 // c1c2c3 
 
 //
-void convert_preskip_pcm(float * outbuffer, void * inbuffer, int ch)
+void convert_preskip_pcm(float * outbuffer, void * inbuffer, int ch, int frame_size, int preskip_size)
 {
-  float(*dspin)[FRAME_SIZE] = (float(*)[FRAME_SIZE])inbuffer;
+  float(*dspin)[IA_FRAME_MAXSIZE] = (float(*)[IA_FRAME_MAXSIZE])inbuffer;
   for (int i = 0; i < ch; i++)
   {
-    for (int j = 0; j < PRESKIP_SIZE; j++)
+    for (int j = 0; j < preskip_size; j++)
     {
-      outbuffer[i*FRAME_SIZE + j] = outbuffer[ch * FRAME_SIZE + i*PRESKIP_SIZE + j];
+      outbuffer[i*frame_size + j] = outbuffer[ch * frame_size + i*preskip_size + j];
     }
   }
   for (int i = 0; i < ch; i++)
   {
-    for (int j = PRESKIP_SIZE; j < FRAME_SIZE; j++)
+    for (int j = preskip_size; j < frame_size; j++)
     {
-      outbuffer[i*FRAME_SIZE + j] = dspin[i][j - PRESKIP_SIZE];
+      outbuffer[i*frame_size + j] = dspin[i][j - preskip_size];
     }
   }
 
   for (int i = 0; i < ch; i++)
   {
-    for (int j = 0; j < PRESKIP_SIZE; j++)
+    for (int j = 0; j < preskip_size; j++)
     {
-      outbuffer[ch * FRAME_SIZE + i*PRESKIP_SIZE + j] = dspin[i][j + FRAME_SIZE - PRESKIP_SIZE];
+      outbuffer[ch * frame_size + i*preskip_size + j] = dspin[i][j + frame_size - preskip_size];
+    }
+  }
+}
+
+void convert_out_pcm(float * outbuffer, void * inbuffer, int ch, int frame_size)
+{
+  float(*dspin)[IA_FRAME_MAXSIZE] = (float(*)[IA_FRAME_MAXSIZE])inbuffer;
+  for (int i = 0; i < ch; i++)
+  {
+    for (int j = 0; j < frame_size; j++)
+    {
+      outbuffer[i*frame_size + j] = dspin[i][j];
     }
   }
 }
@@ -405,23 +136,10 @@ typedef struct
   void *data;
 } creator_t;
 
-static creator_t g_downmixm[] = {
-  { CHANNEL_LAYOUT_D100, downmix_714toMstereo },
-  { CHANNEL_LAYOUT_D200, downmix_714toM200 },
-  { CHANNEL_LAYOUT_D510, downmix_714toM510 },
-  { CHANNEL_LAYOUT_D512, downmix_714toM512 },
-  { CHANNEL_LAYOUT_D514, downmix_714toM514 },
-  { CHANNEL_LAYOUT_D710, downmix_714toM710 },
-  { CHANNEL_LAYOUT_D712, downmix_714toM712 },
-  { CHANNEL_LAYOUT_D714, downmix_714toM714 },
-  { CHANNEL_LAYOUT_D312, downmix_714toM312_v2 },
-  { -1 }
-};
-
 static int downmix_h4to2(DownMixer *dm, int dmix_type, int weight_type, float *w_x)
 {
   int type_id = dmix_type - 1;
-  for (int i = 0; i < FRAME_SIZE; i++)
+  for (int i = 0; i < dm->frame_size; i++)
   {
     dm->buffer[enc_channel_mixed_h_l][i] = dm->ch_data[enc_channel_hfl][i] + DmixTypeMat[type_id][2] * dm->ch_data[enc_channel_hbl][i];
     dm->buffer[enc_channel_mixed_h_r][i] = dm->ch_data[enc_channel_hfr][i] + DmixTypeMat[type_id][2] * dm->ch_data[enc_channel_hbr][i];
@@ -441,7 +159,7 @@ static int downmix_h2tofh2(DownMixer *dm, int dmix_type, int weight_type, float 
   int type_id = dmix_type - 1;
   float w_z = calc_w_v2(weight_type, dm->weight_state_value_x_prev, w_x);
 
-  for (int i = 0; i < FRAME_SIZE; i++)
+  for (int i = 0; i < dm->frame_size; i++)
   {
     dm->buffer[enc_channel_mixed_t_l][i] = dm->ch_data[enc_channel_hl][i] + DmixTypeMat[type_id][3] * w_z* dm->ch_data[enc_channel_sl5][i];
     dm->buffer[enc_channel_mixed_t_r][i] = dm->ch_data[enc_channel_hr][i] + DmixTypeMat[type_id][3] * w_z* dm->ch_data[enc_channel_sr5][i];
@@ -459,6 +177,7 @@ static int downmix_h2(DownMixer *dm, int dmix_type, int weight_type, float *w_x)
 {
   if (dm->ch_data[enc_channel_hfl])
   return downmix_h4to2(dm, dmix_type, weight_type, w_x);
+  return 0;
 }
 
 static int downmix_fh2(DownMixer *dm, int dmix_type, int weight_type, float *w_x)
@@ -467,12 +186,13 @@ static int downmix_fh2(DownMixer *dm, int dmix_type, int weight_type, float *w_x
     downmix_h2(dm, dmix_type, weight_type, w_x);
   if(dm->ch_data[enc_channel_hl])
     return downmix_h2tofh2(dm, dmix_type, weight_type, w_x);
+  return 0;
 }
 
 static int downmix_s7to5(DownMixer *dm, int dmix_type, int weight_type, float *w_x)
 {
   int type_id = dmix_type - 1;
-  for (int i = 0; i < FRAME_SIZE; i++)
+  for (int i = 0; i < dm->frame_size; i++)
   {
     dm->buffer[enc_channel_mixed_s5_l][i] = DmixTypeMat[type_id][0] * dm->ch_data[enc_channel_sl7][i] + DmixTypeMat[type_id][1] * dm->ch_data[enc_channel_bl7][i];
     dm->buffer[enc_channel_mixed_s5_r][i] = DmixTypeMat[type_id][0] * dm->ch_data[enc_channel_sr7][i] + DmixTypeMat[type_id][1] * dm->ch_data[enc_channel_br7][i];
@@ -494,12 +214,13 @@ static int downmix_s5(DownMixer *dm, int dmix_type, int weight_type, float *w_x)
 {
   if(dm->ch_data[enc_channel_sl7])
     return downmix_s7to5(dm, dmix_type, weight_type, w_x);
+  return 0;
 }
 
 static int downmix_s5to3(DownMixer *dm, int dmix_type, int weight_type, float *w_x)
 {
   int type_id = dmix_type - 1;
-  for (int i = 0; i < FRAME_SIZE; i++)
+  for (int i = 0; i < dm->frame_size; i++)
   {
     dm->buffer[enc_channel_mixed_s3_l][i] = dm->ch_data[enc_channel_l5][i] + DmixTypeMat[type_id][2] * dm->ch_data[enc_channel_sl5][i];
     dm->buffer[enc_channel_mixed_s3_r][i] = dm->ch_data[enc_channel_r5][i] + DmixTypeMat[type_id][2] * dm->ch_data[enc_channel_sr5][i];
@@ -516,7 +237,7 @@ static int downmix_s5to3(DownMixer *dm, int dmix_type, int weight_type, float *w
 static int downmix_s3to2(DownMixer *dm, int dmix_type, int weight_type, float *w_x)
 {
   int type_id = dmix_type - 1;
-  for (int i = 0; i < FRAME_SIZE; i++)
+  for (int i = 0; i < dm->frame_size; i++)
   {
     dm->buffer[enc_channel_mixed_s2_l][i] = dm->ch_data[enc_channel_l3][i] + 0.707 * dm->ch_data[enc_channel_c][i];
     dm->buffer[enc_channel_mixed_s2_r][i] = dm->ch_data[enc_channel_r3][i] + 0.707 * dm->ch_data[enc_channel_c][i];
@@ -529,12 +250,25 @@ static int downmix_s3to2(DownMixer *dm, int dmix_type, int weight_type, float *w
   return 0;
 }
 
+static int downmix_s2to1(DownMixer *dm, int dmix_type, int weight_type, float *w_x)
+{
+  int type_id = dmix_type - 1;
+  for (int i = 0; i < dm->frame_size; i++)
+  {
+    dm->buffer[enc_channel_mixed_s1_m][i] = 0.5 * dm->ch_data[enc_channel_l2][i] + 0.5 * dm->ch_data[enc_channel_r2][i];
+  }
+  dm->ch_data[enc_channel_mono] = dm->buffer[enc_channel_mixed_s1_m];
+  dm->gaindown_map[CHANNEL_LAYOUT_D100][enc_channel_mono] = 1;
+  return 0;
+}
+
 static int downmix_s3(DownMixer *dm, int dmix_type, int weight_type, float *w_x)
 {
   if(!dm->ch_data[enc_channel_sl5])
     downmix_s5(dm, dmix_type, weight_type, w_x);
   if(dm->ch_data[enc_channel_sl5])
     downmix_s5to3(dm, dmix_type, weight_type, w_x);
+  return 0;
 }
 
 static int downmix_s2(DownMixer *dm, int dmix_type, int weight_type, float *w_x)
@@ -543,6 +277,17 @@ static int downmix_s2(DownMixer *dm, int dmix_type, int weight_type, float *w_x)
     downmix_s3(dm, dmix_type, weight_type, w_x);
   if(dm->ch_data[enc_channel_l3])
     downmix_s3to2(dm, dmix_type, weight_type, w_x);
+  return 0;
+}
+
+static int downmix_s1(DownMixer *dm, int dmix_type, int weight_type, float *w_x)
+{
+  if (!dm->ch_data[enc_channel_l2])
+    downmix_s2(dm, dmix_type, weight_type, w_x);
+  if (dm->ch_data[enc_channel_l2])
+    downmix_s2to1(dm, dmix_type, weight_type, w_x);
+
+  return 0;
 }
 
 void downmix_to714(DownMixer *dm, int dmix_type, int weight_type, float *w_x)
@@ -593,8 +338,14 @@ void downmix_to200(DownMixer *dm, int dmix_type, int weight_type, float *w_x)
   return;
 }
 
+void downmix_to100(DownMixer *dm, int dmix_type, int weight_type, float *w_x)
+{
+  downmix_s1(dm, dmix_type, weight_type, w_x);
+  return;
+}
+
 static creator_t g_downmix[] = {
-  { CHANNEL_LAYOUT_D100, NULL },
+  { CHANNEL_LAYOUT_D100, downmix_to100 },
   { CHANNEL_LAYOUT_D200, downmix_to200 },
   { CHANNEL_LAYOUT_D510, downmix_to510 },
   { CHANNEL_LAYOUT_D512, downmix_to512 },
@@ -610,12 +361,12 @@ int downmix2(DownMixer *dm, unsigned char* inbuffer, int dmix_type, int weight_t
 {
 
   int ret = 0;
-  float dspInBuf714[12][CHUNK_SIZE];
-  float tmp[12][CHUNK_SIZE];
+  float dspInBuf[12][IA_FRAME_MAXSIZE];
+  float tmp[12][IA_FRAME_MAXSIZE];
   float weight_state_value_x_curr = 0.0;
   uint8_t *playout;
   int channel;
-  conv_downmixpcm(inbuffer, dspInBuf714, dm->channels);
+  conv_downmixpcm(inbuffer, dspInBuf, dm->channels, dm->frame_size);
 
   unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
   unsigned char pre_ch = 0;
@@ -648,7 +399,7 @@ int downmix2(DownMixer *dm, unsigned char* inbuffer, int dmix_type, int weight_t
   {
     uint8_t *tchs = enc_get_layout_channels(last_layout);
     int ch = tchs[i];
-    dm->ch_data[ch] = dspInBuf714[i];
+    dm->ch_data[ch] = dspInBuf[i];
     //printf("%s (%d) \n", up_get_channel_name(channel), channel);
   }
   for (int i = last_index; i >= 0; i--)
@@ -673,111 +424,61 @@ int downmix2(DownMixer *dm, unsigned char* inbuffer, int dmix_type, int weight_t
         printf("channel %d doesn't has data.\n", playout[ch]);
         continue;
       }
-      memcpy(tmp[ch], dm->ch_data[channel], sizeof(float) * FRAME_SIZE);
+      memcpy(tmp[ch], dm->ch_data[channel], sizeof(float) * dm->frame_size);
     }
-    convert_preskip_pcm(dm->downmix_m[layout], tmp, enc_get_layout_channel_count(layout));
+    //convert_preskip_pcm(dm->downmix_m[layout], tmp, enc_get_layout_channel_count(layout), dm->frame_size, dm->preskip_size);
+    convert_out_pcm(dm->downmix_m[layout], tmp, enc_get_layout_channel_count(layout), dm->frame_size);
     //downmix_s
     for (int ch = pre_ch; ch < enc_get_layout_channel_count(layout); ++ch)
     {
-      for (int j = 0; j < enc_get_layout_channel_count(layout); j++)
+      int s_index = 0;
+      for (s_index = 0; s_index < enc_get_layout_channel_count(layout); s_index++)
       {
-        if (dm->channel_order[ch] == playout[j])
+        if (dm->channel_order[ch] == playout[s_index])
         {
-          memcpy(&(dm->downmix_s[layout][(ch - pre_ch)*FRAME_SIZE]), tmp[j], sizeof(float) * FRAME_SIZE);
+          memcpy(&(dm->downmix_s[layout][(ch - pre_ch) * dm->frame_size]), tmp[s_index], sizeof(float) * dm->frame_size);
           break;
         }
+      }
+      if (s_index == enc_get_layout_channel_count(layout))// mono case
+      {
+        memcpy(&(dm->downmix_s[layout][(ch - pre_ch) * dm->frame_size]), dm->ch_data[enc_channel_l2], sizeof(float) * dm->frame_size);
       }
     }
     pre_ch = enc_get_layout_channel_count(layout);
   }
 
 
-
   dm->weight_state_value_x_prev = weight_state_value_x_curr;
   return 0;
 }
 
-#if 0
-/*
-channels: input channel
-target_channel_type: demixed channel type, AB TPQ SUV...
-dmix_type: downmix type from by audio scene classificaiton
-weight_type: wight type from height mixing
-input: input PCM
-
-*/
-int downmix(DownMixer *dm, unsigned char* inbuffer, int dmix_type, int weight_type)
-{
-
- 
-  int ret = 0;
-  float dspInBuf714[12][CHUNK_SIZE];
-  float tmp[12][CHUNK_SIZE];
-  float weight_state_value_x_curr = 0.0;
-  conv_downmixpcm(inbuffer, dspInBuf714, dm->channels);
-
-  unsigned char channel_map714[] = {1,2,6,8,10,8,10,12,6};
-  unsigned char pre_ch = 0;
-  unsigned char channel_map_s0[][MAX_CHANNELS] = { { 0,1 },{ 2,3,4,5 },{ 0,1 },{ 4,5,8,9 } }; //Transmission Order: 2ch / 3.1.2ch / 5.1.2ch / 7.1.4ch 
-  unsigned char channel_map_s1[][MAX_CHANNELS] = { { 0,1 },{ 2,3,0,1 },{ 6,7 },{ 4,5,8,9 } }; //Transmission Order: 2ch / 5.1ch / 5.1.2ch / 7.1.4ch
-  unsigned char channel_map_s2[][MAX_CHANNELS] = { { 0,1 },{ 2,3,0,1 },{ 4,5 },{ 8,9,10,11 } }; //Transmission Order: 2ch / 5.1ch / 7.1ch / 7.1.4ch
-  unsigned char(*channel_map_s)[MAX_CHANNELS];
-  if(dm->scalable_format == 0)
-    channel_map_s = channel_map_s0;// TODO..........
-  else if (dm->scalable_format == 1)
-    channel_map_s = channel_map_s1;// TODO..........
-  else if (dm->scalable_format == 2)
-    channel_map_s = channel_map_s2;// TODO..........
-
-  for (int i = 0; i < CHANNEL_LAYOUT_DMAX; i++)
-  {
-    int lay_out = dm->channel_layout_map[i];
-
-    if (lay_out == CHANNEL_LAYOUT_DMAX)
-      break;
-
-    ((void(*)(float dspInBuf[][FRAME_SIZE], void* , int , int , float , float *))g_downmixm[lay_out].data)
-      (dspInBuf714, tmp, dmix_type, weight_type, dm->weight_state_value_x_prev, &weight_state_value_x_curr);
-
-    for (int j = 0; j < (channel_map714[lay_out] - pre_ch); j++)
-    {
-      for (int k = 0; k < FRAME_SIZE; k++)
-      {
-        float *temp1 = dm->downmix_s[lay_out];
-        temp1[j*FRAME_SIZE + k] = tmp[(*(channel_map_s+i))[j]][k];
-      }
-    }
-    pre_ch = channel_map714[lay_out];
-
-    convert_preskip_pcm(dm->downmix_m[lay_out], tmp, channel_map714[lay_out]);
-  }
-  
-  dm->weight_state_value_x_prev = weight_state_value_x_curr;
-  return 0;
-}
-#endif
-
-DownMixer * downmix_create(const unsigned char *channel_layout_map)
+DownMixer * downmix_create(const unsigned char *channel_layout_map, int frame_size)
 {
   DownMixer *dm = (DownMixer*)malloc(sizeof(DownMixer));
+  if(!dm)return NULL;
   memset(dm, 0x00, sizeof(DownMixer));
 
   memcpy(dm->channel_layout_map, channel_layout_map, CHANNEL_LAYOUT_DMAX);
+  dm->frame_size = frame_size;
   for (int i = 0; i < CHANNEL_LAYOUT_DMAX; i++)
   {
     int layout = dm->channel_layout_map[i];
     if (layout == CHANNEL_LAYOUT_DMAX)
       break;
-    dm->downmix_m[layout] = (float *)malloc((FRAME_SIZE + PRESKIP_SIZE) * MAX_CHANNELS * sizeof(float));
-    memset(dm->downmix_m[layout], 0x00, (FRAME_SIZE + PRESKIP_SIZE) * MAX_CHANNELS * sizeof(float));
-    dm->downmix_s[layout] = (float *)malloc(FRAME_SIZE * MAX_CHANNELS * sizeof(float));
-    memset(dm->downmix_s[layout], 0x00, FRAME_SIZE * MAX_CHANNELS * sizeof(float));
+    dm->downmix_m[layout] = (float *)malloc((frame_size) * MAX_CHANNELS * sizeof(float));
+    if(!dm->downmix_m[layout])goto FAILED;
+    memset(dm->downmix_m[layout], 0x00, (frame_size) * MAX_CHANNELS * sizeof(float));
+    dm->downmix_s[layout] = (float *)malloc(frame_size * MAX_CHANNELS * sizeof(float));
+    if(!dm->downmix_s[layout])goto FAILED;
+    memset(dm->downmix_s[layout], 0x00, frame_size * MAX_CHANNELS * sizeof(float));
   }
 
   for (int i = 0; i < enc_channel_mixed_cnt; i++)
   {
-    dm->buffer[i] = (float *)malloc(FRAME_SIZE * sizeof(float));
-    memset(dm->buffer[i], 0x00, FRAME_SIZE * sizeof(float));
+    dm->buffer[i] = (float *)malloc(frame_size * sizeof(float));
+    if(!dm->buffer[i])goto FAILED;
+    memset(dm->buffer[i], 0x00, frame_size * sizeof(float));
   }
 
 
@@ -790,7 +491,7 @@ DownMixer * downmix_create(const unsigned char *channel_layout_map)
     int layout = dm->channel_layout_map[i];
     if (layout == CHANNEL_LAYOUT_DMAX)
       break;
-    ret = enc_get_new_channels(last_cl_layout, layout, new_channels);
+    ret = enc_get_new_channels2(last_cl_layout, layout, new_channels);
 
     for (int i = idx, j = 0; j<ret; ++i, ++j) {
       dm->channel_order[i] = new_channels[j];
@@ -803,6 +504,26 @@ DownMixer * downmix_create(const unsigned char *channel_layout_map)
   dm->channels = enc_get_layout_channel_count(last_cl_layout);
   dm->weight_state_value_x_prev = 0.0;
   return dm;
+FAILED:
+  for (int i = 0; i < CHANNEL_LAYOUT_DMAX; i++)
+  {
+    int layout = dm->channel_layout_map[i];
+    if (layout == CHANNEL_LAYOUT_DMAX)
+      break;
+    if(dm->downmix_m[layout])
+      free(dm->downmix_m[layout]);
+    if(dm->downmix_s[layout])
+      free(dm->downmix_s[layout]);
+  }
+
+  for (int i = 0; i < enc_channel_mixed_cnt; i++)
+  {
+    if(dm->buffer[i])
+    free(dm->buffer[i]);
+  }
+  if(dm)
+    free(dm);
+  return NULL;
 }
 
 void downmix_clear(DownMixer *dm)

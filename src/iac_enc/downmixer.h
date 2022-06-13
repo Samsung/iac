@@ -1,6 +1,6 @@
 #ifndef __DOWNMIXER_H_
 #define __DOWNMIXER_H
-#include "opus_extension.h"
+#include "audio_defines.h"
 #include "opus_types.h"
 #include "scalable_format.h"
 
@@ -29,6 +29,8 @@ define MAX_CHANNELS 12
 #endif
 typedef struct {
   int channels;
+  int frame_size;
+  int preskip_size;
   unsigned char channel_layout_map[CHANNEL_LAYOUT_DMAX];
   int channel_groups;
   float *downmix_m[CHANNEL_LAYOUT_DMAX];
@@ -39,9 +41,8 @@ typedef struct {
   unsigned char  channel_order[enc_channel_cnt + 1];
   unsigned char gaindown_map[CHANNEL_LAYOUT_DMAX][enc_channel_cnt];
 }DownMixer;
-DownMixer * downmix_create(const unsigned char *channel_layout_map);
+DownMixer * downmix_create(const unsigned char *channel_layout_map, int frame_size);
 void downmix_destroy(DownMixer *dm);
-int downmix(DownMixer *dm, unsigned char* inbuffer, int dmix_type, int weight_type);
 int downmix2(DownMixer *dm, unsigned char* inbuffer, int dmix_type, int weight_type);
 void downmix_clear(DownMixer *dm);
 //unsigned char* get_downmix_data(DownMixer *dm, DownmixChannelType type);

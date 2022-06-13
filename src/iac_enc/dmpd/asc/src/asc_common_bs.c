@@ -19,6 +19,7 @@ void audio_resizing_1ch(float * data0, int frame_size, int data_unit_size, int d
         padded_nsamples_ds = nsamples_ds + tail_add;
     }
     float* data_ds = malloc(padded_nsamples_ds*sizeof(float));
+    if(!data_ds)return;
     memset(data_ds,0,padded_nsamples_ds*sizeof(float));
     decimate_dialog(data0,frame_size,data_ds);
 
@@ -52,6 +53,7 @@ void audio_resizing_714ch(float* data0, int frame_size, int data_unit_size, int 
     
     //float* data_ds = malloc(padded_nsamples_ds*DOWN_CHANNELS*sizeof(float));
     float *ret_data = malloc( (padded_nsamples_ds + data_unit_size*kernel_s)*DOWN_CHANNELS*sizeof(float)); 
+    if(!ret_data)return;
     float *data_ds =  ret_data  + data_unit_size*kernel_s*DOWN_CHANNELS;
     //float* data_ds = malloc(padded_nsamples_ds*DOWN_CHANNELS*sizeof(float));
     memset(data_ds,0,padded_nsamples_ds*DOWN_CHANNELS*sizeof(float));

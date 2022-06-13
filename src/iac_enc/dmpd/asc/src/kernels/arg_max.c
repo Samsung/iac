@@ -18,7 +18,7 @@
   // Returns kTfLiteOk on success.
   TfLiteStatus ArgMax_Prepare(TfLiteContext* context, TfLiteNode* node)
   {
-      
+    return kTfLiteOk;    
   }
 
   // Execute the node (should read node->inputs and output to node->outputs).
@@ -47,7 +47,7 @@
     }
     output->data.f[0] = index;
     LOGE("ArgMax_Eval %d\n",index);
-
+    return kTfLiteOk;
   }
 
   TfLiteRegistration* Register_ARGMAX() {

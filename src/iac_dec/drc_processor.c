@@ -19,12 +19,13 @@
 
 #include "drc_processor.h"
 
-void drc_init_limiter(AudioEffectPeakLimiter *limiter, int input_sample_rate, int input_nchannels)
+void drc_init_limiter(AudioEffectPeakLimiter *limiter, int input_sample_rate,
+                      int input_nchannels, int frame_size)
 {
     audio_effect_peak_limiter_init(limiter, LIMITER_MaximumTruePeak,
             input_sample_rate, input_nchannels,
             LIMITER_AttackSec, LIMITER_ReleaseSec,
-            FRAME_SIZE,
+            frame_size,
 #ifndef NODELAY_PROCESS
             LIMITER_LookAhead
 #else

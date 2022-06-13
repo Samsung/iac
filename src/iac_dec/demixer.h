@@ -21,22 +21,19 @@
 #define __DEMIXER_H_
 
 #include <stdint.h>
+#include "immersive_audio.h"
+#include "immersive_audio_types.h"
 
 typedef struct Demixer Demixer;
-typedef struct DemixingParam {
-    int         demixing_mode;
-    int         steps;
-    float*      gain;
-    uint8_t*    recon_gain;
-    int         recon_gain_flag;
-    int*        layout;
-    uint8_t*    channel_order;
-    int         frame_size;
-} DemixingParam;
 
-Demixer* demixer_create(void);
-int demixer_init(Demixer* );
-int demixer_demix(Demixer* , void* , int , void* , DemixingParam* );
-void demixer_destroy(Demixer* );
+Demixer *demixer_open(uint32_t frame_size, uint32_t delay);
+void demixer_close (Demixer *);
+
+int demixer_set_channel_layout (Demixer *, IAChannelLayoutType );
+int demixer_set_channels_order (Demixer *, IAChannel *, int );
+int demixer_set_output_gain (Demixer *, IAChannel *, float *, int);
+int demixer_set_demixing_mode (Demixer *, int);
+int demixer_set_recon_gain (Demixer *, int , IAChannel *, float *, uint32_t);
+int demixer_demixing (Demixer *, float *, float *, uint32_t);
 
 #endif /* __DEMIXER_H_ */

@@ -11,6 +11,19 @@
 #define CHANNEL_LAYOUT_INVALID -1
 #endif
 
+typedef enum {
+  FORMAT_CHANNEL_LAYOUT_100, //1.0.0
+  FORMAT_CHANNEL_LAYOUT_200, //2.0.0 
+  FORMAT_CHANNEL_LAYOUT_510, //5.1.0
+  FORMAT_CHANNEL_LAYOUT_512, //5.1.2
+  FORMAT_CHANNEL_LAYOUT_514, //5.1.4
+  FORMAT_CHANNEL_LAYOUT_710, //7.1.0
+  FORMAT_CHANNEL_LAYOUT_712, //7.1.2
+  FORMAT_CHANNEL_LAYOUT_714, //7.1.4
+  FORMAT_CHANNEL_LAYOUT_312, //3.1.2
+  FORMAT_CHANNEL_LAYOUT_MAX
+}FORMAT_CHANNEL_LAYOUT;
+
 enum {
   enc_channel_mono,
   enc_channel_l2,
@@ -44,6 +57,7 @@ enum {
 
 
 enum {
+  enc_channel_mixed_s1_m,
   enc_channel_mixed_s2_l,
   enc_channel_mixed_s2_r,
   enc_channel_mixed_s3_l,
@@ -103,13 +117,13 @@ static uint8_t enc_gs_layout_channels[][12] = { // wav Channels (Speaker locatio
 static uint8_t enc_gs_layout_channels2[][12] = { //Channels(Speaker location orderings), used for getting scalable channel order
   { enc_channel_mono },
   { enc_channel_l2, enc_channel_r2 },
-  { enc_channel_c, enc_channel_lfe, enc_channel_l5, enc_channel_r5, enc_channel_sl5, enc_channel_sr5 },
-  { enc_channel_c, enc_channel_lfe, enc_channel_l5, enc_channel_r5, enc_channel_sl5, enc_channel_sr5, enc_channel_hl, enc_channel_hr },
-  { enc_channel_c, enc_channel_lfe, enc_channel_l5, enc_channel_r5, enc_channel_sl5, enc_channel_sr5, enc_channel_hfl, enc_channel_hfr, enc_channel_hbl, enc_channel_hbr },
-  { enc_channel_c, enc_channel_lfe, enc_channel_l7, enc_channel_r7, enc_channel_sl7, enc_channel_sr7, enc_channel_bl7, enc_channel_br7 },
-  { enc_channel_c, enc_channel_lfe, enc_channel_l7, enc_channel_r7, enc_channel_sl7, enc_channel_sr7, enc_channel_bl7, enc_channel_br7, enc_channel_hl, enc_channel_hr },
-  { enc_channel_c, enc_channel_lfe, enc_channel_l7, enc_channel_r7, enc_channel_sl7, enc_channel_sr7, enc_channel_bl7, enc_channel_br7, enc_channel_hfl, enc_channel_hfr, enc_channel_hbl, enc_channel_hbr },
-  { enc_channel_c, enc_channel_lfe, enc_channel_l3, enc_channel_r3, enc_channel_tl, enc_channel_tr }
+  { enc_channel_l5, enc_channel_r5, enc_channel_sl5, enc_channel_sr5, enc_channel_c, enc_channel_lfe },
+  { enc_channel_l5, enc_channel_r5, enc_channel_sl5, enc_channel_sr5, enc_channel_hl, enc_channel_hr, enc_channel_c, enc_channel_lfe },
+  { enc_channel_l5, enc_channel_r5, enc_channel_sl5, enc_channel_sr5, enc_channel_hfl, enc_channel_hfr, enc_channel_hbl, enc_channel_hbr, enc_channel_c, enc_channel_lfe},
+  { enc_channel_l7, enc_channel_r7, enc_channel_sl7, enc_channel_sr7, enc_channel_bl7, enc_channel_br7, enc_channel_c, enc_channel_lfe},
+  { enc_channel_l7, enc_channel_r7, enc_channel_sl7, enc_channel_sr7, enc_channel_bl7, enc_channel_br7, enc_channel_hl, enc_channel_hr, enc_channel_c, enc_channel_lfe },
+  { enc_channel_l7, enc_channel_r7, enc_channel_sl7, enc_channel_sr7, enc_channel_bl7, enc_channel_br7, enc_channel_hfl, enc_channel_hfr, enc_channel_hbl, enc_channel_hbr, enc_channel_c, enc_channel_lfe},
+  { enc_channel_l3, enc_channel_r3, enc_channel_tl, enc_channel_tr, enc_channel_c, enc_channel_lfe }
 };
 #else
 static uint8_t enc_gs_layout_channels2[][12] = { //Channels(Speaker location orderings), used for getting scalable channel order
@@ -137,8 +151,20 @@ static uint8_t enc_gs_vorbis_layout_channels[][12] = { // vorbis Channels (Speak
   { enc_channel_l3, enc_channel_c, enc_channel_r3, enc_channel_tl, enc_channel_tr, enc_channel_lfe }
 };
 
+static int get_recon_gain_flags_map_msb[][14] = { // convert to MSB
+  { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
+  { -1, -1, -1, -1, enc_channel_r2, -1, enc_channel_l2, /*|*/ -1, -1, -1, -1, -1, -1, -1 },
+  { -1, -1, enc_channel_sr5, enc_channel_sl5, enc_channel_r5, enc_channel_c, enc_channel_l5, /*|*/ enc_channel_lfe, -1, -1, -1, -1, -1, -1  },
+  { enc_channel_hr, enc_channel_hl, enc_channel_sr5, enc_channel_sl5, enc_channel_r5, enc_channel_c, enc_channel_l5, /*|*/enc_channel_lfe, -1, -1, -1, -1, -1, -1  },
+  { enc_channel_hfr, enc_channel_hfl, enc_channel_sr5, enc_channel_sl5, enc_channel_r5, enc_channel_c, enc_channel_l5, /*|*/enc_channel_lfe, enc_channel_hbr, enc_channel_hbl, -1, -1, -1, -1  },
+  { -1, -1, enc_channel_sr7, enc_channel_sl7, enc_channel_r7, enc_channel_c, enc_channel_l7, /*|*/enc_channel_lfe, -1, -1, enc_channel_br7, enc_channel_bl7, -1, -1  },
+  { enc_channel_hr, enc_channel_hl, enc_channel_sr7, enc_channel_sl7, enc_channel_r7, enc_channel_c, enc_channel_l7, /*|*/enc_channel_lfe, -1, -1, enc_channel_br7, enc_channel_bl7, -1, -1, /*|*/  },
+  { enc_channel_hfr, enc_channel_hfl, enc_channel_sr7, enc_channel_sl7, enc_channel_r7, enc_channel_c, enc_channel_l7, /*|*/enc_channel_lfe, enc_channel_hbr, enc_channel_hbl, enc_channel_br7, enc_channel_bl7, -1, -1  },
+  { enc_channel_tr, enc_channel_tl, -1, -1, enc_channel_r3, enc_channel_c, enc_channel_l3, /*|*/enc_channel_lfe, -1, -1, -1, -1, -1, -1  },
+};
+
 static int get_recon_gain_flags_map[][12] = {
-  { enc_channel_mono },
+  { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
   { enc_channel_l2, -1, enc_channel_r2, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
   { enc_channel_l5, enc_channel_c, enc_channel_r5, enc_channel_sl5, enc_channel_sr5, -1, -1, -1, -1, -1, -1, enc_channel_lfe },
   { enc_channel_l5, enc_channel_c, enc_channel_r5, enc_channel_sl5, enc_channel_sr5, enc_channel_hl, enc_channel_hr, -1, -1, -1, -1, enc_channel_lfe },
@@ -150,15 +176,32 @@ static int get_recon_gain_flags_map[][12] = {
 };
 
 static int get_recon_gain_value_map[][12] = {
-  { enc_channel_mono },
-  { 0, -1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
-  { 0, 2, 1, 4, 5, -1, -1, -1, -1, -1, -1, 3 },
-  { 0, 2, 1, 4, 5, 6, 7, -1, -1, -1, -1, 3 },
-  { 0, 2, 1, 4, 5, 6, 7, -1, -1, 8, 9, 3 },
-  { 0, 2, 1, 4, 5, -1, -1, 6, 7, -1, -1, 3 },
-  { 0, 2, 1, 4, 5, 8, 9, 6, 7, -1, -1, 3 },
-  { 0, 2, 1, 4, 5, 8, 9, 6, 7, 10, 11, 3 },
-  { 0, 2, 1, -1, -1, 4, 5, -1, -1, -1, -1, 3 }
+  { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },// mono
+  {  0, -1,  1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },// 2.0.0
+  {  0,  2,  1,  4,  5, -1, -1, -1, -1, -1, -1,  3 },// 5.1.0
+  {  0,  2,  1,  4,  5,  6,  7, -1, -1, -1, -1,  3 },// 5.1.2
+  {  0,  2,  1,  4,  5,  6,  7, -1, -1,  8,  9,  3 },// 5.1.4
+  {  0,  2,  1,  4,  5, -1, -1,  6,  7, -1, -1,  3 },// 7.1.0
+  {  0,  2,  1,  4,  5,  8,  9,  6,  7, -1, -1,  3 },// 7.1.2
+  {  0,  2,  1,  4,  5,  8,  9,  6,  7, 10, 11,  3 },// 7.1.4
+  {  0,  2,  1, -1, -1,  4,  5, -1, -1, -1, -1,  3 } // 3.1.2
+};
+
+static int get_recon_gain_mixed_map[][12] = { // map indicating mixed channels
+  { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },// mono
+  { 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },// 2.0.0
+  { 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0 },// 5.1.0
+  { 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0 },// 5.1.2
+  { 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0 },// 5.1.4
+  { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },// 7.1.0
+  { 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0 },// 7.1.2
+  { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },// 7.1.4
+  { 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0 } // 3.1.2
+};
+
+static int get_output_gain_flags_map[] ={
+  5/*Mono*/, 5/*l2*/, 4/*r2*/, -1/*c*/, -1/*lfe*/, 1/*tl*/, 0/*tr*/, 5/*l3*/, 4/*r3*/, -1/*l5/l7*/, -1/*r5/r7*/,
+  3/*sl5*/, 2/*sr5*/, 1/*hl*/, 0/*hr*/, -1/*sl7*/, -1/*sr7*/, -1/*hfl*/, -1/*hfr*/, -1/*bl7*/, -1/*br7*/, -1/*hbl*/, 1/*hbr*/
 };
 
 static const int enc_gs_layout_channel_count[] = {
@@ -178,4 +221,8 @@ int enc_convert_12channel(int ch);
 int enc_has_c_channel(int cnt, uint8_t *channels);
 const char* enc_get_channel_name(uint32_t ch);
 int enc_get_new_channels(int base, int target, uint8_t* channels);
+int enc_get_new_channels2(int base, int target, uint8_t* channels);
+int get_surround_channels(int lay_out);
+int get_height_channels(int lay_out);
+int get_lfe_channels(int lay_out);
 #endif

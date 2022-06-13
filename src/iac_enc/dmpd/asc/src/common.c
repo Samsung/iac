@@ -45,6 +45,7 @@ int TfLiteIntArrayEqualsArray(const TfLiteIntArray* a, int b_size,
 TfLiteIntArray* TfLiteIntArrayCreate(int size) {
   TfLiteIntArray* ret =
       (TfLiteIntArray*)malloc(TfLiteIntArrayGetSizeInBytes(size));
+  if(!ret)return NULL;
   ret->size = size;
   return ret;
 }
@@ -52,6 +53,7 @@ TfLiteIntArray* TfLiteIntArrayCreate(int size) {
 TfLiteIntArray* TfLiteIntArrayCreateWithData(int size,int* data) {
   TfLiteIntArray* ret =
       (TfLiteIntArray*)malloc(TfLiteIntArrayGetSizeInBytes(size));
+  if(!ret)return NULL;
   ret->size = size;
   for(int i=0;i<size;i++)
 	  ret->data[i]=data[i];
@@ -82,6 +84,7 @@ int TfLiteFloatArrayGetSizeInBytes(int size) {
 TfLiteFloatArray* TfLiteFloatArrayCreate(int size) {
   TfLiteFloatArray* ret =
       (TfLiteFloatArray*)malloc(TfLiteFloatArrayGetSizeInBytes(size));
+  if(!ret)return NULL;
   ret->size = size;
   return ret;
 }

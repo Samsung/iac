@@ -22,18 +22,10 @@ typedef enum {
 }CHANNEL_LAYOUT;
 
 typedef enum {
-  CHANNEL_GROUP_TYPE_BCG,
-  CHANNEL_GROUP_TYPE_DCG1,
-  CHANNEL_GROUP_TYPE_DCG2,
-  CHANNEL_GROUP_TYPE_DCG3,
-  CHANNEL_GROUP_TYPE_DCG4,
-  CHANNEL_GROUP_TYPE_MAX
-} CHANNEL_GROUP_TYPE;
-
-typedef struct {
-  int meta_size;
-  int sample_size;
-}EXTENSION_ENCODE_SIZE;
+  IA_DEP_CODEC_OPUS,
+  IA_DEP_CODEC_AAC,
+  IA_DEP_CODEC_MAX
+} IA_DEP_CODEC_TYPE;
 
 #ifndef DEMIXING_MATRIX_SIZE_MAX
 #define DEMIXING_MATRIX_SIZE_MAX (18 * 18 * 2)
@@ -50,10 +42,10 @@ typedef struct {
   int loudspeaker_layout;
   int output_gain_is_present_flag;
   int recon_gain_is_present_flag;
-  int output_channel_count;
   int substream_count;
   int coupled_substream_count;
   int loudness;
+  int output_gain_flags;
   int output_gain;
 }CHANNEL_AUDIO_LAYER_CONFIG;
 
@@ -61,10 +53,9 @@ typedef struct {
   int version;
   int ambisonics_mode;
   int channel_audio_layer;
-  int reserved;
-  int substream_size_is_present_flag;
-  AMBISONICS_LAYER_CONFIG ambisonics_layer_config[CHANNEL_GROUP_TYPE_MAX];
-  CHANNEL_AUDIO_LAYER_CONFIG channel_audio_layer_config[CHANNEL_GROUP_TYPE_MAX];
+
+  AMBISONICS_LAYER_CONFIG ambisonics_layer_config;
+  CHANNEL_AUDIO_LAYER_CONFIG channel_audio_layer_config[CHANNEL_LAYOUT_MAX];
 }IA_STATIC_METADATA;
 
 
@@ -75,6 +66,8 @@ typedef struct {
 * @param     [in] Fs : sample rate.
 * @param     [in]channel_layout_in : the input of channel layout, ex: 7.1.4
 * @param     [in]channel_layout_cb : the scalable channel layout combinations, ex: 2ch / 3.1.2ch / 5.1.2ch
+* @param     [in]codec_id : the codec id. 0:opus, 1:aac
+* @param     [in]error : the return error when create ia handle
 * @return    return immersive audio encoder handler
 * @remark    Adjacent channel layouts of a scalable format (where CLn-1 is the precedent channel layout and CLn is the next one) are
 *            only allowed as below, where CLn = S(n).W(n).H(n)
@@ -85,7 +78,7 @@ typedef struct {
 IAEncoder *immersive_audio_encoder_create(int32_t Fs,
   int channel_layout_in,
   const unsigned char *channel_layout_cb,//
-  int application, //IA_APPLICATION_AUDIO
+  int codec_id, //0:opus, 1:aac
   int *error);
 
 /*

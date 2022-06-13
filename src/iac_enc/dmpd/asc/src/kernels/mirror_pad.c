@@ -84,7 +84,7 @@ void MirrorPad_Free(TfLiteContext* context, void* buffer) {
 }
 
 TfLiteStatus MirrorPad_Prepare(TfLiteContext* context, TfLiteNode* node) {
-
+  return kTfLiteOk;
 }
 
 void MirrorPad_Eval(TfLiteContext* context, TfLiteNode* node) {
@@ -100,6 +100,7 @@ void MirrorPad_Eval(TfLiteContext* context, TfLiteNode* node) {
 
   int *output_dims_num_elements = (int*)malloc(input_dims*sizeof(int));
   int *input_dims_num_elements = (int*)malloc(input_dims*sizeof(int));
+  if(!output_dims_num_elements||!input_dims_num_elements)goto FAILED;
   for(int i=0; i< input_dims;i++){
     output_dims_num_elements[i] = 1;
     input_dims_num_elements[i] = 1;
@@ -128,14 +129,15 @@ void MirrorPad_Eval(TfLiteContext* context, TfLiteNode* node) {
   eval_data.padding_matrix = padding_matrix;
 
   MirrorPadWorkerTask(&eval_data,0,output_size);
-  
+
+LOGE("MirrorPad_Eval\n");
+FAILED:
   if (output_dims_num_elements)
     free(output_dims_num_elements);
 
   if (input_dims_num_elements)
     free(input_dims_num_elements);
 
-LOGE("MirrorPad_Eval\n");
 
 }
 

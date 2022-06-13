@@ -194,6 +194,7 @@ int init_default(AudioEffectPeakLimiter* ths)
 {
     int ret = -1;
     if (ths) {
+        audio_effect_peak_limiter_uninit (ths);
         memset(ths, 0x00, sizeof(AudioEffectPeakLimiter));
 
         ths->currentGain = 1.0;

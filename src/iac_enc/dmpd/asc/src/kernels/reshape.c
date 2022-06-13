@@ -22,7 +22,7 @@
 
     
 
-
+    return kTfLiteOk;
   }
 
   // Execute the node (should read node->inputs and output to node->outputs).
@@ -42,7 +42,7 @@
     int output_size  = NumElements(output);
 
     memcpy(output->data.raw, input->data.raw, input->bytes);
-  
+    return kTfLiteOk;
 
   }
 

@@ -94,6 +94,11 @@ StridedSliceParams BuildStridedSliceParams(StridedSliceContext* op_context) {
   const TfLiteIntArray* input_shape = GetTensorShape(op_context->input);
   int added_ellipsis = 0, added_axises = 0;
   op_context->effective_input_shape = TfLiteIntArrayCreate(effective_dims);
+  if(!op_context->effective_input_shape)
+  {
+    memset(&op_params, 0x00, sizeof(op_params));
+    return op_params;
+  }
   
   for (int i = 0; i < effective_dims; ++i) {
     if ((1 << i) & effective_ellipsis_mask) {
@@ -320,6 +325,8 @@ void StridedSlice(const StridedSliceParams* op_params,
     //   RuntimeShape::ExtendedShape(5, unextended_output_shape);
 
     RuntimeShape* input_shape = TfLiteIntArrayCreate(5);
+    RuntimeShape* output_shape= TfLiteIntArrayCreate(5);
+    if(!input_shape||!output_shape)goto FAILED;
     int input_ndims = unextended_input_shape->size;
     for(int i=0;i<5;i++)
     {
@@ -330,8 +337,6 @@ void StridedSlice(const StridedSliceParams* op_params,
         }
         
     }
-
-    RuntimeShape* output_shape= TfLiteIntArrayCreate(5);
     int output_ndims = unextended_output_shape->size;
     for(int i=0;i<5;i++)
     {
@@ -390,6 +395,7 @@ void StridedSlice(const StridedSliceParams* op_params,
       }
     }
   }
+FAILED:
   if (input_shape)
   {
     TfLiteIntArrayFree(input_shape);
@@ -420,7 +426,7 @@ void Strided_Slice_Free(TfLiteContext* context, void* buffer)
 // Returns kTfLiteOk on success.
 TfLiteStatus Strided_Slice_Prepare(TfLiteContext* context, TfLiteNode* node)
 {
-    
+  return kTfLiteOk;    
 }
 
 // Execute the node (should read node->inputs and output to node->outputs).
@@ -455,6 +461,7 @@ TfLiteStatus Strided_Slice_Eval(TfLiteContext* context, TfLiteNode* node)
       TfLiteIntArrayFree(op_context.effective_input_shape);
       op_context.effective_input_shape = NULL;
     }
+    return kTfLiteOk;
 }
 
 

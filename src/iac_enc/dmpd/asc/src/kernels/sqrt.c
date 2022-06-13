@@ -19,7 +19,7 @@
   // Returns kTfLiteOk on success.
   TfLiteStatus Sqrt_Prepare(TfLiteContext* context, TfLiteNode* node)
   {
-   
+    return kTfLiteOk;   
   }
 
   // Execute the node (should read node->inputs and output to node->outputs).
@@ -30,6 +30,7 @@
       const TfLiteTensor* output  = GetOutput(context, node, 0);
 
       output->data.f[0] = sqrt(input->data.f[0]);
+      return kTfLiteOk;
   }
 
   TfLiteRegistration* Register_SQRT() {

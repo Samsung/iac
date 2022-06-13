@@ -10,7 +10,7 @@ storage format, as described here:
 Please see the examples in the "test/tools" directory. If you're already building this project.
 
 ### Compiling
-There are 2 parts to build: iac(iac_dec&iac_enc&dmpd) tools(encode2mp4&mp4opusplay).
+There are 2 parts to build: iac(iac_dec&iac_enc&dmpd) tools(encode2mp4&mp4iacplay).
 
 "build_x86.sh" is an example to build, you can run it directly at your side.
 
@@ -22,7 +22,7 @@ There are 2 parts to build: iac(iac_dec&iac_enc&dmpd) tools(encode2mp4&mp4opuspl
 % make install
 ```
 
-2. build tools in "test/tools/encode2mp4" and "test/tools/mp4opusplay" directory separately
+2. build tools in "test/tools/encode2mp4" and "test/tools/mp4iacplay" directory separately
 ```sh
 % cmake ./-DCMAKE_INSTALL_PREFIX=${BUILD_LIBS}
 % make 
@@ -36,26 +36,30 @@ This tool aims to encode PCM data to IA bitstream and encapsulate to Mp4/Fmp4
 
 1. encode scalable channel layout input format.
 ```sh
-./encode2mp4 <Input wav file> <Input channel layout> <Channel layout combinations> <Recon Gain Flag (0/1)> <Output Gain Flag (0/1)> <FMP4 Flag (0/1)>
-Example:  encode2mp4  replace_audio.wav  7.1.4 2.0.0/3.1.2/5.1.2  1  1  0
+-codec   : <opus/aac>
+-mode    : <input channel layout/channel layout combinations>
+<input wav file>
+<output mp4 file>
+
+Example:  ./encode2mp4 -codec opus -mode 7.1.4/2.0.0+3.1.2+5.1.2 replace_audio.wav replace_audio.mp4
 ```
 Remark: "estimator_model.tflite" and "feature_model.tflite" are required in exacuting directory.
 
 2. encode non-scalable channel layout input format.
 ```sh
-Example:  encode2mp4  replace_audio.wav  7.1.4 0.0.0  0  0  0
+Example:  ./encode2mp4 -codec opus -mode 7.1.4/0.0.0 replace_audio.wav replace_audio.mp4
 ```
 
-### Tools(mp4opusplay)
+### Tools(mp4iacplay)
 This tool aims to parse Mp4/Fmp4, decode IA bitstream and dump to wav file.
 ```sh
-./mp4opusplayer <options> <input/output file>
+./mp4iacplayer <options> <input/output file>
 options:
 -o1          : -o1(mp4 dump output)
--o4          : -o4(decode CMF4 opus bitstream, audio processing and output wave file).
+-o2          : -o2(decode CMF4 opus bitstream, audio processing and output wave file).
 -l[1-8]      : layout(1:2.0, 2:5.1, 3:5.1.2, 4:5.1.4, 5:7.1, 6:7.1.2, 7:7.1.4, 8:3.1.2.
 
-Example:  mp4opusplayer -o4 -l1 replace_audio.mp4
+Example:  ./mp4iacplayer -o2 -l1 replace_audio.mp4
 ```
 
 

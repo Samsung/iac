@@ -98,7 +98,7 @@ p
 q
 */
 void gaindown(float *downmix_s[CHANNEL_LAYOUT_GMAX],
-  const unsigned char *channel_layout_map, const unsigned char *gain_down_map, uint16_t *dmixgain)
+  const unsigned char *channel_layout_map, const unsigned char *gain_down_map, uint16_t *dmixgain, int frame_size)
 {
   unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
 
@@ -114,9 +114,9 @@ void gaindown(float *downmix_s[CHANNEL_LAYOUT_GMAX],
     {
       if (gain_down_map[base_ch + j] == 0)
         continue;
-      for (int k = 0; k < FRAME_SIZE; k++)
+      for (int k = 0; k < frame_size; k++)
       {
-        downmix_s[lay_out][j*FRAME_SIZE + k] = downmix_s[lay_out][j*FRAME_SIZE + k] * qf_to_float(dmixgain[lay_out], 8);
+        downmix_s[lay_out][j*frame_size + k] = downmix_s[lay_out][j*frame_size + k] * q_to_float(dmixgain[lay_out], 8);
       }
     }
     base_ch += channels;
@@ -128,7 +128,7 @@ void gaindown(float *downmix_s[CHANNEL_LAYOUT_GMAX],
 abtpq...
 */
 void gaindown2(float *downmix_s[CHANNEL_LAYOUT_GMAX],
-  const unsigned char *channel_layout_map, const unsigned char *gain_down_map, uint16_t *dmixgain)
+  const unsigned char *channel_layout_map, const unsigned char *gain_down_map, uint16_t *dmixgain, int frame_size)
 {
   unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
 
@@ -144,9 +144,9 @@ void gaindown2(float *downmix_s[CHANNEL_LAYOUT_GMAX],
     {
       if (gain_down_map[base_ch + j] == 0)
         continue;
-      for (int k = 0; k < FRAME_SIZE; k++)
+      for (int k = 0; k < frame_size; k++)
       {
-        downmix_s[lay_out][j + k*channels] = downmix_s[lay_out][j + k*channels] * qf_to_float(dmixgain[lay_out], 8);
+        downmix_s[lay_out][j + k*channels] = downmix_s[lay_out][j + k*channels] * q_to_float(dmixgain[lay_out], 8);
       }
     }
     base_ch += channels;

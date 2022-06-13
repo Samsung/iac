@@ -84,6 +84,7 @@ float* t_to_f(void * asc_estimator_feature_, float* x, int channel,int nfft, int
  
         
     float * trans = malloc(channel*STFT_INPUT_SIZE*sizeof(float));
+    if(!trans)return NULL;
     for(int i=0;i<STFT_INPUT_SIZE;i++)
     {                  
         trans[i]                     = x[i*channel];
@@ -166,6 +167,7 @@ float* tf_transpose(float* x,int channel)
     }
     
     float * ret = malloc(INPUT_SIZE*INPUT_SIZE*channel*sizeof(float));
+    if(!ret)return NULL;
     for(int i=0;i<INPUT_SIZE*INPUT_SIZE;i++)
     {                  
           ret[i*channel]=  x[i];

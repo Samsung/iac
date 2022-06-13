@@ -547,6 +547,7 @@ int access_tflite_buffer(const void *buffer,Interpreter* interpreter,OpResolver*
 
     }
 #endif
+    return 0;
 }
 
 
@@ -567,7 +568,7 @@ char* read_model_file(const char* filename)
   FILE* file = fopen(filename, "rb");  //TODO  std::unique_ptr
   if (!file) {
     LOGE("Could not open '%s'.", filename);
-    return;
+    return NULL;
   }
   struct stat sb;
 // support usage of msvc's posix-like fileno symbol
@@ -578,7 +579,8 @@ char* read_model_file(const char* filename)
 #endif
   if (fstat(FILENO(file), &sb) != 0) {
     LOGE("Failed to get file size of '%s'.", filename);
-    return;
+    fclose(file);
+    return NULL;
   }
 #undef FILENO
   size_t buffer_size_bytes_ = sb.st_size;
@@ -587,13 +589,15 @@ char* read_model_file(const char* filename)
   char* buffer = (char*)malloc(sizeof(char)*buffer_size_bytes_);
   if (!buffer) {
     LOGE("Malloc of buffer to hold copy of '%s' failed.", filename);
-    return;
+    fclose(file);
+    return NULL;
   }
   size_t bytes_read =
       fread(buffer, sizeof(char), buffer_size_bytes_, file);
   if (bytes_read != buffer_size_bytes_) {
     LOGE("Read of '%s' failed (too few bytes read).",filename);
-    return;
+    fclose(file);
+    return NULL;
   }
   // Versions of GCC before 6.2.0 don't support std::move from non-const
   // char[] to const char[] unique_ptrs.
@@ -655,7 +659,7 @@ void saveOutput(Interpreter* interpreter,char* dir)
             }
         }    
         size = NumElements(tensor);
-        dump_data(strcat(prefix,temp),tensor->data.f,size);
+        dump_data(strncat(prefix,temp,strlen(temp)),tensor->data.f,size);
     }
 
 }
@@ -774,7 +778,9 @@ int load_asc_estimator_model(void ** tflite)
 
 int unload_asc_estimator_model(void *estimator_tflite_)
 {
+#ifndef DISABLE_DEBUG_LOG
   printf("unload_asc_estimator_model calling...\n");
+#endif
   estimator_tflite * p = (estimator_tflite*)estimator_tflite_;
   if (p)
   {
@@ -812,7 +818,9 @@ int load_asc_feature_model(void ** tflite)
 
 void unload_asc_feature_model(void *feature_tflite_)
 {
+#ifndef DISABLE_DEBUG_LOG
   printf("unload_asc_feature_model calling...\n");
+#endif
   feature_tflite * p = (feature_tflite*)feature_tflite_;
   if (p)
   {
@@ -823,7 +831,7 @@ void unload_asc_feature_model(void *feature_tflite_)
     Delete_OpResolver(&(p->feature_opResolver));
     free(p);
   }
-  return 0;
+  return;
 }
 
 //#define DEBUG

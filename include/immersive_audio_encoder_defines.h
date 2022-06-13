@@ -2,6 +2,7 @@
 #define IMMERSIVE_AUDIO_ENCODER_DEFINES_H
 #include <stdint.h>
 
+////////////////////////// Opus Codec /////////////////////////////////////
 #define __ia_check_int(x) (((void)((x) == (int32_t)0)), (int32_t)(x))
 #define __ia_check_int_ptr(ptr) ((ptr) + ((ptr) - (int32_t*)(ptr)))
 
@@ -43,4 +44,5 @@
 #define IA_SET_FORCE_MODE(x) IA_SET_FORCE_MODE_REQUEST, __ia_check_int(x)
 
 
+/////////////////////////////// AAC Codec ////////////////////////////
 #endif /* IMMERSIVE_AUDIO_ENCODER_DEFINES_H */

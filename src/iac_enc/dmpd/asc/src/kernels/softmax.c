@@ -32,7 +32,7 @@
   // Returns kTfLiteOk on success.
   TfLiteStatus Softmax_Prepare(TfLiteContext* context, TfLiteNode* node)
   {
-      
+    return kTfLiteOk;      
   }
 
   // Execute the node (should read node->inputs and output to node->outputs).
@@ -76,6 +76,7 @@
   }
 
       LOGE("Softmax_Eval\n");
+      return kTfLiteOk;
 
   }
 
