@@ -66,11 +66,13 @@ typedef enum {
 
 #define IA_CH_LAYOUT_MAX_CHANNELS     12
 
-#define OPUS_FRAME_SIZE     960
-#define AAC_FRAME_SIZE      1024
+#define OPUS_FRAME_SIZE         960
+#define MAX_OPUS_FRAME_SIZE     OPUS_FRAME_SIZE * 6
+#define AAC_FRAME_SIZE          1024
+#define MAX_AAC_FRAME_SIZE      2048
+#define MAX_FRAME_SIZE          MAX_OPUS_FRAME_SIZE
 
 #define MAX_STREAMS         255
-#define MAX_FRAME_SIZE      OPUS_FRAME_SIZE * 6
 
 /**
  * opus delay : pre-skip 312
@@ -80,9 +82,10 @@ typedef enum {
 /**
  * aac delay : 1024 + 1024 + 576 + 144;
  * framing delay + MDCT delay + block switching delay (fl/2 + fs/2). fs = fl / 8.
+ * encoder delay is 2048
+ * decoder delay is 720
  * fl???
  * */
 #define AAC_DELAY           2768
-
 
 #endif /* _IMMERSIVE_AUDIO_TYPES_H_ */

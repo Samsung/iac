@@ -2,12 +2,12 @@
 #include "config.h"
 #endif
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "bitstreamrw.h"
+#include "drc_processor.h"
 #include "fixedp11_5.h"
-#include "queue.h"
 
 #include "immersive_audio_core_decoder.h"
 #include "immersive_audio_debug.h"
@@ -16,7 +16,6 @@
 #include "immersive_audio_metadata.h"
 #include "immersive_audio_obu.h"
 #include "immersive_audio_utils.h"
-#include "drc_processor.h"
 
 #ifdef IA_TAG
 #undef IA_TAG
@@ -26,17 +25,6 @@
 
 #define RSHIFT(a) (1 << (a))
 #define LAYOUT_FLAG(type) RSHIFT(type)
-
-#define CELT_SIG_SCALE 32768.f
-
-#define MIN32(a,b) ((a) < (b) ? (a) : (b))   /**< Minimum 32-bit value.   */
-#define MAX32(a,b) ((a) > (b) ? (a) : (b))   /**< Maximum 32-bit value.   */
-
-#include <math.h>
-#define float2int(x) lrintf(x)
-
-
-
 
 IAParam* immersive_audio_param_raw_data_new (IAParamID id,
                                              uint8_t *data, uint32_t size)
@@ -65,7 +53,12 @@ void immersive_audio_param_free(IAParam *param)
 
 static  int16_t FLOAT2INT16(float x)
 {
-  x = x*CELT_SIG_SCALE;
+
+#define MIN32(a,b) ((a) < (b) ? (a) : (b))   /**< Minimum 32-bit value.   */
+#define MAX32(a,b) ((a) > (b) ? (a) : (b))   /**< Maximum 32-bit value.   */
+#define float2int(x) lrintf(x)
+
+  x = x * 32768.f;
   x = MAX32(x, -32768);
   x = MIN32(x, 32767);
   return (int16_t)float2int(x);
@@ -77,6 +70,25 @@ static void swap(void **p1, void **p2) {
     *p1 = p;
 }
 
+
+static IACodecID ia_4cc_get_codec_id (uint32_t id)
+{
+#define TAG(a, b, c, d) ((a) | (b) << 8 | (c) << 16 | (d) << 24)
+
+    ia_logd ("4CC : %.4s", (uint8_t *)&id);
+    switch (id) {
+        case TAG('m', 'p', '4', 'a'):
+        case TAG('e', 's', 'd', 's'):
+            return IA_CODEC_AAC;
+
+        case TAG('o', 'p', 'u', 's'):
+        case TAG('d', 'O', 'p', 's'):
+            return IA_CODEC_OPUS;
+
+        default:
+            return IA_CODEC_UNKNOWN;
+    }
+}
 
 static int
 ia_channel_layout_get_new_channels (IAChannelLayoutType last,
@@ -95,7 +107,7 @@ ia_channel_layout_get_new_channels (IAChannelLayoutType last,
      * @ Center channel comes first and followed by LFE and followed by the other one.
      * */
 
-    if (last == IA_CH_LAYOUT_TYPE_INVALID) {
+    if (last == IA_CHANNEL_LAYOUT_INVALID) {
         chs = ia_audio_layer_get_channels (cur, new_chs, count);
     } else {
         uint32_t s1 = ia_channel_layout_get_category_channels_count (last, IA_CH_CATE_SURROUND);
@@ -175,12 +187,6 @@ ia_decoder_context_uninit (IADecoderContext *ctx)
         free (ctx->ambix_info);
     }
 
-    if (ctx->q_recon)
-        queue_free (ctx->q_recon, free);
-
-    if (ctx->q_dmx_mode)
-        queue_free (ctx->q_dmx_mode, free);
-
     memset (ctx, 0, sizeof(IADecoderContext));
 }
 
@@ -227,8 +233,10 @@ ia_decoder_context_init (IADecoderContext *ctx, IAStaticMeta *meta)
     if (ctx->layers > 0) {
         IAChannelAudioLayerInfo    *lf = 0;
         IAChannelAudioLayerInfo    *plf = 0;
-        IAChannelLayoutType         last = IA_CH_LAYOUT_TYPE_INVALID;
-        int                         chs = 0;
+        IAChannelLayoutType         last = IA_CHANNEL_LAYOUT_INVALID;
+
+        int         chs = 0;
+        float       gain_db = 0;
 
         ia_logt ("audio layer info :");
         lf = (IAChannelAudioLayerInfo *)
@@ -263,13 +271,15 @@ ia_decoder_context_init (IADecoderContext *ctx, IAStaticMeta *meta)
                     goto alloc_fail;
                 plf->output_gain_info->gain_flags =
                     meta->ch_audio_layer_config[i].output_gain_flags;
-                plf->output_gain_info->gain =
+                gain_db =
                     q_to_float(meta->ch_audio_layer_config[i].output_gain, 8);
+                plf->output_gain_info->gain = db2lin(gain_db);
                 ia_logi(" > output gain flags 0x%02x",
                         plf->output_gain_info->gain_flags & U8_MASK);
-                ia_logi(" > output gain %f (0x%04x)",
-                        plf->output_gain_info->gain,
-                        meta->ch_audio_layer_config[i].output_gain & U16_MASK);
+                ia_logi(" > output gain %f (0x%04x), linear gain %f",
+                        gain_db,
+                        meta->ch_audio_layer_config[i].output_gain & U16_MASK,
+                        plf->output_gain_info->gain);
             } else {
                 ia_logi(" > no output gain info.");
             }
@@ -341,21 +351,12 @@ ia_recon_channels_order_update (IAChannelLayoutType layout, IAReconGainInfo2 *re
 {
     int chs = 0;
     static IAReconChannel recon_channel_order[] = {
-        IA_CH_RE_L,
-        IA_CH_RE_C,
-        IA_CH_RE_R,
-        IA_CH_RE_LS,
-        IA_CH_RE_RS,
-        IA_CH_RE_LTF,
-        IA_CH_RE_RTF,
-        IA_CH_RE_LB,
-        IA_CH_RE_RB,
-        IA_CH_RE_LTB,
-        IA_CH_RE_RTB,
-        IA_CH_RE_LFE
+        IA_CH_RE_L, IA_CH_RE_C, IA_CH_RE_R, IA_CH_RE_LS, IA_CH_RE_RS,
+        IA_CH_RE_LTF, IA_CH_RE_RTF,
+        IA_CH_RE_LB, IA_CH_RE_RB, IA_CH_RE_LTB, IA_CH_RE_RTB, IA_CH_RE_LFE
     };
 
-    static IAChannel channel_layout_map[IA_CH_LAYOUT_TYPE_COUNT][IA_CH_RE_COUNT] = {
+    static IAChannel channel_layout_map[IA_CHANNEL_LAYOUT_COUNT][IA_CH_RE_COUNT] = {
         {IA_CH_MONO, IA_CH_INVALID, IA_CH_INVALID, IA_CH_INVALID, IA_CH_INVALID, IA_CH_INVALID, IA_CH_INVALID,
             IA_CH_INVALID, IA_CH_INVALID, IA_CH_INVALID, IA_CH_INVALID, IA_CH_INVALID},
         {IA_CH_L2, IA_CH_INVALID, IA_CH_R2, IA_CH_INVALID, IA_CH_INVALID, IA_CH_INVALID, IA_CH_INVALID,
@@ -456,7 +457,7 @@ static IAErrCode ia_decoder_open (IADecoder *ths, IACodecID cid,
 
         cdec = ia_core_decoder_open(cid);
         if (!cdec) {
-            ec = IA_ERR_UNIMPLEMENTED;
+            ec = IA_ERR_INTERNAL;
             ia_loge ("%s : Failed to open the %d-IACoreDecoder (%s).",
                     ia_error_code_string(ec), i+1, ia_codec_name(cid));
             break;
@@ -464,31 +465,21 @@ static IAErrCode ia_decoder_open (IADecoder *ths, IACodecID cid,
 
         ths->ldec[i] = cdec;
 
-        ec = ia_core_decoder_init (cdec, spec, clen, newflags);
-        if (ec) {
-            ia_loge ("%s : Failed to configure the %s decoder.",
-                    ia_error_code_string(ec), ia_codec_name(cid));
-            break;
-        }
-
+        ia_core_decoder_set_codec_specific_info (cdec, spec, clen);
         ia_core_decoder_set_streams_info (cdec, ctx->layer_info[i].streams,
                                           ctx->layer_info[i].coupled_streams);
 
+        ec = ia_core_decoder_init (cdec, newflags);
+        if (ec != IA_OK) {
+            ia_loge ("%s : Failed to set streams info to decoder %s.",
+                    ia_error_code_string(ec), ia_codec_name(cid));
+            break;
+        }
     }
 
     return ec;
 }
 
-
-typedef enum {
-    IA_CH_GAIN_RTF,
-    IA_CH_GAIN_LTF,
-    IA_CH_GAIN_RS,
-    IA_CH_GAIN_LS,
-    IA_CH_GAIN_R,
-    IA_CH_GAIN_L,
-    IA_CH_GAIN_COUNT
-} IAOutputGainChannel;
 
 static IAChannel
 ia_output_gain_channel_map (IAChannelLayoutType type, IAOutputGainChannel gch)
@@ -497,13 +488,13 @@ ia_output_gain_channel_map (IAChannelLayoutType type, IAOutputGainChannel gch)
     switch (gch) {
         case IA_CH_GAIN_L: {
             switch (type) {
-                case IA_CH_LAYOUT_TYPE_MONO:
+                case IA_CHANNEL_LAYOUT_MONO:
                     ch = IA_CH_MONO;
                     break;
-                case IA_CH_LAYOUT_TYPE_STEREO:
+                case IA_CHANNEL_LAYOUT_STEREO:
                     ch = IA_CH_L2;
                     break;
-                case IA_CH_LAYOUT_TYPE_3_1_2:
+                case IA_CHANNEL_LAYOUT_312:
                     ch = IA_CH_L3;
                     break;
                 default:
@@ -513,10 +504,10 @@ ia_output_gain_channel_map (IAChannelLayoutType type, IAOutputGainChannel gch)
 
         case IA_CH_GAIN_R: {
             switch (type) {
-                case IA_CH_LAYOUT_TYPE_STEREO:
+                case IA_CHANNEL_LAYOUT_STEREO:
                     ch = IA_CH_R2;
                     break;
-                case IA_CH_LAYOUT_TYPE_3_1_2:
+                case IA_CHANNEL_LAYOUT_312:
                     ch = IA_CH_R3;
                     break;
                 default:
@@ -618,16 +609,8 @@ static IAErrCode ia_decoder_set_demixing_info (IADecoder* ths,
 
     iec = ia_obu_find_demixing_info (&unit, data, size);
     if (iec == IA_OK) {
-        if (ctx->q_dmx_mode) {
-            int *v = (int *) malloc (sizeof(int));
-            if (!v)
-                return IA_ERR_ALLOC_FAIL;
-            *v = ia_demixing_info_parse (unit.payload, unit.psize);
-            queue_push (ctx->q_dmx_mode, v);
-        } else {
-            ctx->dmx_mode = ia_demixing_info_parse (unit.payload, unit.psize);
-        }
-        ia_logd("new demixing mode %d", ths->dctx->dmx_mode);
+        ctx->dmx_mode = ia_demixing_info_parse (unit.payload, unit.psize);
+        ia_logd("new demixing mode %d", ctx->dmx_mode);
     }
     return iec;
 }
@@ -672,22 +655,10 @@ static IAErrCode ia_decoder_packet_parse (IADecoder *ths, uint8_t *data, uint32_
                         ia_decoder_set_demixing_info (ths, data + pos, len - pos);
                 } break;
                 case IA_OBU_RECON_GAIN_INFO: {
-                    IAReconGainInfoList *list;
-                    list = (IAReconGainInfoList *) malloc (sizeof(IAReconGainInfoList));
-                    if (!list) {
-                        ec = IA_ERR_ALLOC_FAIL;
-                        break;
-                    }
-                    if (ia_recon_gain_info_parse (list, obu.payload, obu.psize) > 0) {
-                        if (ctx->q_recon) {
-                            queue_push(ctx->q_recon, list);
-                        } else {
-                            ia_decoder_context_set_recon_gain_info_list(ths, list);
-                            free(list);
-                        }
-                    } else {
-                        free(list);
-                    }
+                    IAReconGainInfoList list;
+                    memset (&list, 0, sizeof (IAReconGainInfoList));
+                    if (ia_recon_gain_info_parse (&list, obu.payload, obu.psize) > 0)
+                        ia_decoder_context_set_recon_gain_info_list(ths, &list);
                 } break;
                 case IA_OBU_SUBSTREAM: {
                     pkts[count].data = obu.payload;
@@ -771,42 +742,23 @@ ia_decoder_demixing (IADecoder *ths, float *src, float *dst, uint32_t frame_size
     IAReconGainInfo2 *re;
     IADecoderContext *ctx = ths->dctx;
 
-    if (ctx->delay < ctx->frame_size) {
+    re = ctx->layer_info[ctx->layer].recon_gain_info;
 
-        if (ctx->q_dmx_mode && queue_length(ctx->q_dmx_mode) > 0) {
-            int *v = (int *) queue_pop (ctx->q_dmx_mode);
-            if (v) {
-                ctx->dmx_mode = *v;
-                free (v);
-            }
+    ia_logt ("demixer info update :");
+    if (re) {
+        demixer_set_recon_gain (ths->demixer, re->channels,
+                                re->order, re->recon_gain, re->flags);
+
+        ia_logd ("channel flags 0x%04x", re->flags & U16_MASK);
+        for (int c=0; c<re->channels; ++c) {
+            ia_logd ("channel %s(%d) recon gain %f",
+                    ia_channel_name(re->order[c]), re->order[c],
+                    re->recon_gain[c]);
         }
-
-        if (ctx->q_recon && queue_length(ctx->q_recon) > 0) {
-            IAReconGainInfoList *list =
-                (IAReconGainInfoList *) queue_pop (ctx->q_recon);
-            if (list) {
-                ia_decoder_context_set_recon_gain_info_list(ths, list);
-                free(list);
-            }
-        }
-
-        re = ths->dctx->layer_info[ths->dctx->layer].recon_gain_info;
-
-        ia_logt ("demixer info update :");
-        if (re) {
-            demixer_set_recon_gain (ths->demixer, re->channels,
-                                    re->order, re->recon_gain, re->flags);
-
-            ia_logd ("channel flags 0x%04x", re->flags & U16_MASK);
-            for (int c=0; c<re->channels; ++c) {
-                ia_logd ("channel %s(%d) recon gain %f",
-                        ia_channel_name(re->order[c]), re->order[c],
-                        re->recon_gain[c]);
-            }
-        }
-        demixer_set_demixing_mode (ths->demixer, ths->dctx->dmx_mode);
-        ia_logd ("demixing mode %d", ths->dctx->dmx_mode);
     }
+    demixer_set_demixing_mode (ths->demixer, ths->dctx->dmx_mode);
+    ia_logd ("demixing mode %d", ths->dctx->dmx_mode);
+
     return demixer_demixing (ths->demixer, dst, src, frame_size);
 }
 
@@ -858,29 +810,54 @@ int immersive_audio_channel_layout_get_channels_count (IAChannelLayoutType type)
 }
 
 
-IADecoder* immersive_audio_decoder_open (IACodecID cid,
+IADecoder* immersive_audio_decoder_create (IACodecID cid,
                                          uint8_t* cspec, uint32_t clen,
                                          uint8_t *meta, uint32_t mlen,
                                          uint32_t flags)
 {
-    IADecoder *ths = 0;
-    IADecoderContext *ctx = 0;
-    IAErrCode ec = IA_OK;
-    IAStaticMeta sm;
+    IADecoder          *ths = 0;
+    IADecoderContext   *ctx = 0;
+    IAErrCode           ec = IA_OK;
+    IAStaticMeta        sm;
+    IACodecID           id = IA_CODEC_UNKNOWN;
+    uint8_t            *cfg = cspec;
+    uint32_t            csize = clen;
 
-    /* Check codec id. */
-    if (!ia_codec_check(cid)) {
-        ec = IA_ERR_BAD_ARG;
-        ia_loge ("%s : Invalid codec id %u", ia_error_code_string(ec), cid);
-        goto termination;
-    }
-
+    /* Check codec specification info. */
     if (!cspec || !clen) {
         ec = IA_ERR_BAD_ARG;
         ia_loge ("%s : codec specific info %p and length %u",
                 ia_error_code_string(ec), cspec, clen);
         goto termination;
     }
+
+    id = cid;
+    /* Check codec id. */
+    if (flags & IA_FLAG_CODEC_CONFIG_ISOBMFF) {
+        id = ia_4cc_get_codec_id(*((uint32_t *)(cspec + 4)));
+    } else if (~flags & IA_FLAG_CODEC_CONFIG_RAW) {
+        IAOBU unit;
+        IACodecSpecInfo info;
+        if (ia_obu_find_codec_specific_info(&unit, cspec, clen) != IA_OK) {
+            ec = IA_ERR_BAD_ARG;
+            ia_loge ("%s : the parameters doesn't includes the specification info",
+                    ia_error_code_string(ec));
+            goto termination;
+        }
+
+        ia_codec_specific_info_parse(&info, unit.payload, unit.psize);
+        id = ia_4cc_get_codec_id(info.cid);
+        cfg = info.config;
+        csize = info.size;
+        flags |= IA_FLAG_CODEC_CONFIG_RAW;
+    };
+
+    if (!ia_codec_check(id)) {
+        ec = IA_ERR_BAD_ARG;
+        ia_loge ("%s : Invalid codec id %u", ia_error_code_string(ec), id);
+        goto termination;
+    }
+
 
     /* Alloc memory for IADecoder and IADecoderContext. */
     ths = (IADecoder *) ia_mallocz (sizeof(IADecoder));
@@ -903,7 +880,6 @@ IADecoder* immersive_audio_decoder_open (IACodecID cid,
     if (meta) {
         uint8_t* raw = 0;
         uint32_t size = mlen;
-        int cate = 0;
         if (~flags & IA_FLAG_STATIC_META_RAW) {
             IAOBU unit;
             IAErrCode iec = ia_obu_find_static_meta (&unit, meta, mlen);
@@ -934,27 +910,13 @@ IADecoder* immersive_audio_decoder_open (IACodecID cid,
         }
 
         ctx->frame_size =
-            cid == IA_CODEC_AAC ? AAC_FRAME_SIZE : OPUS_FRAME_SIZE;
-        ctx->delay = cid == IA_CODEC_AAC ? AAC_DELAY : OPUS_DELAY;
+            id == IA_CODEC_AAC ? AAC_FRAME_SIZE : OPUS_FRAME_SIZE;
+        ctx->delay = id == IA_CODEC_AAC ? AAC_DELAY : OPUS_DELAY;
         ia_logi("frame size is %u, delay %u", ctx->frame_size, ctx->delay);
-
-        cate = ctx->delay/ctx->frame_size;
-        if (cate > 0) {
-            ia_logd("add queues for demixing mode and recon gain.");
-            ctx->q_recon = queue_new(cate);
-            ctx->q_dmx_mode = queue_new(cate);
-
-            if (!ctx->q_recon || !ctx->q_dmx_mode) {
-                ec  = IA_ERR_ALLOC_FAIL;
-                ia_loge("%s : fail to new queue for recon gain or demixing mode",
-                        ia_error_code_string(ec));
-                goto termination;
-            }
-        }
     }
 
     /* open true decoder. */
-    ec = ia_decoder_open (ths, cid, cspec, clen, flags);
+    ec = ia_decoder_open (ths, id, cfg, csize, flags);
 
     if (ec != IA_OK) {
         ia_loge ("%s : Failed to open internal decoder.",
@@ -979,7 +941,7 @@ IADecoder* immersive_audio_decoder_open (IACodecID cid,
     ia_logt ("buffer size %lu.", sizeof(float) * MAX_FRAME_SIZE * ctx->channels);
     for (int i=0; i<DEC_BUF_CNT; ++i) {
         ths->buffer[i] =
-            (uint8_t *) malloc (sizeof(float) * MAX_FRAME_SIZE * ctx->channels);
+            (float *) malloc (sizeof(float) * MAX_FRAME_SIZE * ctx->channels);
         if (!ths->buffer[i]) {
             ec = IA_ERR_ALLOC_FAIL;
             ia_loge ("%s : buffer is allocated failed.", ia_error_code_string(ec));
@@ -989,7 +951,7 @@ IADecoder* immersive_audio_decoder_open (IACodecID cid,
 
 termination:
     if (ec < 0) {
-        immersive_audio_decoder_close (ths);
+        immersive_audio_decoder_destory (ths);
         ths = 0;
     }
 
@@ -1008,8 +970,8 @@ int immersive_audio_decoder_decode (IADecoder* ths,
     static int pktidx = 0;
     IADecoderContext *ctx = ths->dctx;
 
-    in = (float *)ths->buffer[0];
-    out = (float *)ths->buffer[1];
+    in = ths->buffer[0];
+    out = ths->buffer[1];
 
     ia_logt("decode audio packet %d : data %p, size %d, out %p, max size %d",
             ++pktidx, data, len , pcm, size);
@@ -1045,9 +1007,6 @@ int immersive_audio_decoder_decode (IADecoder* ths,
     ia_logt("Gain-up, demixing, smoothing.");
     ret = ia_decoder_demixing(ths, in, out, real_frame_size);
 
-    if (ctx->delay > ctx->frame_size)
-        ctx->delay -= ctx->frame_size;
-
     if (ret != IA_OK) return ret;
 
     swap((void **)&in, (void **)&out);
@@ -1069,7 +1028,7 @@ int immersive_audio_decoder_decode (IADecoder* ths,
 }
 
 
-void immersive_audio_decoder_close (IADecoder* ths)
+void immersive_audio_decoder_destory (IADecoder* ths)
 {
     if (ths) {
         ia_logt ("close in");
@@ -1078,7 +1037,7 @@ void immersive_audio_decoder_close (IADecoder* ths)
             free (ths->dctx);
         }
 
-        for (int d=0; d<IA_CH_LAYOUT_TYPE_COUNT; ++d)
+        for (int d=0; d<IA_CHANNEL_LAYOUT_COUNT; ++d)
             if (ths->ldec[d])
                 ia_core_decoder_close(ths->ldec[d]);
 

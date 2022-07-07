@@ -7,39 +7,19 @@
 #define DefDmixType = 1; //default value
 #define DefWeightType = 1; //default value
 
-#ifndef CHANNEL_LAYOUT_DMAX
-
-typedef enum {
-  CHANNEL_LAYOUT_D100, //1.0.0
-  CHANNEL_LAYOUT_D200, //2.0.0 
-  CHANNEL_LAYOUT_D510, //5.1.0
-  CHANNEL_LAYOUT_D512, //5.1.2
-  CHANNEL_LAYOUT_D514, //5.1.4
-  CHANNEL_LAYOUT_D710, //7.1.0
-  CHANNEL_LAYOUT_D712, //7.1.2
-  CHANNEL_LAYOUT_D714, //7.1.4
-  CHANNEL_LAYOUT_D312, //3.1.2
-  CHANNEL_LAYOUT_DMAX
-}CHANNEL_LAYOUT_D;
-
-#endif
-
-#ifndef MAX_CHANNELS
-define MAX_CHANNELS 12
-#endif
 typedef struct {
   int channels;
   int frame_size;
   int preskip_size;
-  unsigned char channel_layout_map[CHANNEL_LAYOUT_DMAX];
+  unsigned char channel_layout_map[CHANNEL_LAYOUT_MAX];
   int channel_groups;
-  float *downmix_m[CHANNEL_LAYOUT_DMAX];
-  float *downmix_s[CHANNEL_LAYOUT_DMAX];
+  float *downmix_m[CHANNEL_LAYOUT_MAX];
+  float *downmix_s[CHANNEL_LAYOUT_MAX];
   float weight_state_value_x_prev;
   float *ch_data[enc_channel_cnt];
   float *buffer[enc_channel_mixed_cnt];
   unsigned char  channel_order[enc_channel_cnt + 1];
-  unsigned char gaindown_map[CHANNEL_LAYOUT_DMAX][enc_channel_cnt];
+  unsigned char gaindown_map[CHANNEL_LAYOUT_MAX][enc_channel_cnt];
 }DownMixer;
 DownMixer * downmix_create(const unsigned char *channel_layout_map, int frame_size);
 void downmix_destroy(DownMixer *dm);

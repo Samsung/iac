@@ -61,6 +61,12 @@ static IAErrCode ia_obu_find (IAOBU *u, IAOBUType type,
 }
 
 
+IAErrCode ia_obu_find_codec_specific_info (IAOBU *u, uint8_t *data, uint32_t len)
+{
+    return ia_obu_find (u, IA_OBU_CODEC_SPECIFIC_INFO, data, len);
+}
+
+
 IAErrCode ia_obu_find_static_meta (IAOBU *u, uint8_t *data, uint32_t len)
 {
     return ia_obu_find (u, IA_OBU_IA_STATIC_META, data, len);
@@ -71,6 +77,7 @@ IAErrCode ia_obu_find_demixing_info (IAOBU *u, uint8_t *data, uint32_t len)
 {
     return ia_obu_find (u, IA_OBU_DEMIXING_INFO, data, len);
 }
+
 
 /**
  *  obu_header

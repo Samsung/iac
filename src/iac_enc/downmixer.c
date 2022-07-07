@@ -147,10 +147,10 @@ static int downmix_h4to2(DownMixer *dm, int dmix_type, int weight_type, float *w
   dm->ch_data[enc_channel_hl] = dm->buffer[enc_channel_mixed_h_l];
   dm->ch_data[enc_channel_hr] = dm->buffer[enc_channel_mixed_h_r];
 
-  dm->gaindown_map[CHANNEL_LAYOUT_D512][enc_channel_hl] = 1;
-  dm->gaindown_map[CHANNEL_LAYOUT_D512][enc_channel_hr] = 1;
-  dm->gaindown_map[CHANNEL_LAYOUT_D712][enc_channel_hl] = 1;
-  dm->gaindown_map[CHANNEL_LAYOUT_D712][enc_channel_hr] = 1;
+  dm->gaindown_map[CHANNEL_LAYOUT_512][enc_channel_hl] = 1;
+  dm->gaindown_map[CHANNEL_LAYOUT_512][enc_channel_hr] = 1;
+  dm->gaindown_map[CHANNEL_LAYOUT_712][enc_channel_hl] = 1;
+  dm->gaindown_map[CHANNEL_LAYOUT_712][enc_channel_hr] = 1;
   return 0;
 }
 
@@ -167,8 +167,8 @@ static int downmix_h2tofh2(DownMixer *dm, int dmix_type, int weight_type, float 
   dm->ch_data[enc_channel_tl] = dm->buffer[enc_channel_mixed_t_l];
   dm->ch_data[enc_channel_tr] = dm->buffer[enc_channel_mixed_t_r];
 
-  dm->gaindown_map[CHANNEL_LAYOUT_D312][enc_channel_tl] = 1;
-  dm->gaindown_map[CHANNEL_LAYOUT_D312][enc_channel_tr] = 1;
+  dm->gaindown_map[CHANNEL_LAYOUT_312][enc_channel_tl] = 1;
+  dm->gaindown_map[CHANNEL_LAYOUT_312][enc_channel_tr] = 1;
 
   return 0;
 }
@@ -200,12 +200,12 @@ static int downmix_s7to5(DownMixer *dm, int dmix_type, int weight_type, float *w
   dm->ch_data[enc_channel_sl5] = dm->buffer[enc_channel_mixed_s5_l];
   dm->ch_data[enc_channel_sr5] = dm->buffer[enc_channel_mixed_s5_r];
 
-  dm->gaindown_map[CHANNEL_LAYOUT_D510][enc_channel_sl5] = 1;
-  dm->gaindown_map[CHANNEL_LAYOUT_D510][enc_channel_sr5] = 1;
-  dm->gaindown_map[CHANNEL_LAYOUT_D512][enc_channel_sl5] = 1;
-  dm->gaindown_map[CHANNEL_LAYOUT_D512][enc_channel_sr5] = 1;
-  dm->gaindown_map[CHANNEL_LAYOUT_D514][enc_channel_sl5] = 1;
-  dm->gaindown_map[CHANNEL_LAYOUT_D514][enc_channel_sr5] = 1;
+  dm->gaindown_map[CHANNEL_LAYOUT_510][enc_channel_sl5] = 1;
+  dm->gaindown_map[CHANNEL_LAYOUT_510][enc_channel_sr5] = 1;
+  dm->gaindown_map[CHANNEL_LAYOUT_512][enc_channel_sl5] = 1;
+  dm->gaindown_map[CHANNEL_LAYOUT_512][enc_channel_sr5] = 1;
+  dm->gaindown_map[CHANNEL_LAYOUT_514][enc_channel_sl5] = 1;
+  dm->gaindown_map[CHANNEL_LAYOUT_514][enc_channel_sr5] = 1;
 
   return 0;
 }
@@ -228,8 +228,8 @@ static int downmix_s5to3(DownMixer *dm, int dmix_type, int weight_type, float *w
   dm->ch_data[enc_channel_l3] = dm->buffer[enc_channel_mixed_s3_l];
   dm->ch_data[enc_channel_r3] = dm->buffer[enc_channel_mixed_s3_r];
 
-  dm->gaindown_map[CHANNEL_LAYOUT_D312][enc_channel_l3] = 1;
-  dm->gaindown_map[CHANNEL_LAYOUT_D312][enc_channel_r3] = 1;
+  dm->gaindown_map[CHANNEL_LAYOUT_312][enc_channel_l3] = 1;
+  dm->gaindown_map[CHANNEL_LAYOUT_312][enc_channel_r3] = 1;
 
   return 0;
 }
@@ -244,8 +244,8 @@ static int downmix_s3to2(DownMixer *dm, int dmix_type, int weight_type, float *w
   }
   dm->ch_data[enc_channel_l2] = dm->buffer[enc_channel_mixed_s2_l];
   dm->ch_data[enc_channel_r2] = dm->buffer[enc_channel_mixed_s2_r];
-  dm->gaindown_map[CHANNEL_LAYOUT_D200][enc_channel_l2] = 1;
-  dm->gaindown_map[CHANNEL_LAYOUT_D200][enc_channel_r2] = 1;
+  dm->gaindown_map[CHANNEL_LAYOUT_200][enc_channel_l2] = 1;
+  dm->gaindown_map[CHANNEL_LAYOUT_200][enc_channel_r2] = 1;
 
   return 0;
 }
@@ -258,7 +258,7 @@ static int downmix_s2to1(DownMixer *dm, int dmix_type, int weight_type, float *w
     dm->buffer[enc_channel_mixed_s1_m][i] = 0.5 * dm->ch_data[enc_channel_l2][i] + 0.5 * dm->ch_data[enc_channel_r2][i];
   }
   dm->ch_data[enc_channel_mono] = dm->buffer[enc_channel_mixed_s1_m];
-  dm->gaindown_map[CHANNEL_LAYOUT_D100][enc_channel_mono] = 1;
+  dm->gaindown_map[CHANNEL_LAYOUT_100][enc_channel_mono] = 1;
   return 0;
 }
 
@@ -345,15 +345,15 @@ void downmix_to100(DownMixer *dm, int dmix_type, int weight_type, float *w_x)
 }
 
 static creator_t g_downmix[] = {
-  { CHANNEL_LAYOUT_D100, downmix_to100 },
-  { CHANNEL_LAYOUT_D200, downmix_to200 },
-  { CHANNEL_LAYOUT_D510, downmix_to510 },
-  { CHANNEL_LAYOUT_D512, downmix_to512 },
-  { CHANNEL_LAYOUT_D514, downmix_to514 },
-  { CHANNEL_LAYOUT_D710, downmix_to710 },
-  { CHANNEL_LAYOUT_D712, downmix_to712 },
-  { CHANNEL_LAYOUT_D714, downmix_to714 },
-  { CHANNEL_LAYOUT_D312, downmix_to312 },
+  { CHANNEL_LAYOUT_100, downmix_to100 },
+  { CHANNEL_LAYOUT_200, downmix_to200 },
+  { CHANNEL_LAYOUT_510, downmix_to510 },
+  { CHANNEL_LAYOUT_512, downmix_to512 },
+  { CHANNEL_LAYOUT_514, downmix_to514 },
+  { CHANNEL_LAYOUT_710, downmix_to710 },
+  { CHANNEL_LAYOUT_712, downmix_to712 },
+  { CHANNEL_LAYOUT_714, downmix_to714 },
+  { CHANNEL_LAYOUT_312, downmix_to312 },
   { -1 }
 };
 
@@ -379,11 +379,11 @@ int downmix2(DownMixer *dm, unsigned char* inbuffer, int dmix_type, int weight_t
   int last_index = 0;
   int ts_index = 0;
   int ts_ch = 0;
-  for (int i = 0; i < CHANNEL_LAYOUT_DMAX; i++)
+  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
   {
     int lay_out = dm->channel_layout_map[i];
 
-    if (lay_out == CHANNEL_LAYOUT_DMAX)
+    if (lay_out == CHANNEL_LAYOUT_MAX)
       break;
     last_layout = lay_out;
     last_index = i;
@@ -459,12 +459,12 @@ DownMixer * downmix_create(const unsigned char *channel_layout_map, int frame_si
   if(!dm)return NULL;
   memset(dm, 0x00, sizeof(DownMixer));
 
-  memcpy(dm->channel_layout_map, channel_layout_map, CHANNEL_LAYOUT_DMAX);
+  memcpy(dm->channel_layout_map, channel_layout_map, CHANNEL_LAYOUT_MAX);
   dm->frame_size = frame_size;
-  for (int i = 0; i < CHANNEL_LAYOUT_DMAX; i++)
+  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
   {
     int layout = dm->channel_layout_map[i];
-    if (layout == CHANNEL_LAYOUT_DMAX)
+    if (layout == CHANNEL_LAYOUT_MAX)
       break;
     dm->downmix_m[layout] = (float *)malloc((frame_size) * MAX_CHANNELS * sizeof(float));
     if(!dm->downmix_m[layout])goto FAILED;
@@ -486,10 +486,10 @@ DownMixer * downmix_create(const unsigned char *channel_layout_map, int frame_si
   int last_cl_layout = CHANNEL_LAYOUT_INVALID;
   uint8_t new_channels[256];
 
-  for (int i = 0; i < CHANNEL_LAYOUT_DMAX; i++)
+  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
   {
     int layout = dm->channel_layout_map[i];
-    if (layout == CHANNEL_LAYOUT_DMAX)
+    if (layout == CHANNEL_LAYOUT_MAX)
       break;
     ret = enc_get_new_channels2(last_cl_layout, layout, new_channels);
 
@@ -505,10 +505,10 @@ DownMixer * downmix_create(const unsigned char *channel_layout_map, int frame_si
   dm->weight_state_value_x_prev = 0.0;
   return dm;
 FAILED:
-  for (int i = 0; i < CHANNEL_LAYOUT_DMAX; i++)
+  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
   {
     int layout = dm->channel_layout_map[i];
-    if (layout == CHANNEL_LAYOUT_DMAX)
+    if (layout == CHANNEL_LAYOUT_MAX)
       break;
     if(dm->downmix_m[layout])
       free(dm->downmix_m[layout]);
@@ -535,7 +535,7 @@ void downmix_destroy(DownMixer *dm)
 {
   if (dm)
   {
-    for (int i = 0; i < CHANNEL_LAYOUT_DMAX; i++)
+    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
     {
       if (dm->downmix_m[i])
         free(dm->downmix_m[i]);

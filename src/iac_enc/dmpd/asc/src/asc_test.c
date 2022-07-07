@@ -64,12 +64,31 @@ void save_result2(FILE*  fp, int* result, int frame_num, int ori_frame_num, int 
   }
 }
 
-IA_ASC * ia_asc_start(int layout)
+void save_result3(QueuePlus *pq, int* result, int frame_num, int ori_frame_num, int tile_factor)
+{
+
+  int count = 0;
+  for (int i = 0; i<frame_num; i++) {
+    for (int j = 0; j<tile_factor; j++) {
+      if (count < ori_frame_num) {
+        uint8_t dmix_index_t = result[i];
+        QueuePush(pq, &dmix_index_t);
+      }
+      else {
+        return;
+      }
+      count++;
+    }
+  }
+}
+
+IA_ASC * ia_asc_start(int layout, QueuePlus *pq)
 {
   IA_ASC *ia_asc = (IA_ASC*)malloc(sizeof(IA_ASC));
   memset(ia_asc, 0x00, sizeof(IA_ASC));
   ia_asc->layout = layout;
   ia_asc->max_ents = 3000;// about 1min duration
+
   if (inference_asc_create(&(ia_asc->asc_estimator_feature)) < 0)
   {
     printf("inference_asc_create is failed \n");
@@ -77,13 +96,15 @@ IA_ASC * ia_asc_start(int layout)
   }
   if (layout == ASC_CHANNEL_LAYOUT_100 || layout == ASC_CHANNEL_LAYOUT_200 || layout == ASC_CHANNEL_LAYOUT_312)
   {
-    printf("by pass\n");
+    printf("ASC, by pass\n");
     return ia_asc;
   }
-
+#ifdef USE_QUEUE_METHOD
+  ia_asc->pq = pq;
+#else
   char *filename = "audio_dmix.txt";
   ia_asc->fp = (FILE*)fopen(filename, "w+");
-
+#endif
   uint32_t chunk_size = 960;
 
   uint32_t nch = 0;
@@ -165,11 +186,11 @@ int frame_based_process(IA_ASC *asc)
 #endif 
 
 #ifdef DEBUG
-  for (int i = kernel_s; i< (frame_num + kernel_s); i++) {
+  for (int i = kernel_s; i< (frame_num + kernel_s); i++) 
 #else 
-  for (int i = kernel_s; i< frame_num; i++) {
+  for (int i = kernel_s; i< frame_num; i++) 
 #endif 
-
+{
     float * input_e = sample_e + i*DOWN_CHANNELS*data_unit_size;
     float * inp_prep_e = asc_preprocess(input_e, DOWN_CHANNELS*data_unit_size);
     float * inp_asc_e = asc_log_mstft_transform(asc_estimator_feature, inp_prep_e, DOWN_CHANNELS, mel_matrix, fft_size_asc, hop_size_asc);
@@ -222,8 +243,13 @@ int frame_based_process(IA_ASC *asc)
     printf("frame %d  result %d total %d\n", i, dout_asc_result[i - kernel_s], frame_num);
 #endif
   }
-
-  save_result2(asc->fp, dout_asc_result, frame_num, asc->ents, tile_factor);
+#ifdef USE_QUEUE_METHOD
+  if(asc->pq)
+    save_result3(asc->pq, dout_asc_result, frame_num, asc->ents, tile_factor);
+#else
+  if(asc->fp)
+    save_result2(asc->fp, dout_asc_result, frame_num, asc->ents, tile_factor);
+#endif
 FAILED:
   if (NULL != sample_e) {
     free(sample_e);
@@ -251,9 +277,41 @@ int ia_asc_process(IA_ASC *asc, int16_t *input, int size)
 
   int nch = channel_map714[asc->layout];
 
+  int chunk_size = 960;
+  int step = 0;
+  int16_t down_sample[12 * 960];
+  if (size > chunk_size) //down sample
+  {
+    step = size /(size - chunk_size);
+    int index = 0;
+    for (int i = 0; i < size; i++)
+    {
+      if (i%step == 0)
+        continue;
+      if (index >= chunk_size)
+        break;
+      for (int j = 0; j < nch; j++)
+      {
+        down_sample[index*nch + j] = input[i*nch + j];
+      }
+      index++;
+    }
+  }
+  else
+  {
+    for (int i = 0; i < size; i++)
+    {
+      for (int j = 0; j < nch; j++)
+      {
+        down_sample[i*nch + j] = input[i*nch + j];
+      }
+    }
+  }
+
+
   if (asc->layout == ASC_CHANNEL_LAYOUT_710 || asc->layout == ASC_CHANNEL_LAYOUT_712 || asc->layout == ASC_CHANNEL_LAYOUT_714)
   {
-    int chunk_size = 960;
+
     int shift = asc->ents * chunk_size;
 #if 0
     for (int i = 0; i<chunk_size; i++) {
@@ -265,11 +323,11 @@ int ia_asc_process(IA_ASC *asc, int16_t *input, int size)
     }
 #else
     for (int i = 0; i<chunk_size; i++) {
-      asc->data_fs[(i + shift)*DOWN_CHANNELS] = (int16_t)(input[2 + i*nch]);
-      asc->data_fs[(i + shift)*DOWN_CHANNELS + 1] = (int16_t)(input[0 + i*nch]);
-      asc->data_fs[(i + shift)*DOWN_CHANNELS + 2] = (int16_t)(input[1 + i*nch]);
-      asc->data_fs[(i + shift)*DOWN_CHANNELS + 3] = (int16_t)(input[4 + i*nch] + input[6 + i*nch]);
-      asc->data_fs[(i + shift)*DOWN_CHANNELS + 4] = (int16_t)(input[5 + i*nch] + input[7 + i*nch]);
+      asc->data_fs[(i + shift)*DOWN_CHANNELS] = (int16_t)(down_sample[2 + i*nch]);
+      asc->data_fs[(i + shift)*DOWN_CHANNELS + 1] = (int16_t)(down_sample[0 + i*nch]);
+      asc->data_fs[(i + shift)*DOWN_CHANNELS + 2] = (int16_t)(down_sample[1 + i*nch]);
+      asc->data_fs[(i + shift)*DOWN_CHANNELS + 3] = (int16_t)(down_sample[4 + i*nch] + input[6 + i*nch]);
+      asc->data_fs[(i + shift)*DOWN_CHANNELS + 4] = (int16_t)(down_sample[5 + i*nch] + input[7 + i*nch]);
     }
 #endif
     asc->ents++;
@@ -284,14 +342,14 @@ int ia_asc_process(IA_ASC *asc, int16_t *input, int size)
   }
   else if (asc->layout == ASC_CHANNEL_LAYOUT_514 || asc->layout == ASC_CHANNEL_LAYOUT_512 || asc->layout == ASC_CHANNEL_LAYOUT_510)
   {
-    int chunk_size = 960;
+
     int shift = asc->ents * chunk_size;
     for (int i = 0; i<chunk_size; i++) {
-      asc->data_fs[(i + shift)*DOWN_CHANNELS] = (int16_t)(input[2 + i*nch]);
-      asc->data_fs[(i + shift)*DOWN_CHANNELS + 1] = (int16_t)(input[0 + i*nch]);
-      asc->data_fs[(i + shift)*DOWN_CHANNELS + 2] = (int16_t)(input[1 + i*nch]);
-      asc->data_fs[(i + shift)*DOWN_CHANNELS + 3] = (int16_t)(input[4 + i*nch]);
-      asc->data_fs[(i + shift)*DOWN_CHANNELS + 4] = (int16_t)(input[5 + i*nch]);
+      asc->data_fs[(i + shift)*DOWN_CHANNELS] = (int16_t)(down_sample[2 + i*nch]);
+      asc->data_fs[(i + shift)*DOWN_CHANNELS + 1] = (int16_t)(down_sample[0 + i*nch]);
+      asc->data_fs[(i + shift)*DOWN_CHANNELS + 2] = (int16_t)(down_sample[1 + i*nch]);
+      asc->data_fs[(i + shift)*DOWN_CHANNELS + 3] = (int16_t)(down_sample[4 + i*nch]);
+      asc->data_fs[(i + shift)*DOWN_CHANNELS + 4] = (int16_t)(down_sample[5 + i*nch]);
     }
     asc->ents++;
     if (asc->ents < asc->max_ents)
@@ -325,6 +383,7 @@ int ia_asc_stop(IA_ASC *asc)
   }
   return -1;
 }
+
 #ifndef DISABLE_EXECUTION
 int main(int argc, char* argv[])
 {
@@ -453,11 +512,11 @@ int main(int argc, char* argv[])
     #endif 
 
     #ifdef DEBUG
-    for(int i= kernel_s; i< (frame_num + kernel_s);i++){
+    for(int i= kernel_s; i< (frame_num + kernel_s);i++)
     #else 
-    for(int i= kernel_s; i< frame_num;i++){
+    for(int i= kernel_s; i< frame_num;i++)
     #endif 
-
+    {
         float * input_e = sample_e + i*DOWN_CHANNELS*data_unit_size;
         float * inp_prep_e = asc_preprocess(input_e,DOWN_CHANNELS*data_unit_size);
         float * inp_asc_e  = asc_log_mstft_transform(asc_estimator_feature,inp_prep_e,DOWN_CHANNELS,mel_matrix,fft_size_asc,hop_size_asc);

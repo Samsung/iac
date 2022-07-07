@@ -3,8 +3,14 @@
 
 #include <stdint.h>
 
-#include "immersive_audio.h"
+#include "immersive_audio_defines.h"
 #include "immersive_audio_types.h"
+
+typedef struct IACodecSpecInfo {
+    uint32_t    cid;
+    uint8_t    *config;
+    uint32_t    size;
+} IACodecSpecInfo;
 
 typedef struct IAStaticMeta {
 
@@ -30,7 +36,7 @@ typedef struct IAStaticMeta {
         int16_t loudness;
         uint8_t output_gain_flags;
         int16_t output_gain;
-    } ch_audio_layer_config[IA_CH_LAYOUT_TYPE_COUNT];
+    } ch_audio_layer_config[IA_CHANNEL_LAYOUT_COUNT];
 
 } IAStaticMeta;
 
@@ -42,8 +48,10 @@ typedef struct IAReconGainInfo {
 
 typedef struct IAReconGainInfoList {
     int count;
-    IAReconGainInfo recon_gain_info[IA_CH_LAYOUT_TYPE_COUNT];
+    IAReconGainInfo recon_gain_info[IA_CHANNEL_LAYOUT_COUNT];
 } IAReconGainInfoList;
+
+int ia_codec_specific_info_parse (IACodecSpecInfo *, uint8_t *, uint32_t );
 
 IAErrCode ia_static_meta_parse (IAStaticMeta *, uint8_t *, uint32_t );
 void ia_static_meta_uninit (IAStaticMeta *);

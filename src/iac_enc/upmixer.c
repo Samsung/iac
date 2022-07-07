@@ -128,6 +128,23 @@ void upmix_gain(UpMixer *um, int count, int *in, int channel_layout)
 }
 #endif
 
+static int upmix_s1to2(UpMixer *um, float *w_x)
+{
+
+  for (int i = 0; i<um->frame_size; i++)
+  {
+    um->buffer[enc_channel_mixed_s2_l][i] =
+      um->ch_data[enc_channel_l2][i];
+    um->buffer[enc_channel_mixed_s2_r][i] =
+      (um->ch_data[enc_channel_mono][i] - 0.5 * um->ch_data[enc_channel_l2][i]) * 2.0;
+  }
+  um->ch_data[enc_channel_l2] = um->buffer[enc_channel_mixed_s2_l];
+  um->ch_data[enc_channel_r2] = um->buffer[enc_channel_mixed_s2_r];
+  um->scalable_map[CHANNEL_LAYOUT_200][enc_channel_r2] = 1;
+
+  return 0;
+}
+
 static int upmix_s2to3(UpMixer *um, float *w_x)
 {
 
@@ -141,21 +158,8 @@ static int upmix_s2to3(UpMixer *um, float *w_x)
   um->ch_data[enc_channel_l3] = um->buffer[enc_channel_mixed_s3_l];
   um->ch_data[enc_channel_r3] = um->buffer[enc_channel_mixed_s3_r];
 
-  return 0;
-}
-
-static int upmix_s1to2(UpMixer *um, float *w_x)
-{
-
-  for (int i = 0; i<um->frame_size; i++)
-  {
-    um->buffer[enc_channel_mixed_s2_l][i] =
-      um->ch_data[enc_channel_l2][i];
-    um->buffer[enc_channel_mixed_s2_r][i] =
-      (um->ch_data[enc_channel_mono][i] - 0.5 * um->ch_data[enc_channel_l2][i]) * 2.0;
-  }
-  um->ch_data[enc_channel_l2] = um->buffer[enc_channel_mixed_s2_l];
-  um->ch_data[enc_channel_r2] = um->buffer[enc_channel_mixed_s2_r];
+  um->scalable_map[CHANNEL_LAYOUT_312][enc_channel_l3] = 1;
+  um->scalable_map[CHANNEL_LAYOUT_312][enc_channel_r3] = 1;
 
   return 0;
 }
@@ -200,6 +204,13 @@ static int upmix_s3to5(UpMixer *um, float *w_x)
   um->ch_data[enc_channel_sl5] = um->buffer[enc_channel_mixed_s5_l];
   um->ch_data[enc_channel_sr5] = um->buffer[enc_channel_mixed_s5_r];
 
+  um->scalable_map[CHANNEL_LAYOUT_510][enc_channel_sl5] = 1;
+  um->scalable_map[CHANNEL_LAYOUT_510][enc_channel_sr5] = 1;
+  um->scalable_map[CHANNEL_LAYOUT_512][enc_channel_sl5] = 1;
+  um->scalable_map[CHANNEL_LAYOUT_512][enc_channel_sr5] = 1;
+  um->scalable_map[CHANNEL_LAYOUT_514][enc_channel_sl5] = 1;
+  um->scalable_map[CHANNEL_LAYOUT_514][enc_channel_sr5] = 1;
+
   return 0;
 }
 
@@ -239,6 +250,13 @@ static int upmix_s5to7(UpMixer *um, float *w_x)
   um->ch_data[enc_channel_bl7] = um->buffer[enc_channel_mixed_s7_l];
   um->ch_data[enc_channel_br7] = um->buffer[enc_channel_mixed_s7_r];
 
+  um->scalable_map[CHANNEL_LAYOUT_710][enc_channel_bl7] = 1;
+  um->scalable_map[CHANNEL_LAYOUT_710][enc_channel_br7] = 1;
+  um->scalable_map[CHANNEL_LAYOUT_712][enc_channel_bl7] = 1;
+  um->scalable_map[CHANNEL_LAYOUT_712][enc_channel_br7] = 1;
+  um->scalable_map[CHANNEL_LAYOUT_714][enc_channel_bl7] = 1;
+  um->scalable_map[CHANNEL_LAYOUT_714][enc_channel_br7] = 1;
+
   return 0;
 }
 
@@ -249,7 +267,7 @@ static int upmix_s7(UpMixer *um, float *w_x)
   return upmix_s5to7(um, w_x);
 }
 
-static int upmix_hf2to2(UpMixer *um, float *w_x)
+static int upmix_hf2toh2(UpMixer *um, float *w_x)
 {
   Mdhr current = um->mdhr_c, last = um->mdhr_l;
   int last_Typeid = last.dmix_matrix_type - 1;
@@ -276,15 +294,20 @@ static int upmix_hf2to2(UpMixer *um, float *w_x)
   um->ch_data[enc_channel_hl] = um->buffer[enc_channel_mixed_h_l];
   um->ch_data[enc_channel_hr] = um->buffer[enc_channel_mixed_h_r];
 
+  um->scalable_map[CHANNEL_LAYOUT_512][enc_channel_hl] = 1;
+  um->scalable_map[CHANNEL_LAYOUT_512][enc_channel_hr] = 1;
+  um->scalable_map[CHANNEL_LAYOUT_712][enc_channel_hl] = 1;
+  um->scalable_map[CHANNEL_LAYOUT_712][enc_channel_hr] = 1;
+
   return 0;
 }
 
 static int upmix_h2(UpMixer *um, float *w_x)
 {
-  return upmix_hf2to2(um, w_x);
+  return upmix_hf2toh2(um, w_x);
 }
 
-static int upmix_h2to4(UpMixer *um, float *w_x)
+static int upmix_h2toh4(UpMixer *um, float *w_x)
 {
   Mdhr current = um->mdhr_c, last = um->mdhr_l;
   int last_Typeid = last.dmix_matrix_type - 1;
@@ -311,6 +334,11 @@ static int upmix_h2to4(UpMixer *um, float *w_x)
   um->ch_data[enc_channel_hbl] = um->buffer[enc_channel_mixed_h_bl];
   um->ch_data[enc_channel_hbr] = um->buffer[enc_channel_mixed_h_br];
 
+  um->scalable_map[CHANNEL_LAYOUT_514][enc_channel_hbl] = 1;
+  um->scalable_map[CHANNEL_LAYOUT_514][enc_channel_hbr] = 1;
+  um->scalable_map[CHANNEL_LAYOUT_714][enc_channel_hbl] = 1;
+  um->scalable_map[CHANNEL_LAYOUT_714][enc_channel_hbr] = 1;
+
   return 0;
 }
 
@@ -318,7 +346,7 @@ static int upmix_h4(UpMixer *um, float *w_x)
 {
   if (!um->ch_data[enc_channel_hl])
     upmix_h2(um, w_x);
-  return upmix_h2to4(um, w_x);
+  return upmix_h2toh4(um, w_x);
 }
 
 void upmix_to100(UpMixer *um, float *w_x)
@@ -333,7 +361,7 @@ void upmix_to200(UpMixer *um, float *w_x)
     upmix_s2(um, w_x);
   //int out[] = { enc_channel_mixed_s2_l, enc_channel_mixed_s2_r };
 
-  //upmix_gain(um, 2, in, CHANNEL_LAYOUT_U200);
+  //upmix_gain(um, 2, in, CHANNEL_LAYOUT_200);
 
   //um->ch_data[enc_channel_l2] = um->buffer[enc_channel_mixed_s2_l];
   //um->ch_data[enc_channel_r2] = um->buffer[enc_channel_mixed_s2_r];
@@ -344,7 +372,7 @@ void upmix_to312(UpMixer *um, float *w_x)
   int in[] = { enc_channel_tl, enc_channel_tr };
   //int out[] = { enc_channel_mixed_h_l, enc_channel_mixed_h_r };
 
-  //upmix_gain(um, 2, in, CHANNEL_LAYOUT_U312);
+  //upmix_gain(um, 2, in, CHANNEL_LAYOUT_312);
 
   //um->ch_data[enc_channel_tl] = um->buffer[enc_channel_mixed_h_l];
   //um->ch_data[enc_channel_tr] = um->buffer[enc_channel_mixed_h_r];
@@ -444,15 +472,19 @@ void upmix_smooth(UpMixer *um, int layout, int count, int *channel)
   }
 }
 
-static int upmix_add_mixed_s3_channels(UpMixer *um, int* array)
+static int upmix_add_mixed_channels(UpMixer *um, int layout, int* array)
 {
   int cnt = 0;
-  if (um->ch_data[enc_channel_l2] && um->ch_data[enc_channel_l3]) {
-    array[cnt++] = enc_channel_l3;
-    array[cnt++] = enc_channel_r3;
-    um->scalable_map[CHANNEL_LAYOUT_U312][enc_channel_l3] = 1;
-    um->scalable_map[CHANNEL_LAYOUT_U312][enc_channel_r3] = 1;
+  uint8_t *tchs = NULL;
+  int nch = enc_get_layout_channel_count(layout);
+  tchs = enc_get_layout_channels(layout);
+  for (int i = 0; i < nch; i++)
+  {
+    int channel = tchs[i];
+    if(um->scalable_map[layout][channel] == 1)
+      array[cnt++] = channel;
   }
+
   return cnt;
 }
 
@@ -461,7 +493,19 @@ static int upmix_add_mixed_s2_channels(UpMixer *um, int* array)
   int cnt = 0;
   if (um->ch_data[enc_channel_mono] && um->ch_data[enc_channel_l2]) {
     array[cnt++] = enc_channel_r2;
-    um->scalable_map[CHANNEL_LAYOUT_U200][enc_channel_r2] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_200][enc_channel_r2] = 1;
+  }
+  return cnt;
+}
+
+static int upmix_add_mixed_s3_channels(UpMixer *um, int* array)
+{
+  int cnt = 0;
+  if (um->ch_data[enc_channel_l2] && um->ch_data[enc_channel_l3]) {
+    array[cnt++] = enc_channel_l3;
+    array[cnt++] = enc_channel_r3;
+    um->scalable_map[CHANNEL_LAYOUT_312][enc_channel_l3] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_312][enc_channel_r3] = 1;
   }
   return cnt;
 }
@@ -472,12 +516,12 @@ static int upmix_add_mixed_s5_channels(UpMixer *um, int* array)
   if (um->ch_data[enc_channel_l3] && um->ch_data[enc_channel_sl5]) {
     array[cnt++] = enc_channel_sl5;
     array[cnt++] = enc_channel_sr5;
-    um->scalable_map[CHANNEL_LAYOUT_U510][enc_channel_sl5] = 1;
-    um->scalable_map[CHANNEL_LAYOUT_U510][enc_channel_sr5] = 1;
-    um->scalable_map[CHANNEL_LAYOUT_U512][enc_channel_sl5] = 1;
-    um->scalable_map[CHANNEL_LAYOUT_U512][enc_channel_sr5] = 1;
-    um->scalable_map[CHANNEL_LAYOUT_U514][enc_channel_sl5] = 1;
-    um->scalable_map[CHANNEL_LAYOUT_U514][enc_channel_sr5] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_510][enc_channel_sl5] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_510][enc_channel_sr5] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_512][enc_channel_sl5] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_512][enc_channel_sr5] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_514][enc_channel_sl5] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_514][enc_channel_sr5] = 1;
   }
   return cnt;
 }
@@ -488,12 +532,12 @@ static int upmix_add_mixed_s7_channels(UpMixer *um, int* array)
   if (um->ch_data[enc_channel_sl5] && um->ch_data[enc_channel_bl7]) {
     array[cnt++] = enc_channel_bl7;
     array[cnt++] = enc_channel_br7;
-    um->scalable_map[CHANNEL_LAYOUT_U710][enc_channel_bl7] = 1;
-    um->scalable_map[CHANNEL_LAYOUT_U710][enc_channel_br7] = 1;
-    um->scalable_map[CHANNEL_LAYOUT_U712][enc_channel_bl7] = 1;
-    um->scalable_map[CHANNEL_LAYOUT_U712][enc_channel_br7] = 1;
-    um->scalable_map[CHANNEL_LAYOUT_U714][enc_channel_bl7] = 1;
-    um->scalable_map[CHANNEL_LAYOUT_U714][enc_channel_br7] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_710][enc_channel_bl7] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_710][enc_channel_br7] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_712][enc_channel_bl7] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_712][enc_channel_br7] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_714][enc_channel_bl7] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_714][enc_channel_br7] = 1;
   }
   return cnt;
 }
@@ -505,10 +549,10 @@ static int upmix_add_mixed_h2_channels(UpMixer *um, int* array)
     array[cnt++] = enc_channel_hl;
     array[cnt++] = enc_channel_hr;
 
-    um->scalable_map[CHANNEL_LAYOUT_U512][enc_channel_hl] = 1;
-    um->scalable_map[CHANNEL_LAYOUT_U512][enc_channel_hr] = 1;
-    um->scalable_map[CHANNEL_LAYOUT_U712][enc_channel_hl] = 1;
-    um->scalable_map[CHANNEL_LAYOUT_U712][enc_channel_hr] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_512][enc_channel_hl] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_512][enc_channel_hr] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_712][enc_channel_hl] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_712][enc_channel_hr] = 1;
   }
   return cnt;
 }
@@ -519,31 +563,31 @@ static int upmix_add_mixed_h4_channels(UpMixer *um, int* array)
   if (um->ch_data[enc_channel_hl] && um->ch_data[enc_channel_hbl]) {
     array[cnt++] = enc_channel_hbl;
     array[cnt++] = enc_channel_hbr;
-    um->scalable_map[CHANNEL_LAYOUT_U514][enc_channel_hbl] = 1;
-    um->scalable_map[CHANNEL_LAYOUT_U514][enc_channel_hbr] = 1;
-    um->scalable_map[CHANNEL_LAYOUT_U714][enc_channel_hbl] = 1;
-    um->scalable_map[CHANNEL_LAYOUT_U714][enc_channel_hbr] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_514][enc_channel_hbl] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_514][enc_channel_hbr] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_714][enc_channel_hbl] = 1;
+    um->scalable_map[CHANNEL_LAYOUT_714][enc_channel_hbr] = 1;
   }
   return cnt;
-}
-
-void smooth_to312(UpMixer *um)
-{
-  int mixch_list[MAX_CHANNELS];
-  int ret = 0;
-
-  ret = upmix_add_mixed_s3_channels(um, mixch_list);
-  upmix_smooth(um, CHANNEL_LAYOUT_U312, ret, mixch_list);
-
 }
 
 void smooth_to200(UpMixer *um)
 {
   int mixch_list[MAX_CHANNELS];
   int ret = 0;
+  ret = upmix_add_mixed_channels(um, CHANNEL_LAYOUT_200, mixch_list);
+  //ret = upmix_add_mixed_s2_channels(um, mixch_list);
+  upmix_smooth(um, CHANNEL_LAYOUT_200, ret, mixch_list);
 
-  ret = upmix_add_mixed_s2_channels(um, mixch_list);
-  upmix_smooth(um, CHANNEL_LAYOUT_U200, ret, mixch_list);
+}
+
+void smooth_to312(UpMixer *um)
+{
+  int mixch_list[MAX_CHANNELS];
+  int ret = 0;
+  ret = upmix_add_mixed_channels(um, CHANNEL_LAYOUT_312, mixch_list);
+  //ret = upmix_add_mixed_s3_channels(um, mixch_list);
+  upmix_smooth(um, CHANNEL_LAYOUT_312, ret, mixch_list);
 
 }
 
@@ -551,9 +595,9 @@ void smooth_to510(UpMixer *um)
 {
   int mixch_list[MAX_CHANNELS];
   int ret = 0;
-
-  ret = upmix_add_mixed_s5_channels(um, mixch_list);
-  upmix_smooth(um, CHANNEL_LAYOUT_U510, ret, mixch_list);
+  ret = upmix_add_mixed_channels(um, CHANNEL_LAYOUT_510, mixch_list);
+  //ret = upmix_add_mixed_s5_channels(um, mixch_list);
+  upmix_smooth(um, CHANNEL_LAYOUT_510, ret, mixch_list);
 
 }
 
@@ -561,10 +605,10 @@ void smooth_to512(UpMixer *um)
 {
   int mixch_list[MAX_CHANNELS];
   int ret = 0;
-
-  ret = upmix_add_mixed_s5_channels(um, mixch_list);
-  ret += upmix_add_mixed_h2_channels(um, &mixch_list[ret]);
-  upmix_smooth(um, CHANNEL_LAYOUT_U512, ret, mixch_list);
+  ret = upmix_add_mixed_channels(um, CHANNEL_LAYOUT_512, mixch_list);
+  //ret = upmix_add_mixed_s5_channels(um, mixch_list);
+  //ret += upmix_add_mixed_h2_channels(um, &mixch_list[ret]);
+  upmix_smooth(um, CHANNEL_LAYOUT_512, ret, mixch_list);
 
 }
 
@@ -572,10 +616,10 @@ void smooth_to514(UpMixer *um)
 {
   int mixch_list[MAX_CHANNELS];
   int ret = 0;
-
-  ret = upmix_add_mixed_s5_channels(um, mixch_list);
-  ret += upmix_add_mixed_h4_channels(um, &mixch_list[ret]);
-  upmix_smooth(um, CHANNEL_LAYOUT_U514, ret, mixch_list);
+  ret = upmix_add_mixed_channels(um, CHANNEL_LAYOUT_514, mixch_list);
+  //ret = upmix_add_mixed_s5_channels(um, mixch_list);
+  //ret += upmix_add_mixed_h4_channels(um, &mixch_list[ret]);
+  upmix_smooth(um, CHANNEL_LAYOUT_514, ret, mixch_list);
 
 }
 
@@ -583,9 +627,9 @@ void smooth_to710(UpMixer *um)
 {
   int mixch_list[MAX_CHANNELS];
   int ret = 0;
-
-  ret = upmix_add_mixed_s7_channels(um, mixch_list);
-  upmix_smooth(um, CHANNEL_LAYOUT_U710, ret, mixch_list);
+  ret = upmix_add_mixed_channels(um, CHANNEL_LAYOUT_710, mixch_list);
+  //ret = upmix_add_mixed_s7_channels(um, mixch_list);
+  upmix_smooth(um, CHANNEL_LAYOUT_710, ret, mixch_list);
 
 }
 
@@ -593,10 +637,10 @@ void smooth_to712(UpMixer *um)
 {
   int mixch_list[MAX_CHANNELS];
   int ret = 0;
-
-  ret = upmix_add_mixed_s7_channels(um, mixch_list);
-  ret += upmix_add_mixed_h2_channels(um, &mixch_list[ret]);
-  upmix_smooth(um, CHANNEL_LAYOUT_U712, ret, mixch_list);
+  ret = upmix_add_mixed_channels(um, CHANNEL_LAYOUT_712, mixch_list);
+  //ret = upmix_add_mixed_s7_channels(um, mixch_list);
+  //ret += upmix_add_mixed_h2_channels(um, &mixch_list[ret]);
+  upmix_smooth(um, CHANNEL_LAYOUT_712, ret, mixch_list);
 
 }
 
@@ -604,10 +648,10 @@ void smooth_to714(UpMixer *um)
 {
   int mixch_list[MAX_CHANNELS];
   int ret = 0;
-
-  ret = upmix_add_mixed_s7_channels(um, mixch_list);
-  ret += upmix_add_mixed_h4_channels(um, &mixch_list[ret]);
-  upmix_smooth(um, CHANNEL_LAYOUT_U714, ret, mixch_list);
+  ret = upmix_add_mixed_channels(um, CHANNEL_LAYOUT_714, mixch_list);
+  //ret = upmix_add_mixed_s7_channels(um, mixch_list);
+  //ret += upmix_add_mixed_h4_channels(um, &mixch_list[ret]);
+  upmix_smooth(um, CHANNEL_LAYOUT_714, ret, mixch_list);
 
 }
 
@@ -619,28 +663,28 @@ typedef struct
 
 
 static creator_t g_upmix[] = {
-  { CHANNEL_LAYOUT_U100, upmix_to100 },
-  { CHANNEL_LAYOUT_U200, upmix_to200 },
-  { CHANNEL_LAYOUT_U510, upmix_to510 },
-  { CHANNEL_LAYOUT_U512, upmix_to512 },
-  { CHANNEL_LAYOUT_U514, upmix_to514 },
-  { CHANNEL_LAYOUT_U710, upmix_to710 },
-  { CHANNEL_LAYOUT_U712, upmix_to712 },
-  { CHANNEL_LAYOUT_U714, upmix_to714 },
-  { CHANNEL_LAYOUT_U312, upmix_to312 },
+  { CHANNEL_LAYOUT_100, upmix_to100 },
+  { CHANNEL_LAYOUT_200, upmix_to200 },
+  { CHANNEL_LAYOUT_510, upmix_to510 },
+  { CHANNEL_LAYOUT_512, upmix_to512 },
+  { CHANNEL_LAYOUT_514, upmix_to514 },
+  { CHANNEL_LAYOUT_710, upmix_to710 },
+  { CHANNEL_LAYOUT_712, upmix_to712 },
+  { CHANNEL_LAYOUT_714, upmix_to714 },
+  { CHANNEL_LAYOUT_312, upmix_to312 },
   { -1 }
 };
 
 static creator_t g_factorsmooth[] = {
-  { CHANNEL_LAYOUT_U100, NULL },
-  { CHANNEL_LAYOUT_U200, smooth_to200 },
-  { CHANNEL_LAYOUT_U510, smooth_to510 },
-  { CHANNEL_LAYOUT_U512, smooth_to512 },
-  { CHANNEL_LAYOUT_U514, smooth_to514 },
-  { CHANNEL_LAYOUT_U710, smooth_to710 },
-  { CHANNEL_LAYOUT_U712, smooth_to712 },
-  { CHANNEL_LAYOUT_U714, smooth_to714 },
-  { CHANNEL_LAYOUT_U312, smooth_to312 },
+  { CHANNEL_LAYOUT_100, NULL },
+  { CHANNEL_LAYOUT_200, smooth_to200 },
+  { CHANNEL_LAYOUT_510, smooth_to510 },
+  { CHANNEL_LAYOUT_512, smooth_to512 },
+  { CHANNEL_LAYOUT_514, smooth_to514 },
+  { CHANNEL_LAYOUT_710, smooth_to710 },
+  { CHANNEL_LAYOUT_712, smooth_to712 },
+  { CHANNEL_LAYOUT_714, smooth_to714 },
+  { CHANNEL_LAYOUT_312, smooth_to312 },
   { -1 }
 };
 
@@ -651,15 +695,15 @@ UpMixer * upmix_create(int recon_gain_flag, const unsigned char *channel_layout_
   if(!um)return NULL;
   memset(um, 0x00, sizeof(UpMixer));
   um->recon_gain_flag = recon_gain_flag;
-  um->pre_layout = CHANNEL_LAYOUT_UMAX;
-  memcpy(um->channel_layout_map, channel_layout_map, CHANNEL_LAYOUT_UMAX);
+  um->pre_layout = CHANNEL_LAYOUT_MAX;
+  memcpy(um->channel_layout_map, channel_layout_map, CHANNEL_LAYOUT_MAX);
   um->frame_size = frame_size;
   um->preskip_size = preskip_size;
 
-  for (int i = 0; i < CHANNEL_LAYOUT_UMAX; i++)
+  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
   {
     int layout = um->channel_layout_map[i];
-    if (layout == CHANNEL_LAYOUT_UMAX)
+    if (layout == CHANNEL_LAYOUT_MAX)
       break;
     um->upmix[layout] = (float *)malloc(um->frame_size * MAX_CHANNELS * sizeof(float));
     if(!um->upmix[layout])goto FAILED;
@@ -702,7 +746,7 @@ UpMixer * upmix_create(int recon_gain_flag, const unsigned char *channel_layout_
     um->last_sf1[i] = um->last_sfavg1[i] = um->last_sf2[i] = um->last_sfavg2[i] = um->last_sf3[i] = um->last_sfavg3[i] = 1;
   }
 
-  for (int i = 0; i < CHANNEL_LAYOUT_UMAX; i++)
+  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
   {
     for (int j = 0; j < 12; j++)
     {
@@ -729,10 +773,10 @@ UpMixer * upmix_create(int recon_gain_flag, const unsigned char *channel_layout_
   int last_cl_layout = CHANNEL_LAYOUT_INVALID;
   uint8_t new_channels[256];
 
-  for (int i = 0; i < CHANNEL_LAYOUT_UMAX; i++)
+  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
   {
     int layout = um->channel_layout_map[i];
-    if (layout == CHANNEL_LAYOUT_UMAX)
+    if (layout == CHANNEL_LAYOUT_MAX)
       break;
     ret = enc_get_new_channels2(last_cl_layout, layout, new_channels);
 
@@ -745,10 +789,10 @@ UpMixer * upmix_create(int recon_gain_flag, const unsigned char *channel_layout_
   }
   return um;
 FAILED:
-  for (int i = 0; i < CHANNEL_LAYOUT_UMAX; i++)
+  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
   {
     int layout = um->channel_layout_map[i];
-    if (layout == CHANNEL_LAYOUT_UMAX)
+    if (layout == CHANNEL_LAYOUT_MAX)
       break;
     if(um->upmix[layout])
 		free(um->upmix[layout]);
@@ -767,7 +811,7 @@ void upmix_destroy(UpMixer *um)
 {
   if (um)
   {
-    for (int i = 0; i < CHANNEL_LAYOUT_UMAX; i++)
+    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
     {
       if (um->upmix[i])
         free(um->upmix[i]);
@@ -795,16 +839,16 @@ void upmix_gain_up(UpMixer *um, float pcmbuf[][IA_FRAME_MAXSIZE], int nch, const
 
   int loop = 0;
   int layout = um->channel_layout_map[loop];
-  float last_dmix_gain = q_to_float(last.dmixgain[layout], 8);
-  float dmix_gain = q_to_float(current.dmixgain[layout], 8);
+  float last_dmix_gain = last.dmixgain_f[layout];
+  float dmix_gain = current.dmixgain_f[layout];
   for (int i = 0; i < nch; i++)
   {
     if (i >= channel_map714[layout])
     {
       loop++;
       layout = um->channel_layout_map[loop];
-      last_dmix_gain = q_to_float(last.dmixgain[layout], 8);
-      dmix_gain = q_to_float(current.dmixgain[layout], 8);
+      last_dmix_gain = last.dmixgain_f[layout];
+      dmix_gain = current.dmixgain_f[layout];
     }
     if (gain_down_map[i])
     {
@@ -840,10 +884,10 @@ void upmix3(UpMixer *um, const unsigned char *gain_down_map)
     um->ch_data[i] = NULL;
   }
 
-  for (int i = 0; i < CHANNEL_LAYOUT_UMAX; i++)
+  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
   {
     int layout = um->channel_layout_map[i];
-    if (layout == CHANNEL_LAYOUT_UMAX)
+    if (layout == CHANNEL_LAYOUT_MAX)
       break;
     conv_upmixpcm(um->up_input[layout], dspInBuf, channel_map714[layout] - pre_ch, start_ch, um->frame_size);
     start_ch += (channel_map714[layout] - pre_ch);
@@ -860,10 +904,10 @@ void upmix3(UpMixer *um, const unsigned char *gain_down_map)
     //printf("%s (%d) \n", up_get_channel_name(channel), channel);
   }
 
-  for (int i = 0; i < CHANNEL_LAYOUT_UMAX; i++)
+  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
   {
     int layout = um->channel_layout_map[i];
-    if (layout == CHANNEL_LAYOUT_UMAX)
+    if (layout == CHANNEL_LAYOUT_MAX)
       break;
     if (g_upmix[layout].data)
     {
@@ -872,10 +916,10 @@ void upmix3(UpMixer *um, const unsigned char *gain_down_map)
   }
 
 #if 1
-  for (int i = 0; i < CHANNEL_LAYOUT_UMAX; i++)
+  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
   {
     int layout = um->channel_layout_map[i];
-    if (layout == CHANNEL_LAYOUT_UMAX)
+    if (layout == CHANNEL_LAYOUT_MAX)
       break;
     if (g_factorsmooth[layout].data)
     {
@@ -883,10 +927,10 @@ void upmix3(UpMixer *um, const unsigned char *gain_down_map)
     }
   }
 #endif
-  for (int i = 0; i < CHANNEL_LAYOUT_UMAX; i++)
+  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
   {
     int layout = um->channel_layout_map[i];
-    if (layout == CHANNEL_LAYOUT_UMAX)
+    if (layout == CHANNEL_LAYOUT_MAX)
       break;
     playout = enc_get_layout_channels(layout);
     for (int ch = 0; ch < enc_get_layout_channel_count(layout); ++ch)

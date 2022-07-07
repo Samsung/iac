@@ -12,6 +12,20 @@
 #endif
 
 #define IA_TAG "IAMETA"
+
+
+int ia_codec_specific_info_parse (IACodecSpecInfo *info, uint8_t *spec, uint32_t size)
+{
+    if (size < 4 || !info)
+        return IA_ERR_BAD_ARG;
+
+    info->cid = *((uint32_t *)spec);
+    info->config = spec + 4;
+    info->size = size - 4;
+
+    return IA_OK;
+}
+
 /**
  *
  *  ia_static_meta()
@@ -69,8 +83,8 @@ IAErrCode ia_static_meta_parse (IAStaticMeta *meta,
     meta->ambisonics_mode = bs_getbits(&bs, 2);
     meta->channel_audio_layer = bs_getbits(&bs, 3);
     bs_getbits(&bs, 3);
-    ia_logi ("ambisonics_mode : %d", meta->ambisonics_mode);
-    ia_logi ("channel_audio_layer : %d", meta->channel_audio_layer);
+    ia_logd ("ambisonics_mode : %d", meta->ambisonics_mode);
+    ia_logd ("channel_audio_layer : %d", meta->channel_audio_layer);
 
     if (meta->ambisonics_mode > 0) {
         uint32_t bytes = 0;
@@ -110,7 +124,7 @@ IAErrCode ia_static_meta_parse (IAStaticMeta *meta,
     }
 
     for (int i=0; i<meta->channel_audio_layer; ++i) {
-        ia_logi ("layer : %d", i);
+        ia_logd ("layer : %d", i);
         meta->ch_audio_layer_config[i].loudspeaker_layout = bs_getbits(&bs, 4);
         meta->ch_audio_layer_config[i].output_gain_is_present_flag = bs_getbits(&bs, 1);
         meta->ch_audio_layer_config[i].recon_gain_is_present_flag = bs_getbits(&bs, 1);
@@ -118,12 +132,12 @@ IAErrCode ia_static_meta_parse (IAStaticMeta *meta,
         meta->ch_audio_layer_config[i].substream_count = bs_getbits(&bs, 8);
         meta->ch_audio_layer_config[i].coupled_substream_count = bs_getbits(&bs, 8);
         meta->ch_audio_layer_config[i].loudness = bs_getbits(&bs, 16);
-        ia_logi("loudspeaker_layout : %d", meta->ch_audio_layer_config[i].loudspeaker_layout);
-        ia_logi("output_gain_is_present_flag : %d", meta->ch_audio_layer_config[i].output_gain_is_present_flag);
-        ia_logi("recon_gain_is_present_flag : %d", meta->ch_audio_layer_config[i].recon_gain_is_present_flag);
-        ia_logi("substream_count : %d", meta->ch_audio_layer_config[i].substream_count);
-        ia_logi("coupled_substream_count : %d", meta->ch_audio_layer_config[i].coupled_substream_count);
-        ia_logi("loudness : 0x%04x", meta->ch_audio_layer_config[i].loudness & U16_MASK);
+        ia_logd("loudspeaker_layout : %d", meta->ch_audio_layer_config[i].loudspeaker_layout);
+        ia_logd("output_gain_is_present_flag : %d", meta->ch_audio_layer_config[i].output_gain_is_present_flag);
+        ia_logd("recon_gain_is_present_flag : %d", meta->ch_audio_layer_config[i].recon_gain_is_present_flag);
+        ia_logd("substream_count : %d", meta->ch_audio_layer_config[i].substream_count);
+        ia_logd("coupled_substream_count : %d", meta->ch_audio_layer_config[i].coupled_substream_count);
+        ia_logd("loudness : 0x%04x", meta->ch_audio_layer_config[i].loudness & U16_MASK);
         if (meta->ch_audio_layer_config[i].output_gain_is_present_flag) {
             meta->ch_audio_layer_config[i].output_gain_flags = bs_getbits(&bs, 6);
             bs_getbits(&bs, 2);

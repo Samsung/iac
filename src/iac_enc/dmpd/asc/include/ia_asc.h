@@ -1,6 +1,7 @@
 #ifndef IA_ASC_H
 #define IA_ASC_H
 #include <stdint.h>
+#include "queue_plus.h"
 
 typedef enum {
   ASC_CHANNEL_LAYOUT_100, //1.0.0
@@ -23,9 +24,10 @@ typedef struct {
   uint32_t max_ents;
   int layout;
   void *fp;
+  QueuePlus *pq;
 }IA_ASC;
 
-IA_ASC * ia_asc_start(int layout);
-int frame_based_process(IA_ASC *asc);
+IA_ASC * ia_asc_start(int layout, QueuePlus *pq);
+int ia_asc_process(IA_ASC *asc, int16_t *input, int size);
 int ia_asc_stop(IA_ASC *asc);
 #endif /* IA_ASC_H */

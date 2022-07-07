@@ -137,7 +137,7 @@ void audio_true_peak_meter_reset_states(AudioTruePeakMeter* thisp)
 
 float audio_true_peak_meter_next_true_peak(AudioTruePeakMeter* thisp, float sample)
 {
-    float over_sampled_buffer[4];
+    float over_sampled_buffer[4] = {0};
 
     sample_phase_filters_next_over_sample(&thisp->phasefilters, sample, over_sampled_buffer);
     float max_linear = -3.4e34;

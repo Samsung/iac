@@ -107,17 +107,6 @@ termination:
 }
 
 
-IAErrCode ia_core_decoder_init (IACoreDecoder* ths,
-                                uint8_t* spec, uint32_t len, uint32_t flags)
-{
-    IACodecContext *ctx = ths->ctx;
-    ctx->flags = flags;
-    ctx->cspec = spec;
-    ctx->clen = len;
-    return ths->cdec[ths->cid]->init(ctx);
-}
-
-
 void ia_core_decoder_close (IACoreDecoder* ths)
 {
     if (ths) {
@@ -132,6 +121,24 @@ void ia_core_decoder_close (IACoreDecoder* ths)
 }
 
 
+IAErrCode ia_core_decoder_init (IACoreDecoder* ths, uint32_t flags)
+{
+    IACodecContext *ctx = ths->ctx;
+    ctx->flags = flags;
+    return ths->cdec[ths->cid]->init(ctx);
+}
+
+
+IAErrCode ia_core_decoder_set_codec_specific_info (IACoreDecoder* ths,
+                                                   uint8_t* spec, uint32_t len)
+{
+    IACodecContext *ctx = ths->ctx;
+    ctx->cspec = spec;
+    ctx->clen = len;
+    return IA_OK;
+}
+
+
 IAErrCode ia_core_decoder_set_streams_info (IACoreDecoder* ths,
                                             uint8_t streams,
                                             uint8_t coupled_streams)
@@ -140,8 +147,6 @@ IAErrCode ia_core_decoder_set_streams_info (IACoreDecoder* ths,
     ctx->ambisonics = 0;
     ctx->streams = streams;
     ctx->coupled_streams = coupled_streams;
-    if (ctx->flags & IA_FLAG_SUBSTREAM_CODEC_SPECIFIC)
-        ths->cdec[ths->cid]->init_final(ctx);
     return IA_OK;
 }
 

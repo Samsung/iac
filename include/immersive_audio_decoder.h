@@ -7,7 +7,7 @@
 #define _IMMERSIVE_AUDIO_DECODER_H_
 
 #include <stdint.h>
-#include "immersive_audio.h"
+#include "immersive_audio_defines.h"
 
 
 #ifdef __cplusplus
@@ -53,17 +53,20 @@ typedef struct IADecoder IADecoder;
 int     immersive_audio_channel_layout_get_channels_count (IAChannelLayoutType type);
 
 /**
- * @brief   Open an immersive audio decoder handler.
+ * @brief   Create an immersive audio decoder handler.
  * @param   [in] codec : see @ref IACodecID, desired decoder type.
  * @param   [in] codec_spec : contains decoder configuration information.
- *                            the flags indicates the format of the raw data.
- * @param   [in] clen : the length of configuration information.
- * @param   [in] meta : the static meta data of immersive audio bitstream.
+ *                            codec specific info obu as default format.
+ *                            the flags indicates other formats of the codec
+ *                            specific information (@ref IA_FLAG_CODEC_CONFIG_RAW,
+ *                            @ref IA_FLAG_CODEC_CONFIG_ISOBMFF).
+ * @param   [in] clen : the length of codec specific information.
+ * @param   [in] meta : the immersive audio static meta obu data.
  * @param   [in] mlen : the length of static meta data.
  * @param   [in] flags : bit field with flags for the decoder.
  * @return  an immersive audio decoder handler.
  * */
-IADecoder*  immersive_audio_decoder_open (IACodecID codec,
+IADecoder*  immersive_audio_decoder_create (IACodecID codec,
                                           uint8_t* codec_spec, uint32_t clen,
                                           uint8_t *meta, uint32_t mlen,
                                           uint32_t flags);
@@ -73,7 +76,7 @@ IADecoder*  immersive_audio_decoder_open (IACodecID codec,
  * @param   [in] ths : an immersive audio decoder handler.
  * @return  void.
  * */
-void    immersive_audio_decoder_close (IADecoder* ths);
+void    immersive_audio_decoder_destory (IADecoder* ths);
 
 /**
  * @brief   Decode an immersive audio packet.

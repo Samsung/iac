@@ -40,34 +40,30 @@ typedef struct IAOpusContext {
  * */
 static IAErrCode ia_opus_init (IACodecContext *ths)
 {
-    IAErrCode ec = IA_OK;
-    if (ths->cspec) {
-        if (ths->flags & IA_FLAG_CODEC_CONFIG_ISOBMFF) {
-            ths->delay = get_uint16be (ths->cspec, 10);
-            ths->sample_rate = get_uint32be (ths->cspec, 12);
-            ths->channel_mapping_family = get_uint8 (ths->cspec, 18);
-            if (~ths->flags & IA_FLAG_SUBSTREAM_CODEC_SPECIFIC) {
-                ; // TODO - channels, streams, coupled_streams
-            }
-        }
-    }
-
-    // TODO - ~IA_FLAG_SUBSTREAM_CODEC_SPECIFIC
-    return ec;
-}
-
-static IAErrCode ia_opus_init_final (IACodecContext *ths)
-{
     IAOpusContext *ctx = (IAOpusContext *)ths->priv;
     IAErrCode ec = IA_OK;
     int ret = 0;
+    uint8_t *config = ths->cspec;
+
+    if (!ths->cspec || ths->clen <= 0)
+        return IA_ERR_BAD_ARG;
+
+    if (ths->flags & IA_FLAG_CODEC_CONFIG_ISOBMFF)
+        config += 8;
+
+    ths->delay = get_uint16be (config, 2);
+    ths->sample_rate = get_uint32be (config, 4);
+    ths->channel_mapping_family = get_uint8 (config, 10);
+    // TODO - ~IA_FLAG_SUBSTREAM_CODEC_SPECIFIC
+    // if (~ths->flags & IA_FLAG_SUBSTREAM_CODEC_SPECIFIC) { }
+
 
     if (ths->flags & IA_FLAG_SUBSTREAM_CODEC_SPECIFIC) {
         ctx->dec = opus_multistream2_decoder_create(ths->sample_rate,
                 ths->streams, ths->coupled_streams,
                 AUDIO_FRAME_FLOAT | AUDIO_FRAME_PLANE, &ret);
         if (!ctx->dec) {
-            ec = IA_ERR_INVALID_STATE; // TODO - convert OPUS_STATE to IAErrCode
+            ec = IA_ERR_INVALID_STATE;
         }
     }
 
@@ -103,7 +99,6 @@ const IACodec ia_opus_decoder = {
     .cid            = IA_CODEC_OPUS,
     .priv_size      = sizeof (IAOpusContext),
     .init           = ia_opus_init,
-    .init_final     = ia_opus_init_final,
     .decode_list    = ia_opus_decode_list,
     .close          = ia_opus_close,
 };

@@ -38,4 +38,4 @@ dlopen=''
 dlpreopen=''
 
 # Directory that this library needs to be installed in:
-libdir='/home/zhangyl/3D-Audio/Project2022/code_new/dep_codecs/lib'
+libdir='/home/zhangyl/3D-Audio/Project2022/code/dep_codecs/lib'

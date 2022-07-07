@@ -106,7 +106,7 @@ static int get_height_channels(HEQ_CHANNEL_LAYOUT lay_out)
   return ret;
 }
 
-IA_HEQ *ia_heq_start(int layout,int frame_rate)
+IA_HEQ *ia_heq_start(int layout,int frame_rate, QueuePlus *pq)
 {
   IA_HEQ *heq = (IA_HEQ*)malloc(sizeof(IA_HEQ));
   memset(heq, 0x00, sizeof(IA_HEQ));
@@ -125,12 +125,16 @@ IA_HEQ *ia_heq_start(int layout,int frame_rate)
   if (layout == HEQ_CHANNEL_LAYOUT_714 || layout == HEQ_CHANNEL_LAYOUT_712
     || layout == HEQ_CHANNEL_LAYOUT_514 || layout == HEQ_CHANNEL_LAYOUT_512)
   {
+#ifdef USE_QUEUE_METHOD
+    heq->pq = pq;
+#else
     char *filename = "audio_w.txt";
     heq->fp = (FILE*)fopen(filename, "w+");
+#endif
   }
   else
   {
-    printf("by pass\n");
+    printf("HEQ, by pass\n");
   }
   return heq;
 }
@@ -146,8 +150,13 @@ int ia_heq_process(IA_HEQ *heq, int16_t *input, int size)
   double srdArray_[6 * CHUNK_LEN] = { 0 };
   double short_win = (short_duration * heq->frame_rate) / CHUNK_LEN;
   double long_win = (long_duration *  heq->frame_rate) / CHUNK_LEN;
+#ifdef USE_QUEUE_METHOD
+  if (heq->pq == NULL)
+    return 0;
+#else
   if (heq->fp == NULL)
     return 0;
+#endif
   int nch = channel_map714[heq->layout];
   int h_length = get_height_channels(heq->layout);
 
@@ -212,11 +221,22 @@ int ia_heq_process(IA_HEQ *heq, int16_t *input, int size)
   }
 
   heq->fcnt += 1;
-
-  char temp[20] = { 0 };
-  int index = (int)heq->Wlevel;
-  snprintf(temp, 20, "%d\r", index);
-  fwrite(temp, strlen(temp), 1, heq->fp);
+#ifdef USE_QUEUE_METHOD
+  if(heq->pq)
+  {
+    int index = (int)heq->Wlevel;
+    uint8_t w_index_t = index;
+    QueuePush(heq->pq, &w_index_t);
+  }
+#else
+  if(heq->fp)
+  {
+    char temp[20] = { 0 };
+    int index = (int)heq->Wlevel;
+    snprintf(temp, 20, "%d\r", index);
+    fwrite(temp, strlen(temp), 1, heq->fp);
+  }
+#endif
   return 0;
 }
 

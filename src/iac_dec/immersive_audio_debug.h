@@ -1,5 +1,5 @@
-#ifndef __IMMERSIVE_AUDIO_DEBUG_
-#define __IMMERSIVE_AUDIO_DEBUG_
+#ifndef _IMMERSIVE_AUDIO_DEBUG_
+#define _IMMERSIVE_AUDIO_DEBUG_
 
 #ifdef IA_DBG
 
@@ -16,10 +16,11 @@
 #define IA_DBG_D 0x08
 #define IA_DBG_T 0x10
 
-// #define IA_DBG_LEVEL (IA_DBG_E|IA_DBG_W)
-// #define IA_DBG_LEVEL (IA_DBG_E|IA_DBG_W|IA_DBG_I)
-#define IA_DBG_LEVEL (IA_DBG_E|IA_DBG_W|IA_DBG_I|IA_DBG_D)
-// #define IA_DBG_LEVEL (IA_DBG_E|IA_DBG_W|IA_DBG_D|IA_DBG_I|IA_DBG_T)
+#define IA_DBG_LEVEL 0
+
+#ifdef IA_DEV
+#include "immersive_audio_debug_dev.h"
+#endif
 
 #ifndef __MODULE__
 #define __MODULE__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
@@ -39,22 +40,8 @@
 #define ia_logd(fmt, arg...) ia_log(IA_DBG_D, "DEBUG", fmt, ##arg)
 #define ia_logt(fmt, arg...) ia_log(IA_DBG_T, "TRACE", fmt, ##arg)
 
-#define D2F(ch, buf, len, name) \
-    do { \
-        static int idx = 0; \
-        if (idx < 10) { \
-            char dump[32]; \
-            snprintf(dump, 32, "/tmp/fdump%d_%s_%d.dat", ch, name, idx); \
-            FILE *fd = fopen(dump, "w"); \
-            fwrite(buf, 1, len, fd); \
-            fclose(fd); \
-            ++idx; \
-        } \
-    } while(0)
-
-
 #else
-# ifdef WIN32
+#ifdef WIN32
 #define ia_loge(fmt,...)
 #define ia_logw(fmt,...)
 #define ia_logi(fmt,...)
@@ -68,7 +55,6 @@
 #define ia_logt(fmt,arg...)
 #endif
 
-#define D2F(ch, buf, len, name)
 #endif
 
-#endif /*  __IMMERSIVE_AUDIO_DEBUG_ */
+#endif /*  _IMMERSIVE_AUDIO_DEBUG_ */

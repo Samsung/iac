@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#include "immersive_audio.h"
+#include "immersive_audio_defines.h"
 
 typedef enum {
     IA_OBU_IA_STREAM_INDICATOR,
@@ -21,6 +21,7 @@ typedef struct IAOBU {
     uint32_t    psize;
 } IAOBU;
 
+IAErrCode ia_obu_find_codec_specific_info (IAOBU *, uint8_t *, uint32_t);
 IAErrCode ia_obu_find_static_meta (IAOBU *, uint8_t *, uint32_t);
 IAErrCode ia_obu_find_demixing_info (IAOBU *, uint8_t *, uint32_t);
 

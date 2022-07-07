@@ -10,26 +10,10 @@
 #include "opus_types.h"
 #include "scalable_format.h"
 
-#ifndef CHANNEL_LAYOUT_UMAX
-
-typedef enum {
-  CHANNEL_LAYOUT_U100, //1.0.0
-  CHANNEL_LAYOUT_U200, //2.0.0 
-  CHANNEL_LAYOUT_U510, //5.1.0
-  CHANNEL_LAYOUT_U512, //5.1.2
-  CHANNEL_LAYOUT_U514, //5.1.4
-  CHANNEL_LAYOUT_U710, //7.1.0
-  CHANNEL_LAYOUT_U712, //7.1.2
-  CHANNEL_LAYOUT_U714, //7.1.4
-  CHANNEL_LAYOUT_U312, //3.1.2
-  CHANNEL_LAYOUT_UMAX
-}CHANNEL_LAYOUT_U;
-
-#endif
 
 typedef struct {
-  int16_t *up_input[CHANNEL_LAYOUT_UMAX];
-  float *upmix[CHANNEL_LAYOUT_UMAX];
+  int16_t *up_input[CHANNEL_LAYOUT_MAX];
+  float *upmix[CHANNEL_LAYOUT_MAX];
   int recon_gain_flag;
   int frame_size;
   int preskip_size;
@@ -41,8 +25,8 @@ typedef struct {
   float last_sf3[12];// 714 last scalefactor
   float last_sfavg3[12]; //714 last average scalefactor
   
-  float last_sf[CHANNEL_LAYOUT_UMAX][12];
-  float last_sfavg[CHANNEL_LAYOUT_UMAX][12];
+  float last_sf[CHANNEL_LAYOUT_MAX][12];
+  float last_sfavg[CHANNEL_LAYOUT_MAX][12];
   //float up_input_temp[MAX_CHANNELS][FRAME_SIZE];
   float *ch_data[enc_channel_cnt];
   float *buffer[enc_channel_mixed_cnt];
@@ -50,11 +34,11 @@ typedef struct {
   Mdhr mdhr_c;
   float last_weight_state_value_x_prev;
   float last_weight_state_value_x_prev2;
-  unsigned char channel_layout_map[CHANNEL_LAYOUT_UMAX];
+  unsigned char channel_layout_map[CHANNEL_LAYOUT_MAX];
   unsigned char  channel_order[enc_channel_cnt];
   int pre_layout;
-  unsigned char scalable_map[CHANNEL_LAYOUT_UMAX][enc_channel_cnt];
-
+  unsigned char scalable_map[CHANNEL_LAYOUT_MAX][enc_channel_cnt];
+  unsigned char relevant_mixed_cl[enc_channel_cnt];
   float *hanning;
   float *startWin;
   float *stopWin;

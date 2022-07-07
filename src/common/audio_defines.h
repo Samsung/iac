@@ -7,15 +7,17 @@
 #define LIMITER_ReleaseSec          0.200f
 #define LIMITER_LookAhead           240
 
-typedef enum  {
+typedef enum {
   CHANNELUNKNOWN = 0,
-  CHANNELMONO = 1, // 1
-  CHANNELSTEREO = 2, // 2
-  CHANNEL51 = 6, // 6
-  CHANNEL71 = 8, // 8
-  CHANNEL312 = 3, // 3
-  CHANNEL512 = 5, // 5
-  CHANNEL714 = 7 // 7
+  CHANNELMONO,
+  CHANNELSTEREO,
+  CHANNEL51,
+  CHANNEL512,
+  CHANNEL514,
+  CHANNEL71,
+  CHANNEL712,
+  CHANNEL714,
+  CHANNEL312
 }channelLayout;
 
 #define MAX_CHANNELS 12

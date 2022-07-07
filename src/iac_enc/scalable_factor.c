@@ -79,7 +79,7 @@ void calc_rms(float mBuf[][IA_FRAME_MAXSIZE], int channels, float* sum_sig,float
   }
 
 }
-void rms_test(InScalableBuffer inbuffer, ChannelLayerMdhr clayer, RmsStruct * rms, int frame_size)
+void rms_test(InScalableBuffer inbuffer, CHANNEL_LAYOUT_TYPE clayer, RmsStruct * rms, int frame_size)
 {
   float mBuf[12][IA_FRAME_MAXSIZE];
   float rBuf[12][IA_FRAME_MAXSIZE];
@@ -254,7 +254,7 @@ void calc_scalefactor2(float *origsig, float *mixedsig, float *reconsig, float t
   
 }
 
-void scalefactor1_test(InScalableBuffer inbuffer, ChannelLayerMdhr clayer, ScalerFactorStruct *sf, int frame_size)
+void scalefactor1_test(InScalableBuffer inbuffer, CHANNEL_LAYOUT_TYPE clayer, ScalerFactorStruct *sf, int frame_size)
 {
   float mBuf[12][IA_FRAME_MAXSIZE];
   float rBuf[12][IA_FRAME_MAXSIZE];
@@ -284,7 +284,7 @@ ScalableFactor * scalablefactor_create(const unsigned char *channel_layout_map, 
 {
   ScalableFactor *sf = (ScalableFactor *)malloc(sizeof(ScalableFactor));
   memset(sf, 0x00, sizeof(ScalableFactor));
-  memcpy(sf->channel_layout_map, channel_layout_map, CHANNEL_LAYER_MDHR_MAX);
+  memcpy(sf->channel_layout_map, channel_layout_map, CHANNEL_LAYOUT_MAX);
   sf->frame_size = frame_size;
   return sf;
 }
@@ -295,7 +295,7 @@ void scalablefactor_destroy(ScalableFactor *sf)
     free(sf);
 }
 
-void cal_scalablefactor2(ScalableFactor *sf, Mdhr *mdhr, InScalableBuffer inbuffer, ChannelLayerMdhr clayer, ChannelLayerMdhr llayer)
+void cal_scalablefactor2(ScalableFactor *sf, Mdhr *mdhr, InScalableBuffer inbuffer, CHANNEL_LAYOUT_TYPE clayer, CHANNEL_LAYOUT_TYPE llayer)
 {
   unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
   int channels = channel_map714[clayer];
@@ -378,28 +378,28 @@ void cal_scalablefactor2(ScalableFactor *sf, Mdhr *mdhr, InScalableBuffer inbuff
     mdhr->scalablefactor[clayer][i] = chx[i];
   }
 #if 0
-  if (clayer == CHANNEL_LAYER_MDHR_312)
+  if (clayer == CHANNEL_LAYOUT_312)
   {
-    mdhr->chsilence[CHANNEL_LAYER_MDHR_312] = 0;
-    mdhr->chsilence[CHANNEL_LAYER_MDHR_312] = mdhr->chsilence[CHANNEL_LAYER_MDHR_312] | chx[gML3];
-    mdhr->chsilence[CHANNEL_LAYER_MDHR_312] = mdhr->chsilence[CHANNEL_LAYER_MDHR_312] | (chx[gMR3] << 8);
+    mdhr->chsilence[CHANNEL_LAYOUT_312] = 0;
+    mdhr->chsilence[CHANNEL_LAYOUT_312] = mdhr->chsilence[CHANNEL_LAYOUT_312] | chx[gML3];
+    mdhr->chsilence[CHANNEL_LAYOUT_312] = mdhr->chsilence[CHANNEL_LAYOUT_312] | (chx[gMR3] << 8);
 
   }
-  else if (clayer == CHANNEL_LAYER_MDHR_512)
+  else if (clayer == CHANNEL_LAYOUT_512)
   {
-    mdhr->chsilence[CHANNEL_LAYER_MDHR_512] = 0;
-    mdhr->chsilence[CHANNEL_LAYER_MDHR_512] = mdhr->chsilence[CHANNEL_LAYER_MDHR_512] | chx[gMSL5];
-    mdhr->chsilence[CHANNEL_LAYER_MDHR_512] = mdhr->chsilence[CHANNEL_LAYER_MDHR_512] | (chx[gMSR5] << 8);
-    mdhr->chsilence[CHANNEL_LAYER_MDHR_512] = mdhr->chsilence[CHANNEL_LAYER_MDHR_512] | (chx[gMHL5] << 16);
-    mdhr->chsilence[CHANNEL_LAYER_MDHR_512] = mdhr->chsilence[CHANNEL_LAYER_MDHR_512] | (chx[gMHR5] << 24);
+    mdhr->chsilence[CHANNEL_LAYOUT_512] = 0;
+    mdhr->chsilence[CHANNEL_LAYOUT_512] = mdhr->chsilence[CHANNEL_LAYOUT_512] | chx[gMSL5];
+    mdhr->chsilence[CHANNEL_LAYOUT_512] = mdhr->chsilence[CHANNEL_LAYOUT_512] | (chx[gMSR5] << 8);
+    mdhr->chsilence[CHANNEL_LAYOUT_512] = mdhr->chsilence[CHANNEL_LAYOUT_512] | (chx[gMHL5] << 16);
+    mdhr->chsilence[CHANNEL_LAYOUT_512] = mdhr->chsilence[CHANNEL_LAYOUT_512] | (chx[gMHR5] << 24);
   }
-  else if (clayer == CHANNEL_LAYER_MDHR_714)
+  else if (clayer == CHANNEL_LAYOUT_714)
   {
-    mdhr->chsilence[CHANNEL_LAYER_MDHR_714] = 0;
-    mdhr->chsilence[CHANNEL_LAYER_MDHR_714] = mdhr->chsilence[CHANNEL_LAYER_MDHR_714] | chx[gBL];
-    mdhr->chsilence[CHANNEL_LAYER_MDHR_714] = mdhr->chsilence[CHANNEL_LAYER_MDHR_714] | (chx[gBR] << 8);
-    mdhr->chsilence[CHANNEL_LAYER_MDHR_714] = mdhr->chsilence[CHANNEL_LAYER_MDHR_714] | (chx[gHBL] << 16);
-    mdhr->chsilence[CHANNEL_LAYER_MDHR_714] = mdhr->chsilence[CHANNEL_LAYER_MDHR_714] | (chx[gHBR] << 24);
+    mdhr->chsilence[CHANNEL_LAYOUT_714] = 0;
+    mdhr->chsilence[CHANNEL_LAYOUT_714] = mdhr->chsilence[CHANNEL_LAYOUT_714] | chx[gBL];
+    mdhr->chsilence[CHANNEL_LAYOUT_714] = mdhr->chsilence[CHANNEL_LAYOUT_714] | (chx[gBR] << 8);
+    mdhr->chsilence[CHANNEL_LAYOUT_714] = mdhr->chsilence[CHANNEL_LAYOUT_714] | (chx[gHBL] << 16);
+    mdhr->chsilence[CHANNEL_LAYOUT_714] = mdhr->chsilence[CHANNEL_LAYOUT_714] | (chx[gHBR] << 24);
   }
 #endif
 }
