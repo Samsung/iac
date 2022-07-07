@@ -7,22 +7,19 @@
 #include <math.h>
 #include <string.h>
 
-#ifndef CHANNEL_LAYOUT_INVALID
-#define CHANNEL_LAYOUT_INVALID -1
-#endif
-
 typedef enum {
-  FORMAT_CHANNEL_LAYOUT_100, //1.0.0
-  FORMAT_CHANNEL_LAYOUT_200, //2.0.0 
-  FORMAT_CHANNEL_LAYOUT_510, //5.1.0
-  FORMAT_CHANNEL_LAYOUT_512, //5.1.2
-  FORMAT_CHANNEL_LAYOUT_514, //5.1.4
-  FORMAT_CHANNEL_LAYOUT_710, //7.1.0
-  FORMAT_CHANNEL_LAYOUT_712, //7.1.2
-  FORMAT_CHANNEL_LAYOUT_714, //7.1.4
-  FORMAT_CHANNEL_LAYOUT_312, //3.1.2
-  FORMAT_CHANNEL_LAYOUT_MAX
-}FORMAT_CHANNEL_LAYOUT;
+  CHANNEL_LAYOUT_INVALID = -1,
+  CHANNEL_LAYOUT_100,         //1.0.0
+  CHANNEL_LAYOUT_200,         //2.0.0 
+  CHANNEL_LAYOUT_510,         //5.1.0
+  CHANNEL_LAYOUT_512,         //5.1.2
+  CHANNEL_LAYOUT_514,         //5.1.4
+  CHANNEL_LAYOUT_710,         //7.1.0
+  CHANNEL_LAYOUT_712,         //7.1.2
+  CHANNEL_LAYOUT_714,         //7.1.4
+  CHANNEL_LAYOUT_312,         //3.1.2
+  CHANNEL_LAYOUT_MAX
+}CHANNEL_LAYOUT_TYPE;
 
 enum {
   enc_channel_mono,
@@ -193,8 +190,8 @@ static int get_recon_gain_mixed_map[][12] = { // map indicating mixed channels
   { 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0 },// 5.1.0
   { 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0 },// 5.1.2
   { 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0 },// 5.1.4
-  { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },// 7.1.0
-  { 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0 },// 7.1.2
+  { 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0 },// 7.1.0
+  { 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0 },// 7.1.2
   { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },// 7.1.4
   { 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0 } // 3.1.2
 };

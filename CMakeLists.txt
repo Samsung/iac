@@ -49,10 +49,9 @@ add_subdirectory(src/iac_enc/dmpd)
 
 
 set(IAC_PUBLIC_HEADER
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/immersive_audio.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/immersive_audio_decoder.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/immersive_audio_encoder.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/immersive_audio_encoder_defines.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/immersive_audio_defines.h
     )
 set_target_properties(iac PROPERTIES PUBLIC_HEADER "${IAC_PUBLIC_HEADER}")
 

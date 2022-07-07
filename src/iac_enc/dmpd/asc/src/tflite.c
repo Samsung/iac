@@ -596,6 +596,7 @@ char* read_model_file(const char* filename)
       fread(buffer, sizeof(char), buffer_size_bytes_, file);
   if (bytes_read != buffer_size_bytes_) {
     LOGE("Read of '%s' failed (too few bytes read).",filename);
+    free (buffer);
     fclose(file);
     return NULL;
   }

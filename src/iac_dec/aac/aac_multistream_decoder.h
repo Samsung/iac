@@ -5,7 +5,8 @@
 
 typedef struct AACMSDecoder AACMSDecoder;
 
-AACMSDecoder *aac_multistream_decoder_open (int streams, int coupled_streams,
+AACMSDecoder *aac_multistream_decoder_open (uint8_t *config, uint32_t size,
+                                            int streams, int coupled_streams,
                                             uint32_t flags, int* error);
 
 int aac_multistream_decode_list (AACMSDecoder *st,

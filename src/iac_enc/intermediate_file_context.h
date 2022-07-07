@@ -8,6 +8,7 @@
 #include "audio_defines.h"
 #include "immersive_audio_encoder.h"
 
+
 typedef struct {
   int format;
   int sample_rate;
@@ -27,7 +28,7 @@ typedef enum {
   FILE_SCALEFACTOR
 }INT_FILE_TYPE;
 
-static char* downmix_m_wav[CHANNEL_LAYOUT_MAX] = { //0
+static char* downmix_m_wav[IA_CHANNEL_LAYOUT_COUNT] = { //0
   "m100_down.wav",
   "m200_down.wav",
   "m510_down.wav",
@@ -38,7 +39,7 @@ static char* downmix_m_wav[CHANNEL_LAYOUT_MAX] = { //0
   "m714_down.wav",
   "m312_down.wav" };
 
-static char* downmix_s_wav[CHANNEL_LAYOUT_MAX] = { //1
+static char* downmix_s_wav[IA_CHANNEL_LAYOUT_COUNT] = { //1
   "s100_down.wav",
   "s200_down.wav",
   "s510_down.wav",
@@ -49,7 +50,7 @@ static char* downmix_s_wav[CHANNEL_LAYOUT_MAX] = { //1
   "s714_down.wav",
   "s312_down.wav" };
 
-static char* gaindown_wav[CHANNEL_LAYOUT_MAX] = { //2
+static char* gaindown_wav[IA_CHANNEL_LAYOUT_COUNT] = { //2
   "g100_down.wav",
   "g200_down.wav",
   "g510_down.wav",
@@ -60,7 +61,7 @@ static char* gaindown_wav[CHANNEL_LAYOUT_MAX] = { //2
   "g714_down.wav",
   "g312_down.wav" };
 
-static char* upmix_wav[CHANNEL_LAYOUT_MAX] = { //3
+static char* upmix_wav[IA_CHANNEL_LAYOUT_COUNT] = { //3
   "r100_up.wav",
   "r200_up.wav",
   "r510_up.wav",
@@ -71,7 +72,7 @@ static char* upmix_wav[CHANNEL_LAYOUT_MAX] = { //3
   "r714_up.wav",
   "r312_up.wav" };
 
-static char* decoded_wav[CHANNEL_LAYOUT_MAX] = { //4
+static char* decoded_wav[IA_CHANNEL_LAYOUT_COUNT] = { //4
   "d100_dec.wav",
   "d200_dec.wav",
   "d510_dec.wav",
@@ -82,7 +83,7 @@ static char* decoded_wav[CHANNEL_LAYOUT_MAX] = { //4
   "d714_dec.wav",
   "d312_dec.wav" };
 
-static char* encoded_ia[CHANNEL_LAYOUT_MAX] = { //5
+static char* encoded_ia[IA_CHANNEL_LAYOUT_COUNT] = { //5
   "e100_down.ia",
   "e200_down.ia",
   "e510_down.ia",
@@ -93,7 +94,7 @@ static char* encoded_ia[CHANNEL_LAYOUT_MAX] = { //5
   "e714_down.ia",
   "e312_down.ia" };
 
-static char* scalefactor_cfg[CHANNEL_LAYOUT_MAX] = { //5
+static char* scalefactor_cfg[IA_CHANNEL_LAYOUT_COUNT] = { //5
   "f100_scale.cfg",
   "f200_scale.cfg",
   "f510_scale.cfg",
@@ -115,13 +116,13 @@ typedef struct {
   void *in_wavf;
 
 
-  TempFile f_downmix_m_wav[CHANNEL_LAYOUT_MAX];
-  TempFile f_downmix_s_wav[CHANNEL_LAYOUT_MAX];
-  TempFile f_upmix_wav[CHANNEL_LAYOUT_MAX];
-  TempFile f_gaindown_wav[CHANNEL_LAYOUT_MAX];
-  TempFile f_decoded_wav[CHANNEL_LAYOUT_MAX];
-  TempFile f_encoded_ia[CHANNEL_LAYOUT_MAX];
-  TempFile f_scalefactor_cfg[CHANNEL_LAYOUT_MAX];
+  TempFile f_downmix_m_wav[IA_CHANNEL_LAYOUT_COUNT];
+  TempFile f_downmix_s_wav[IA_CHANNEL_LAYOUT_COUNT];
+  TempFile f_upmix_wav[IA_CHANNEL_LAYOUT_COUNT];
+  TempFile f_gaindown_wav[IA_CHANNEL_LAYOUT_COUNT];
+  TempFile f_decoded_wav[IA_CHANNEL_LAYOUT_COUNT];
+  TempFile f_encoded_ia[IA_CHANNEL_LAYOUT_COUNT];
+  TempFile f_scalefactor_cfg[IA_CHANNEL_LAYOUT_COUNT];
 
 }FileContext;
 

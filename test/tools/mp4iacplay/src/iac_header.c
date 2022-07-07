@@ -100,8 +100,8 @@ static void parse_opus_spec (IACHeader *h)
 {
     OpusHeader *oh = &h->opus;
     ROPacket p;
-    uint8_t     ch;
-    uint16_t    shortval;
+    uint8_t     ch = 0;
+    uint16_t    shortval = 0;
 
     p.data = h->codec_config;
     p.maxlen = h->clen;
@@ -155,9 +155,9 @@ static void parse_es_descriptor(IACHeader *h)
 {
     AACHeader *ah = &h->aac;
     ROPacket p;
-    uint8_t     ch;
-    uint16_t    shortval;
-    uint32_t    intval;
+    uint8_t     ch = 0;
+    uint16_t    shortval = 0;
+    uint32_t    intval = 0;
 
     p.data = h->codec_config;
     p.maxlen = h->clen;

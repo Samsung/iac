@@ -73,7 +73,6 @@ void mp4_input_data_dump (char *fn)
 {
     MP4IACParser mp4par;
     int ret;
-    int done = 0;
     char pkt_buf[PKT_SIZE];
 
     FILE *dump_f;
@@ -111,10 +110,9 @@ void mp4_input_data_dump (char *fn)
 
     dump_iac_header(header);
 
-    while (!done) {
+    while (1) {
         if (mp4_iac_parser_read_packet(&mp4par, 0, (void *)pkt_buf,
                     PKT_SIZE, &pkt_len, &sample_offs, &entno) < 0) {
-            done = 1;
             break;
         }
 
@@ -138,7 +136,7 @@ err_done:
     }
 }
 
-static uint8_t wav_layout_map[IA_CH_LAYOUT_TYPE_COUNT][12] = {
+static uint8_t wav_layout_map[IA_CHANNEL_LAYOUT_COUNT][12] = {
     {0},
     {0, 1},
     {0, 2, 1, 5, 3, 4},
@@ -161,7 +159,6 @@ void mp4_input_wav_output (char *fn, int flags)
     MP4IACParser mp4par;
     FILE *dump_f;
     char dump_fn[256] = {0};
-    int done = 0;
     mp4r_t *mp4r;
     FILE *wav_f = 0;
     char wav_fn[256] = {0};
@@ -181,6 +178,10 @@ void mp4_input_wav_output (char *fn, int flags)
     int channels = 0;
     IACHeader *header = 0;
     int idx = 0;
+
+    int16_t *pcm = 0;
+    int16_t *wavpcm = 0;
+    uint32_t nb_frames;
 
     ptr = strrchr(fn, '.');
     if (ptr == 0) {
@@ -209,12 +210,8 @@ void mp4_input_wav_output (char *fn, int flags)
     if (header->codec_id == ATOM_TYPE_MP4A)
         cid = IA_CODEC_AAC;
 
-    int16_t *pcm = 0;
-    int16_t *wavpcm = 0;
-    int16_t *out = 0;
-    uint32_t nb_frames;
 
-    dec = immersive_audio_decoder_open(cid, header->codec_config, header->clen,
+    dec = immersive_audio_decoder_create(cid, header->codec_config, header->clen,
                                        header->metadata, header->mlen,
                                        IA_FLAG_CODEC_CONFIG_ISOBMFF);
     if (!dec) {
@@ -253,10 +250,9 @@ void mp4_input_wav_output (char *fn, int flags)
             48000, channels, layout);
     wav_f = (FILE *)wav_write_open(wav_fn, 48000, 16, channels);
     fprintf(stderr, "Decoding ...\n");
-    while (!done) {
+    while (1) {
         if (mp4_iac_parser_read_packet(&mp4par, 0, (void *)pkt_buf,
                     PKT_SIZE, &pkt_len, &sample_offs, &entno) < 0) {
-            done = 1;
             break;
         } else {
             /* fprintf(stderr, "track id %d: len %4d, offset %8ld, entno %4d\n", */
@@ -267,10 +263,8 @@ void mp4_input_wav_output (char *fn, int flags)
                     header->demix_entries[idx], header->entry_len[idx]);
             ret = immersive_audio_decoder_decode (dec, pkt_buf, pkt_len, pcm, 1024, &param, 1);
             if (ret > 0 && wav_f) {
-                out = pcm;
                 wav_layout_out(pcm, wavpcm, ret, channels, wav_layout_map[layout]);
-                out = wavpcm;
-                wav_write_data(wav_f, (unsigned char *)out, sizeof (int16_t) * ret * channels);
+                wav_write_data(wav_f, (unsigned char *)wavpcm, sizeof (int16_t) * ret * channels);
             }
             immersive_audio_param_free (param);
         }
@@ -287,7 +281,7 @@ err_done:
         free(wavpcm);
     }
     if (dec) {
-        immersive_audio_decoder_close(dec);
+        immersive_audio_decoder_destory(dec);
     }
     if (wav_f) {
         wav_write_close(wav_f);

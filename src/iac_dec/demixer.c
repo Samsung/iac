@@ -54,13 +54,13 @@ static struct DemixingTypeMat {
     float delta;
     int   w_idx_offset;
 } demixing_type_mat[] = {
-    {1.0, 1.0, 0.707, 0.707, -1.0},
-    {0.707, 0.707, 0.707, 0.707, -1.0},
-    {1.0, 0.866, 0.866, 0.866, -1.0},
+    {1.0, 1.0, 0.707, 0.707, -1},
+    {0.707, 0.707, 0.707, 0.707, -1},
+    {1.0, 0.866, 0.866, 0.866, -1},
     {0, 0, 0, 0, 0},
-    {1.0, 1.0, 0.707, 0.707, 1.0},
-    {0.707, 0.707, 0.707, 0.707, 1.0},
-    {1.0, 0.866, 0.866, 0.866, 1.0},
+    {1.0, 1.0, 0.707, 0.707, 1},
+    {0.707, 0.707, 0.707, 0.707, 1},
+    {1.0, 0.866, 0.866, 0.866, 1},
     {0, 0, 0, 0, 0}
 };
 
@@ -213,7 +213,7 @@ static int dmx_s3 (Demixer *ths)
 static int dmx_s5(Demixer *ths)
 {
     /**
-     * S3to5 de-mixer: Ls = 1/d(k) x (L3 - L5) and Rs = 1/d(k) x (R3 - R5)
+     * S3to5 de-mixer: Ls = 1/δ(k) x (L3 - L5) and Rs = 1/δ(k) x (R3 - R5)
      * */
     if (!ths->ch_data[IA_CH_SR5]) {
         float       *l, *r;
@@ -259,7 +259,7 @@ static int dmx_s5(Demixer *ths)
 static int dmx_s7(Demixer *ths)
 {
     /**
-     * S5to7 de-mixer: Lrs = 1/�(k) x (Ls - a(k) x Lss) and Rrs = 1/�(k) x (Rs - a(k) x Rss)
+     * S5to7 de-mixer: Lrs = 1/β(k) x (Ls - α(k) x Lss) and Rrs = 1/β(k) x (Rs - α(k) x Rss)
      * */
     if (!ths->ch_data[IA_CH_BR7]) {
         float       *l, *r;
@@ -346,9 +346,9 @@ static int dmx_h2 (Demixer *ths)
 
         for (; i < ths->frame_size; i++) {
             l[i] = ths->ch_data[IA_CH_TL][i] -
-                demixing_type_mat[Typeid].delta * last_w.w_z * ths->ch_data[IA_CH_SL5][i];
+                demixing_type_mat[Typeid].delta * w.w_z * ths->ch_data[IA_CH_SL5][i];
             r[i] = ths->ch_data[IA_CH_TR][i] -
-                demixing_type_mat[Typeid].delta * last_w.w_z * ths->ch_data[IA_CH_SR5][i];
+                demixing_type_mat[Typeid].delta * w.w_z * ths->ch_data[IA_CH_SR5][i];
         }
 
         ths->ch_data[IA_CH_HL] = l;
@@ -366,7 +366,7 @@ static int dmx_h2 (Demixer *ths)
 static int dmx_h4 (Demixer *ths)
 {
     /**
-     * Ltb = 1/?(k) x (Ltf2 - Ltf4) and Rtb = 1/?(k) x (Rtf2 - Rtf4)
+     * Ltb = 1/γ(k) x (Ltf2 - Ltf4) and Rtb = 1/γ(k) x (Rtf2 - Rtf4)
      * */
     if (!ths->ch_data[IA_CH_HBR]) {
         float       *l, *r;
@@ -533,9 +533,9 @@ Demixer *demixer_open(uint32_t frame_size, uint32_t delay)
         ths->last_weight_state_value_x_prev2 = 0.0; // n-2 packet
         ths->frame_size = frame_size;
         ths->skip = preskip;
-        ths->layout = IA_CH_LAYOUT_TYPE_INVALID;
+        ths->layout = IA_CHANNEL_LAYOUT_INVALID;
 
-        ths->hanning_filter = (float *)malloc(sizeof (float) * windowLen);
+        ths->hanning_filter = (float *)ia_mallocz(sizeof (float) * windowLen);
         ths->start_window = (float *)malloc(sizeof (float) * frame_size);
         ths->stop_window = (float *)malloc(sizeof (float) * frame_size);
         ths->large_buffer =

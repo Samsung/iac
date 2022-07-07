@@ -344,16 +344,17 @@ LoudGainMeasure * immersive_audio_encoder_loudgain_create(const unsigned char *c
   LoudGainMeasure *lm = (LoudGainMeasure *)malloc(sizeof(LoudGainMeasure));
   if(!lm)return NULL;
   memset(lm, 0x00, sizeof(LoudGainMeasure));
-  memcpy(lm->channel_layout_map, channel_layout_map, CHANNEL_LAYOUT_DMAX);
+  memcpy(lm->channel_layout_map, channel_layout_map, IA_CHANNEL_LAYOUT_COUNT);
   lm->frame_size = frame_size;
-  int channel_loudness[CHANNEL_LAYOUT_MAX] = { 1, 2, 6, 8, 10, 8, 10, 12, 6 };
-  channelLayout channellayout[CHANNEL_LAYOUT_MAX] = { CHANNELMONO, CHANNELSTEREO ,CHANNEL51 ,CHANNEL512 ,CHANNELUNKNOWN, CHANNEL71, CHANNELUNKNOWN, CHANNEL714 , CHANNEL312 ,};///////TODO change if channels are changed.
+  int channel_loudness[IA_CHANNEL_LAYOUT_COUNT] = { 1, 2, 6, 8, 10, 8, 10, 12, 6 };
+  channelLayout channellayout[IA_CHANNEL_LAYOUT_COUNT] = 
+                { CHANNELMONO, CHANNELSTEREO ,CHANNEL51 ,CHANNEL512 ,CHANNEL514, CHANNEL71, CHANNEL712, CHANNEL714 , CHANNEL312 ,};
   //int channel_loudness[MAX_CHANNELS] = { 2,6,8,12, }; ///////TODO change if channels are changed.
   //channelLayout channellayout[MAX_CHANNELS] = { CHANNELSTEREO ,CHANNEL312 ,CHANNEL512 ,CHANNEL714 , };///////TODO change if channels are changed.
-  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+  for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
   {
     int layout = lm->channel_layout_map[i];
-    if (layout == CHANNEL_LAYOUT_DMAX)
+    if (layout == IA_CHANNEL_LAYOUT_COUNT)
       break;
     AudioLoudMeterInit(&(lm->loudmeter[layout]));
     lm->loudmeter[layout].initParams(&(lm->loudmeter[layout]), 0.4f, 0.75f, 3.0f);
@@ -433,10 +434,10 @@ int immersive_audio_encoder_loudgain_destory(LoudGainMeasure *lm)
 {
   if (!lm)
     return -1;
-  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+  for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
   {
     int layout = lm->channel_layout_map[i];
-    if (layout == CHANNEL_LAYOUT_DMAX)
+    if (layout == IA_CHANNEL_LAYOUT_COUNT)
       break;
     AudioLoudMeterDeinit(&(lm->loudmeter[layout]));
   }
@@ -486,6 +487,17 @@ void conv_writtenfloat(float *pcmbuf, void *wavbuf, int nch, int frame_size)
       wbuf[(i + j*nch) * 4 + 1] = trans.c[1];
       wbuf[(i + j*nch) * 4 + 2] = trans.c[2];
       wbuf[(i + j*nch) * 4 + 3] = trans.c[3];
+    }
+  }
+}
+
+void conv_writtenfloat1(float *pcmbuf, float *wavbuf, int nch, int frame_size)
+{
+  for (int i = 0; i < nch; i++)
+  {
+    for (int j = 0; j < frame_size; j++)
+    {
+      wavbuf[i + j*nch] = pcmbuf[i * frame_size + j];
     }
   }
 }
@@ -551,7 +563,9 @@ int write_recon_gain(IAEncoder *st, unsigned char* buffer, int type) //0 common,
     {
       bs_setbits(&bs, coded_data_leb[i], 8);
     }
-    //printf(" scalablefactor: \n");
+    const char* channel_layout_names[] = {
+      "1.0.0", "2.0.0", "5.1.0", "5.1.2", "5.1.4", "7.1.0", "7.1.2", "7.1.4", "3.1.2" };
+    //printf("[%s]:", channel_layout_names[layout]);
     for (int i = 0; i < max_recon_gain_fields; i++)
     {
       // channel range is 0 ~ nch for st->mdhr.scalablefactor[layout],
@@ -561,7 +575,7 @@ int write_recon_gain(IAEncoder *st, unsigned char* buffer, int type) //0 common,
       if (channel_index >= 0 && channel > 0 && st->upmixer->scalable_map[layout][channel] == 1)
       {
         bs_setbits(&bs, st->mdhr.scalablefactor[layout][channel_index], 8);
-        //printf("[%d]:%d ", channel_index,st->mdhr.scalablefactor[layout][channel_index]);
+        //printf("%d ",st->mdhr.scalablefactor[layout][channel_index]);
       }
     }
     //printf("\n");
@@ -580,14 +594,18 @@ int immersive_audio_encoder_ctl_va_list(IAEncoder *et, int request,
   {
     uint32_t recon_gain_flag;
     recon_gain_flag = va_arg(ap, uint32_t);
-    printf("\nrecon_gain_flag: %d\n", recon_gain_flag);
+    //printf("\nrecon_gain_flag: %d\n", recon_gain_flag);
     if (recon_gain_flag < 0)
     {
       goto bad_arg;
     }
     et->recon_gain_flag = recon_gain_flag;
     et->upmixer->recon_gain_flag = recon_gain_flag;
-    et->decode_init(et);
+    if (recon_gain_flag > 0)
+    {
+      et->encode_init2(et);
+      et->decode_init(et);
+    }
   }
   break;
   case IA_SET_SCALE_FACTOR_MODE_REQUEST:
@@ -599,7 +617,7 @@ int immersive_audio_encoder_ctl_va_list(IAEncoder *et, int request,
       goto bad_arg;
     }
     et->scalefactor_mode = scalefactor_mode;
-    printf("scalefactor_mode: %d\n", et->scalefactor_mode);
+    //printf("scalefactor_mode: %d\n", et->scalefactor_mode);
   }
   break;
   case IA_SET_OUTPUT_GAIN_FLAG_REQUEST:
@@ -611,125 +629,40 @@ int immersive_audio_encoder_ctl_va_list(IAEncoder *et, int request,
       goto bad_arg;
     }
     et->output_gain_flag = output_gain_flag;
-    printf("output_gain_flag: %d\n", et->output_gain_flag);
-  }
-  break;
-  case IA_SET_TEMP_DOWNMIX_FILE:
-  {
-    char * temp_f;
-    temp_f = va_arg(ap, char*);
-    printf("temp file name: %s\n", temp_f);
-    sprintf(et->dmix_fn, "%s_dmix.txt", temp_f);
-    sprintf(et->weight_fn, "%s_w.txt", temp_f);
-  }
-  break;
-  case IA_SET_SUBSTREAM_SIZE_FLAG_REQUEST:
-  {
-    uint32_t substream_size_flag;
-    substream_size_flag = va_arg(ap, uint32_t);
-    printf("substream_size_flag: %d\n", substream_size_flag);
-    if (substream_size_flag < 0)
-    {
-      goto bad_arg;
-    }
-    et->substream_size_flag = substream_size_flag;
+    //printf("output_gain_flag: %d\n", et->output_gain_flag);
   }
   break;
   case IA_SET_BITRATE_REQUEST:
   {
-    unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
-    int32_t value = va_arg(ap, int32_t);
-    int pre_ch = 0;
-#if 0
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
-    {
-      int layout = et->channel_layout_map[i];
-      if (layout == CHANNEL_LAYOUT_MAX)
-        break;
-      OpusMSEncoder *dep_encoder = et->ia_encoder_dcg[i].dep_encoder;
-      int bitrate = value * (channel_map714[layout] - pre_ch);
-      opus_multistream_encoder_ctl(dep_encoder, IA_SET_BITRATE(bitrate));
-      pre_ch = channel_map714[layout];
-    }
-#endif
+    et->encode_ctl(et, request, ap);
+    et->encode_ctl2(et, request, ap);
   }
   break;
   case IA_SET_BANDWIDTH_REQUEST:
   {
-    int32_t value = va_arg(ap, int32_t);
-#if 0
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
-    {
-      int layout = et->channel_layout_map[i];
-      if (layout == CHANNEL_LAYOUT_MAX)
-        break;
-      OpusMSEncoder *dep_encoder = et->ia_encoder_dcg[i].dep_encoder;
-      opus_multistream_encoder_ctl(dep_encoder, IA_SET_BANDWIDTH(value));
-    }
-#endif
+    et->encode_ctl(et, request, ap);
+    et->encode_ctl2(et, request, ap);
   }
   break;
   case IA_SET_VBR_REQUEST:
   {
-    int32_t value = va_arg(ap, int32_t);
-#if 0
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
-    {
-      int layout = et->channel_layout_map[i];
-      if (layout == CHANNEL_LAYOUT_MAX)
-        break;
-      OpusMSEncoder *dep_encoder = et->ia_encoder_dcg[i].dep_encoder;
-      opus_multistream_encoder_ctl(dep_encoder, IA_SET_VBR(value));
-    }
-#endif
+    et->encode_ctl(et, request, ap);
+    et->encode_ctl2(et, request, ap);
   }
   break;
   case IA_SET_COMPLEXITY_REQUEST:
   {
-    int32_t value = va_arg(ap, int32_t);
-#if 0
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
-    {
-      int layout = et->channel_layout_map[i];
-      if (layout == CHANNEL_LAYOUT_MAX)
-        break;
-      OpusMSEncoder *dep_encoder = et->ia_encoder_dcg[i].dep_encoder;
-      opus_multistream_encoder_ctl(dep_encoder, IA_SET_COMPLEXITY(value));
-    }
-#endif
-  }
-  break;
-  case IA_GET_LOOKAHEAD_REQUEST:
-  {
-    int32_t *value = va_arg(ap, int32_t*);
-#if 0
-    OpusMSEncoder *dep_encoder = et->ia_encoder_dcg[0].dep_encoder;
-    opus_multistream_encoder_ctl(dep_encoder, IA_GET_LOOKAHEAD(value));
-#endif
-  }
-  break;
-  case IA_SET_FORCE_MODE_REQUEST:
-  {
-    int32_t value = va_arg(ap, int32_t);
-#if 0
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
-    {
-      int layout = et->channel_layout_map[i];
-      if (layout == CHANNEL_LAYOUT_MAX)
-        break;
-      OpusMSEncoder *dep_encoder = et->ia_encoder_dcg[i].dep_encoder;
-      opus_multistream_encoder_ctl(dep_encoder, IA_SET_FORCE_MODE(IA_MODE_CELT_ONLY));
-    }
-#endif
+    et->encode_ctl(et, request, ap);
+    et->encode_ctl2(et, request, ap);
   }
   break;
   default:
-    ret = IA_UNIMPLEMENTED;
+    ret = IA_ERR_UNIMPLEMENTED;
     break;
   }
   return ret;
 bad_arg:
-  return IA_BAD_ARG;
+  return IA_ERR_BAD_ARG;
 }
 
 int immersive_audio_encoder_ctl(IAEncoder *et, int request, ...)
@@ -745,24 +678,24 @@ int immersive_audio_encoder_ctl(IAEncoder *et, int request, ...)
 static int get_scalable_format(IAEncoder *st, int channel_layout_in, const unsigned char *channel_layout_cb)
 {
   unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
-  unsigned char channel_layout_map[CHANNEL_LAYOUT_MAX] = { CHANNEL_LAYOUT_MAX , };
+  unsigned char channel_layout_map[IA_CHANNEL_LAYOUT_COUNT] = { IA_CHANNEL_LAYOUT_COUNT , };
   int channel_groups = 0;
-  for (channel_groups = 0; channel_groups < CHANNEL_LAYOUT_MAX; channel_groups++)
+  for (channel_groups = 0; channel_groups < IA_CHANNEL_LAYOUT_COUNT; channel_groups++)
   {
     channel_layout_map[channel_groups] = channel_layout_cb[channel_groups];
-    if (channel_layout_cb[channel_groups] == CHANNEL_LAYOUT_MAX)
+    if (channel_layout_cb[channel_groups] == IA_CHANNEL_LAYOUT_COUNT)
       break;
   }
   channel_layout_map[channel_groups] = channel_layout_in;
   channel_groups++;
-  channel_layout_map[channel_groups] = CHANNEL_LAYOUT_MAX;
+  channel_layout_map[channel_groups] = IA_CHANNEL_LAYOUT_COUNT;
 
   int last_s_channels = 0, last_h_channels = 0;
 
-  for (int i = 0; i < CHANNEL_LAYOUT_DMAX; i++)
+  for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
   {
     int layout = channel_layout_map[i];
-    if (layout == CHANNEL_LAYOUT_DMAX)
+    if (layout == IA_CHANNEL_LAYOUT_COUNT)
       break;
     if (get_surround_channels(layout) < last_s_channels || get_height_channels(layout) < last_h_channels
       || (get_surround_channels(layout) == last_s_channels && get_height_channels(layout) == last_h_channels))
@@ -784,10 +717,10 @@ static int get_scalable_format(IAEncoder *st, int channel_layout_in, const unsig
   uint8_t new_channels[256];
   printf("\nTransmission Channels Order: \n");
   printf("---\n");
-  for (int i = 0; i < CHANNEL_LAYOUT_DMAX; i++)
+  for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
   {
     int layout = channel_layout_map[i];
-    if (layout == CHANNEL_LAYOUT_DMAX)
+    if (layout == IA_CHANNEL_LAYOUT_COUNT)
       break;
     ret = enc_get_new_channels2(last_cl_layout, layout, new_channels);
     int channel_c = enc_has_c_channel(ret, new_channels);
@@ -805,7 +738,7 @@ static int get_scalable_format(IAEncoder *st, int channel_layout_in, const unsig
     }
     if (channel_c >= 0)
     {
-      if (last_cl_layout == CHANNEL_LAYOUT_D100)
+      if (last_cl_layout == IA_CHANNEL_LAYOUT_MONO)
       {
         st->ia_encoder_dcg[i].stream_count = (ret - 2) / 2 + 2 + 1;
       }
@@ -844,7 +777,7 @@ static int get_scalable_format(IAEncoder *st, int channel_layout_in, const unsig
   }
 #endif
 
-  memcpy(st->channel_layout_map, channel_layout_map, CHANNEL_LAYOUT_MAX);
+  memcpy(st->channel_layout_map, channel_layout_map, IA_CHANNEL_LAYOUT_COUNT);
   return channel_groups;
 }
 
@@ -853,15 +786,15 @@ int immersive_audio_encoder_dmpd_start(IAEncoder *st)
 {
   printf("\nDownMix Parameter Determination start...\n");
   int channel_layout_in = 0;
-  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+  for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
   {
     int lay_out = st->channel_layout_map[i];
-    if (lay_out == CHANNEL_LAYOUT_MAX)
+    if (lay_out == IA_CHANNEL_LAYOUT_COUNT)
       break;
     channel_layout_in = lay_out;
   }
-  st->asc = ia_asc_start(channel_layout_in);
-  st->heq = ia_heq_start(channel_layout_in, st->input_sample_rate);
+  st->asc = ia_asc_start(channel_layout_in, &(st->queue_dm[QUEUE_DMPD]));
+  st->heq = ia_heq_start(channel_layout_in, st->input_sample_rate, &(st->queue_wg[QUEUE_DMPD]));
   return 0;
 }
 
@@ -874,25 +807,26 @@ int immersive_audio_encoder_dmpd_process(IAEncoder *st, const int16_t *pcm, int 
 
 int immersive_audio_encoder_dmpd_stop(IAEncoder *st)
 {
-  printf("DownMix Parameter Determination stop!!!\n\n");
   ia_asc_stop(st->asc);
   ia_heq_stop(st->heq);
   st->asc = NULL;
   st->heq = NULL;
+  printf("DownMix Parameter Determination stop!!!\n\n");
   return 0;
 }
 //
 
 extern encode_creator_t dep_encoders[];
+extern encode_creator_t dep_encoders2[];
 extern decode_creator_t dep_decoders[];
 
 static const char* dep_codec_name[] = {
-  "opus", "aac"};
+"unknow", "opus", "aac"};
 
 IAEncoder *immersive_audio_encoder_create(int32_t Fs,
   int channel_layout_in,
   const unsigned char *channel_layout_cb,
-  int codec_id,  //0:opus, 1:aac
+  int codec_id,  //1:opus, 2:aac
   int *error)
 {
   IAEncoder *st = (IAEncoder*)malloc(sizeof(IAEncoder));
@@ -913,8 +847,14 @@ IAEncoder *immersive_audio_encoder_create(int32_t Fs,
     if (dep_encoders[i].opcode == codec_id || dep_encoders[i].opcode == -1)
     {
       st->encode_init = dep_encoders[i].init;
+      st->encode_ctl = dep_encoders[i].control;
       st->encode_frame = dep_encoders[i].encode;
       st->encode_close = dep_encoders[i].close;
+
+      st->encode_init2 = dep_encoders2[i].init;
+      st->encode_ctl2 = dep_encoders2[i].control;
+      st->encode_frame2 = dep_encoders2[i].encode;
+      st->encode_close2 = dep_encoders2[i].close;
       break;
     }
   }
@@ -946,7 +886,7 @@ IAEncoder *immersive_audio_encoder_create(int32_t Fs,
   st->scalefactor_mode = 2;
 
   int frame_size = 960, preskip_size = 312;//opus
-  if (codec_id == IA_DEP_CODEC_AAC)
+  if (codec_id == IA_CODEC_AAC)
   {
     frame_size = 1024;
     preskip_size = 720;
@@ -955,7 +895,9 @@ IAEncoder *immersive_audio_encoder_create(int32_t Fs,
   //int frame_size = 1024 //aac
   st->frame_size = frame_size;
   st->preskip_size = preskip_size;
-  st->downmixer = downmix_create(st->channel_layout_map, frame_size);
+  st->downmixer_ld = downmix_create(st->channel_layout_map, frame_size);
+  st->downmixer_rg = downmix_create(st->channel_layout_map, frame_size);
+  st->downmixer_enc = downmix_create(st->channel_layout_map, frame_size);
   st->loudgain = immersive_audio_encoder_loudgain_create(st->channel_layout_map, Fs, frame_size);
   st->mdhr.dialog_onoff = 1;
   st->mdhr.dialog_level = 0;
@@ -971,10 +913,11 @@ IAEncoder *immersive_audio_encoder_create(int32_t Fs,
   st->mdhr.coding_type = 0;
   st->mdhr.nsamples_of_frame = 0;
 
-  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+  for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
   {
     st->mdhr.LKFSch[i] = 1;
-    st->mdhr.dmixgain[i] = 256;
+    st->mdhr.dmixgain_f[i] = 1.0;
+    st->mdhr.dmixgain_db[i] = 0;
     st->mdhr.chsilence[i] = 0xFFFFFFFF;
     for (int j = 0; j < 12;j++)
       st->mdhr.scalablefactor[i][j] = 0xFF;
@@ -987,11 +930,35 @@ IAEncoder *immersive_audio_encoder_create(int32_t Fs,
   scalablefactor_init();
   st->sf = scalablefactor_create(st->channel_layout_map, frame_size);
 
-  st->fp_dmix = NULL;
-  st->fp_weight = NULL;
-  sprintf(st->dmix_fn, "%s_dmix.txt", "audio");
-  sprintf(st->weight_fn, "%s_w.txt", "audio");
   memset(&(st->fc), 0x00, sizeof(st->fc));
+
+  unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
+
+  for (int i = 0; i < QUEUE_STEP_MAX; i++)
+  {
+    QueueInit(&(st->queue_dm[i]), kUInt8, 1, 1);
+    QueueInit(&(st->queue_wg[i]), kUInt8, 1, 1);
+  }
+
+  for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
+  {
+    int lay_out = st->channel_layout_map[i];
+    if (lay_out == IA_CHANNEL_LAYOUT_COUNT)
+      break;
+    QueueInit(&(st->queue_r[lay_out]), kFloat, frame_size, channel_map714[lay_out]);
+    QueueInit(&(st->queue_m[lay_out]), kFloat, frame_size, channel_map714[lay_out]);
+    QueueInit(&(st->queue_d[lay_out]), kInt16, frame_size, channel_map714[lay_out]);
+    QueueInit(&(st->queue_r[lay_out]), kFloat, frame_size, channel_map714[lay_out]);
+    QueueInit(&(st->queue_rg[lay_out]), kUInt8, channel_map714[lay_out], 1);
+  }
+  if (codec_id == IA_CODEC_OPUS)
+  {
+    st->the_preskip_frame = 1;
+  }
+  else if (codec_id == IA_CODEC_AAC)
+  {
+    st->the_preskip_frame = 3;
+  }
 
   if (channel_groups == 1)
   {
@@ -1003,7 +970,7 @@ IAEncoder *immersive_audio_encoder_create(int32_t Fs,
     {
       for (int j = 0; j < nch; j++)
       {
-        if (st->downmixer->channel_order[i] == tchs[j])
+        if (st->downmixer_ld->channel_order[i] == tchs[j])
         {
           st->ia_encoder_dcg[0].enc_stream_map[i] = j;
           break;
@@ -1015,71 +982,53 @@ IAEncoder *immersive_audio_encoder_create(int32_t Fs,
 }
 
 
-int immersive_audio_encoder_loudness_gain_start(IAEncoder *st)
-{
-  st->fp_dmix = fopen(st->dmix_fn, "r");
-  st->fp_weight = fopen(st->weight_fn, "r");
-
-  if (st->fp_dmix == NULL)
-  {
-    printf("no *_dmix.txt, use default value:1\n");
-  }
-  if (st->fp_weight == NULL)
-  {
-    printf("no *_w.txt, use default value:0\n");
-  }
-
-  ia_intermediate_file_writeopen(st, FILE_DOWNMIX_M, "ALL");
-  ia_intermediate_file_writeopen(st, FILE_DOWNMIX_S, "ALL");
-  return 0;
-}
-
 int immersive_audio_encoder_loudness_gain(IAEncoder *st, const int16_t *pcm, int frame_size)
 {
-  /////////////////////////////////////USED FOR DEBUG
-  //downmix parameter getting, which will be removed in future 
-  int dmix_index = default_dmix_index, w_index = default_w_index;
-  if (st->fp_dmix)
-    fscanf(st->fp_dmix, "%d", &dmix_index);
-  if (st->fp_weight)
-    fscanf(st->fp_weight, "%d", &w_index);
+
+  uint8_t dmix_index = default_dmix_index, w_index = default_w_index;
+  QueuePop(&(st->queue_dm[QUEUE_DMPD]), &dmix_index, 1);
+  QueuePop(&(st->queue_wg[QUEUE_DMPD]), &w_index, 1);
+
+  QueuePush(&(st->queue_dm[QUEUE_LD]), &dmix_index);
+  QueuePush(&(st->queue_wg[QUEUE_LD]), &w_index);
+
   /////////////////////////////////////////////////
   //printf("dmix_index %d , w_index %d \n", dmix_index, w_index);
 
   int16_t temp[IA_FRAME_MAXSIZE * 12 * 2];
-  downmix2(st->downmixer, pcm, dmix_index, w_index);
+  downmix2(st->downmixer_ld, pcm, dmix_index, w_index);
 
   unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
   unsigned char pre_ch = 0;
-  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+  for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
   {
     int lay_out = st->channel_layout_map[i];
-    if (lay_out == CHANNEL_LAYOUT_MAX)
+    if (lay_out == IA_CHANNEL_LAYOUT_COUNT)
       break;
-    immersive_audio_encoder_loudness_measure(st->loudgain, st->downmixer->downmix_m[lay_out], lay_out);
-    conv_writtenfloat(st->downmixer->downmix_m[lay_out], temp, channel_map714[lay_out], st->frame_size);
-    ia_intermediate_file_write(st, FILE_DOWNMIX_M, downmix_m_wav[lay_out], temp, st->frame_size);
+    immersive_audio_encoder_loudness_measure(st->loudgain, st->downmixer_ld->downmix_m[lay_out], lay_out);
+    conv_writtenfloat(st->downmixer_ld->downmix_m[lay_out], temp, channel_map714[lay_out], st->frame_size);
+    //ia_intermediate_file_write(st, FILE_DOWNMIX_M, downmix_m_wav[lay_out], temp, st->frame_size);
 
-    conv_writtenfloat(st->downmixer->downmix_s[lay_out], temp, channel_map714[lay_out] - pre_ch, st->frame_size);
-    ia_intermediate_file_write(st, FILE_DOWNMIX_S, downmix_s_wav[lay_out], temp, st->frame_size);
+    conv_writtenfloat(st->downmixer_ld->downmix_s[lay_out], temp, channel_map714[lay_out] - pre_ch, st->frame_size);
+    //ia_intermediate_file_write(st, FILE_DOWNMIX_S, downmix_s_wav[lay_out], temp, st->frame_size);
     pre_ch = channel_map714[lay_out];
   }
 
   pre_ch = 0;
   int cl_index = 0;
-  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+  for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
   {
     int lay_out = st->channel_layout_map[i];
-    if (lay_out == CHANNEL_LAYOUT_MAX)
+    if (lay_out == IA_CHANNEL_LAYOUT_COUNT)
       break;
     for (int j = 0; j < channel_map714[lay_out] - pre_ch; j++)
     {
-      int cl = st->downmixer->channel_order[cl_index];
-      if (st->downmixer->gaindown_map[lay_out][cl] ||
-        (lay_out != CHANNEL_LAYOUT_200 && cl == enc_channel_l2)) // Mono cases
+      int cl = st->downmixer_ld->channel_order[cl_index];
+      if (st->downmixer_ld->gaindown_map[lay_out][cl] ||
+        (lay_out != IA_CHANNEL_LAYOUT_STEREO && cl == enc_channel_l2)) // Mono cases
       {
         st->gaindown_map[cl_index] = 1;
-        immersive_audio_encoder_gain_measure2(st->loudgain, st->downmixer->downmix_s[lay_out], lay_out, j, cl_index);
+        immersive_audio_encoder_gain_measure2(st->loudgain, st->downmixer_ld->downmix_s[lay_out], lay_out, j, cl_index);
       }
       cl_index++;
     }
@@ -1090,16 +1039,16 @@ int immersive_audio_encoder_loudness_gain(IAEncoder *st, const int16_t *pcm, int
   return 0;
 }
 
-int immersive_audio_encoder_loudness_gain_stop(IAEncoder *st)
+int immersive_audio_encoder_loudness_gain_end(IAEncoder *st)
 {
   int ret = 0;
   LoudGainMeasure *lm = st->loudgain;
   if (lm->measure_end)
     return ret;
-  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+  for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
   {
     int layout = lm->channel_layout_map[i];
-    if (layout == CHANNEL_LAYOUT_DMAX)
+    if (layout == IA_CHANNEL_LAYOUT_COUNT)
       break;
     lm->loudmeter[layout].stopIntegrated(&(lm->loudmeter[layout]));
     lm->loudmeter[layout].processMomentaryLoudness(&(lm->loudmeter[layout]), lm->msize25pct);
@@ -1108,10 +1057,10 @@ int immersive_audio_encoder_loudness_gain_stop(IAEncoder *st)
     lm->entire_peaksqr[layout] = lm->loudmeter[layout].getEntirePeakSquare(&(lm->loudmeter[layout]));
     lm->entire_truepeaksqr[layout] = lm->loudmeter[layout].getEntireTruePeakSquare(&(lm->loudmeter[layout]));
   }
-  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+  for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
   {
     int layout = lm->channel_layout_map[i];
-    if (layout == CHANNEL_LAYOUT_DMAX)
+    if (layout == IA_CHANNEL_LAYOUT_COUNT)
       break;
     lm->dmixgain_lin[layout] = db2lin(-1.0) / sqrt(lm->entire_truepeaksqr_gain[layout]);
     if (lm->dmixgain_lin[layout] > 1) lm->dmixgain_lin[layout] = 1;
@@ -1121,40 +1070,30 @@ int immersive_audio_encoder_loudness_gain_stop(IAEncoder *st)
 
   const char* channel_layout_names[] = {
     "1.0.0", "2.0.0", "5.1.0", "5.1.2", "5.1.4", "7.1.0", "7.1.2", "7.1.4", "3.1.2"  };
-  for (int i = 0; i < CHANNEL_LAYOUT_DMAX; i++)
+  for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
   {
     int lay_out = lm->channel_layout_map[i];
-    if (lay_out == CHANNEL_LAYOUT_DMAX)
+    if (lay_out == IA_CHANNEL_LAYOUT_COUNT)
       break;
     printf("[%s]entireLoudness: %f LKFS\n", channel_layout_names[lay_out], st->loudgain->entire_loudness[lay_out]);
     st->mdhr.LKFSch[lay_out] = float_to_q(st->loudgain->entire_loudness[lay_out], 8);
   }
 
-  for (int i = 0; i < CHANNEL_LAYOUT_DMAX; i++)
+  for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
   {
     int lay_out = lm->channel_layout_map[i];
-    if (lay_out == CHANNEL_LAYOUT_DMAX)
+    if (lay_out == IA_CHANNEL_LAYOUT_COUNT)
       break;
     if (lm->gaindown_flag[lay_out] == 0)
       continue;
     printf("[%s]dmixgain: %f dB\n", channel_layout_names[lay_out], st->loudgain->dmixgain_lin[lay_out]);
-    st->mdhr.dmixgain[lay_out] = float_to_q2(db2lin(st->loudgain->dmixgain_lin[lay_out]), 8);
+    st->mdhr.dmixgain_db[lay_out] = float_to_q(st->loudgain->dmixgain_lin[lay_out], 8);
+    st->mdhr.dmixgain_f[lay_out] = db2lin(q_to_float(st->mdhr.dmixgain_db[lay_out], 8));
   }
 
-  ia_intermediate_file_writeclose(st, FILE_DOWNMIX_M, "ALL");
-  ia_intermediate_file_writeclose(st, FILE_DOWNMIX_S, "ALL");
-  if (st->fp_dmix)
-  {
-    fclose(st->fp_dmix);
-    st->fp_dmix = NULL;
-  }
-  if (st->fp_weight)
-  {
-    fclose(st->fp_weight);
-    st->fp_weight = NULL;
-  }
   return ret; 
 }
+
 IA_STATIC_METADATA get_immersive_audio_encoder_ia_static_metadata(IAEncoder *st)
 {
   IA_STATIC_METADATA ret;
@@ -1164,10 +1103,10 @@ IA_STATIC_METADATA get_immersive_audio_encoder_ia_static_metadata(IAEncoder *st)
   int max_output_gain_flags_fields = 6;
   int pre_ch = 0;
   int cl_index = 0;
-  for (int i = 0; i < CHANNEL_LAYOUT_DMAX; i++)
+  for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
   {
     int layout = st->channel_layout_map[i];
-    if (layout == CHANNEL_LAYOUT_DMAX)
+    if (layout == IA_CHANNEL_LAYOUT_COUNT)
       break;
     ret.channel_audio_layer++;
     ret.channel_audio_layer_config[i].loudspeaker_layout = layout;
@@ -1189,7 +1128,7 @@ b0     : Rigth Top Front channel (Rtf)
     uint16_t output_gain_flags = 0;
     for (int j = 0; j < channel_map714[layout] - pre_ch; j++)
     {
-      int cl = st->downmixer->channel_order[cl_index];
+      int cl = st->downmixer_ld->channel_order[cl_index];
       if (st->gaindown_map[cl_index] == 1) 
       {
         int shift = get_output_gain_flags_map[cl];
@@ -1203,107 +1142,9 @@ b0     : Rigth Top Front channel (Rtf)
     pre_ch = channel_map714[layout];
 
     ret.channel_audio_layer_config[i].output_gain_flags = output_gain_flags;
-    ret.channel_audio_layer_config[i].output_gain = st->mdhr.dmixgain[layout];
+    ret.channel_audio_layer_config[i].output_gain = st->mdhr.dmixgain_db[layout];
   }
   return ret;
-}
-
-
-int immersive_audio_encoder_gaindown(IAEncoder *st)//
-{
-  if (st->recon_gain_flag == 0)
-  {
-    /////////////USED FOR DEBUG
-    st->fp_dmix = fopen(st->dmix_fn, "r");
-    st->fp_weight = fopen(st->weight_fn, "r");
-    if (st->fp_dmix == NULL)
-    {
-      printf("no *_dmix.txt, use default value:1\n");
-    }
-    if (st->fp_weight == NULL)
-    {
-      printf("no *_w.txt, use default value:0\n");
-    }
-    downmix_clear(st->downmixer);
-
-    return 0;
-  }
-  int ret = 0;
-  ia_intermediate_file_readopen(st, FILE_DOWNMIX_S, "ALL");
-  ia_intermediate_file_writeopen(st, FILE_GAIN_DOWN, "ALL");
-
-  float *downmix_s[CHANNEL_LAYOUT_MAX]; //common method, don't rely on encode/decode,just gain down
-  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
-  {
-    int layout = st->channel_layout_map[i];
-    if (layout == CHANNEL_LAYOUT_MAX)
-      break;
-    downmix_s[layout] = (float *)malloc(st->frame_size * MAX_CHANNELS * sizeof(float));
-    if(!downmix_s[layout])
-    {
-      ret = -1;
-      goto FAILED;
-    }
-    memset(downmix_s[layout], 0x00, st->frame_size * MAX_CHANNELS * sizeof(float));
-  }
-
-  int pcm_data_s;
-  unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
-  unsigned char pre_ch = 0;
-
-  int16_t gain_down_out[IA_FRAME_MAXSIZE * MAX_CHANNELS];
-
-  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
-  {
-    int layout = st->channel_layout_map[i];
-    if (layout == CHANNEL_LAYOUT_MAX)
-      break;
-
-    pcm_data_s = ia_intermediate_file_read(st, FILE_DOWNMIX_S, downmix_s_wav[layout], downmix_s[layout], st->frame_size);
-  }
-
-
-  while (pcm_data_s)
-  {
-    gaindown2(downmix_s, st->channel_layout_map, st->gaindown_map, st->mdhr.dmixgain, st->frame_size);
-
-    unsigned char pre_ch = 0;
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
-    {
-      int layout = st->channel_layout_map[i];
-      if (layout == CHANNEL_LAYOUT_MAX)
-        break;
-      conv_writtenpcm1(downmix_s[layout], gain_down_out, channel_map714[layout] - pre_ch, st->frame_size);
-      ia_intermediate_file_write(st, FILE_GAIN_DOWN, gaindown_wav[layout], gain_down_out, st->frame_size);
-      pre_ch = channel_map714[layout];
-    }
-
-
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
-    {
-      int layout = st->channel_layout_map[i];
-      if (layout == CHANNEL_LAYOUT_MAX)
-        break;
-
-      pcm_data_s = ia_intermediate_file_read(st, FILE_DOWNMIX_S, downmix_s_wav[layout], downmix_s[layout], st->frame_size);
-    }
-  }
-
-  ia_intermediate_file_readclose(st, FILE_DOWNMIX_S, "ALL");
-  ia_intermediate_file_writeclose(st, FILE_GAIN_DOWN, "ALL");
-
-FAILED:
-  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
-  {
-    int layout = st->channel_layout_map[i];
-    if (layout == CHANNEL_LAYOUT_MAX)
-      break;
-    if (downmix_s[layout])
-      free(downmix_s[layout]);
-  }
-
-  return ret;
-
 }
 
 static int extract_pcm_from_group(int16_t *input, int16_t * out, int nch, int ith, int single, int frame_size)
@@ -1357,33 +1198,44 @@ static int insert_pcm_to_group(int16_t *input, int16_t * out, int nch, int ith, 
   return channle_index;
 }
 
-void extension_encode_priv(IAEncoder *st)
+int immersive_audio_encoder_recon_gain(IAEncoder *st, const int16_t *pcm, int frame_size)
 {
 
-  ia_intermediate_file_readopen(st, FILE_GAIN_DOWN, "ALL");
-  ia_intermediate_file_writeopen(st, FILE_DECODED, "ALL");
-  ia_intermediate_file_writeopen(st, FILE_ENCODED, "ALL");
+  if (st->recon_gain_flag == 0)
+    return 0;
+
+  uint8_t dmix_index = default_dmix_index, w_index = default_w_index;
+  QueuePop(&(st->queue_dm[QUEUE_LD]), &dmix_index, 1);
+  QueuePop(&(st->queue_wg[QUEUE_LD]), &w_index, 1);
+
+  QueuePush(&(st->queue_dm[QUEUE_SF]), &dmix_index);
+  QueuePush(&(st->queue_wg[QUEUE_SF]), &w_index);
+
+  st->mdhr.dmix_matrix_type = dmix_index;
+  st->mdhr.weight_type = w_index;
 
   int16_t gain_down_in[IA_FRAME_MAXSIZE * MAX_CHANNELS];
+  float temp[IA_FRAME_MAXSIZE * MAX_CHANNELS];
   int pcm_data;
   unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
   unsigned char encoded_frame[MAX_PACKET_SIZE] = { 0, };
   int16_t decoded_frame[MAX_PACKET_SIZE];
-  int presize[CHANNEL_LAYOUT_MAX];
-  
-  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
-  {
-    presize[i] = st->preskip_size;
-  }
+
+  downmix2(st->downmixer_rg, pcm, dmix_index, w_index);
+  gaindown(st->downmixer_rg->downmix_s, st->channel_layout_map, st->gaindown_map, st->mdhr.dmixgain_f, st->frame_size);
+
+
   int16_t extract_pcm[IA_FRAME_MAXSIZE * 2];
   int16_t extract_pcm_dec[IA_FRAME_MAXSIZE * 2];
-#if 1
-  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+  int pre_ch = 0;
+  for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
   {
     int lay_out = st->channel_layout_map[i];
-    if (lay_out == CHANNEL_LAYOUT_MAX)
+    if (lay_out == IA_CHANNEL_LAYOUT_COUNT)
       break;
-    pcm_data = ia_intermediate_file_read(st, FILE_GAIN_DOWN, gaindown_wav[lay_out], gain_down_in, st->frame_size);
+    conv_writtenfloat1(st->downmixer_rg->downmix_m[lay_out], temp, channel_map714[lay_out], st->frame_size);
+    conv_writtenpcm(st->downmixer_rg->downmix_s[lay_out], gain_down_in, channel_map714[lay_out] - pre_ch, st->frame_size);
+    //ia_intermediate_file_write(st, FILE_GAIN_DOWN, gaindown_wav[lay_out], gain_down_in, st->frame_size);
     reorder_channels(st->ia_encoder_dcg[i].enc_stream_map, st->ia_encoder_dcg[i].channel, st->frame_size, gain_down_in);
 
     for (int j = 0; j < st->ia_encoder_dcg[i].stream_count; j++)
@@ -1391,329 +1243,155 @@ void extension_encode_priv(IAEncoder *st)
       if (j < st->ia_encoder_dcg[i].coupled_stream_count)
       {
         extract_pcm_from_group(gain_down_in, extract_pcm, st->ia_encoder_dcg[i].channel, j * 2, 0, st->frame_size);
-        int32_t encoded_size = st->encode_frame(st, i, j, 2, extract_pcm, encoded_frame);
-        ia_intermediate_file_write(st, FILE_ENCODED, encoded_ia[lay_out], encoded_frame, encoded_size);
+        int32_t encoded_size = st->encode_frame2(st, i, j, 2, extract_pcm, encoded_frame);
         int ret = st->decode_frame(st, i, j, 2, encoded_frame, encoded_size, extract_pcm_dec);
         insert_pcm_to_group(extract_pcm_dec, decoded_frame, st->ia_encoder_dcg[i].channel, j * 2, 0, st->frame_size);
       }
       else
       {
-        extract_pcm_from_group(gain_down_in, extract_pcm, st->ia_encoder_dcg[i].channel, st->ia_encoder_dcg[i].coupled_stream_count + j, 1 , st->frame_size);
-        int32_t encoded_size = st->encode_frame(st, i, j, 1, extract_pcm, encoded_frame);
-        ia_intermediate_file_write(st, FILE_ENCODED, encoded_ia[lay_out], encoded_frame, encoded_size);
+        extract_pcm_from_group(gain_down_in, extract_pcm, st->ia_encoder_dcg[i].channel, st->ia_encoder_dcg[i].coupled_stream_count + j, 1, st->frame_size);
+        int32_t encoded_size = st->encode_frame2(st, i, j, 1, extract_pcm, encoded_frame);
         int ret = st->decode_frame(st, i, j, 1, encoded_frame, encoded_size, extract_pcm_dec);
         insert_pcm_to_group(extract_pcm_dec, decoded_frame, st->ia_encoder_dcg[i].channel, st->ia_encoder_dcg[i].coupled_stream_count + j, 1, st->frame_size);
       }
     }
 
     reorder_channels(st->ia_decoder_dcg[i].dec_stream_map, st->ia_decoder_dcg[i].channel, st->frame_size, (int16_t*)decoded_frame);
+    pre_ch = channel_map714[lay_out];
 
-    if (presize[lay_out] > 0)
-    {
-      memset(decoded_frame, 0x00, presize[lay_out] * st->fc.f_gaindown_wav[lay_out].info.channels * sizeof(int16_t));
-      presize[lay_out] = 0;
-    }
-    ia_intermediate_file_write(st, FILE_DECODED, decoded_wav[lay_out], decoded_frame, st->frame_size);
+    QueuePush(&(st->queue_m[lay_out]), temp);
+    QueuePush(&(st->queue_d[lay_out]), decoded_frame);
+    
   }
-#else
-  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+
+  int16_t *up_input[IA_CHANNEL_LAYOUT_COUNT];
+  for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
   {
     int lay_out = st->channel_layout_map[i];
-    if (lay_out == CHANNEL_LAYOUT_MAX)
+    if (lay_out == IA_CHANNEL_LAYOUT_COUNT)
       break;
-    pcm_data = ia_intermediate_file_read(st, FILE_GAIN_DOWN, gaindown_wav[lay_out], gain_down_in, st->frame_size);
-    reorder_channels(st->ia_encoder_dcg[i].enc_stream_map, st->ia_encoder_dcg[i].channel, FRAME_SIZE, gain_down_in);
-    int32_t encoded_size = opus_multistream_encode(st->ia_encoder_dcg[i].dep_encoder,
-      gain_down_in,
-      FRAME_SIZE,
-      encoded_frame,
-      MAX_PACKET_SIZE);
-
-    ia_intermediate_file_write(st, FILE_ENCODED, encoded_ia[lay_out], encoded_frame, encoded_size);
-    int pcm_size = sizeof(int16_t) * st->fc.f_gaindown_wav[lay_out].info.channels * FRAME_SIZE;
-    int ret = opus_multistream_decode(st->ia_decoder_dcg[i].dep_decoder,
-      encoded_frame, encoded_size, (int16_t*)decoded_frame, pcm_size, 0);
-
-    reorder_channels(st->ia_decoder_dcg[i].dec_stream_map, st->ia_decoder_dcg[i].channel, ret, (int16_t*)decoded_frame);
-
-    if (presize[lay_out] > 0)
-    {
-      memset(decoded_frame, 0x00, presize[lay_out] * st->fc.f_gaindown_wav[lay_out].info.channels * sizeof(int16_t));
-      presize[lay_out] = 0;
-    }
-    ia_intermediate_file_write(st, FILE_DECODED, decoded_wav[lay_out], decoded_frame, FRAME_SIZE);
+    up_input[lay_out] = (int16_t *)malloc(st->frame_size * MAX_CHANNELS * sizeof(int16_t));
+    memset(up_input[lay_out], 0x00, st->frame_size * MAX_CHANNELS * sizeof(int16_t));
+    st->upmixer->up_input[lay_out] = up_input[lay_out];
   }
-#endif
-
-
-  int count_ = 0;
-  while (pcm_data)
+  if (QueueLength(&(st->queue_dm[QUEUE_SF])) < st->the_preskip_frame)
   {
-#if 1
-    count_++;
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+    for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
     {
       int lay_out = st->channel_layout_map[i];
-      if (lay_out == CHANNEL_LAYOUT_MAX)
+      if (lay_out == IA_CHANNEL_LAYOUT_COUNT)
         break;
-      pcm_data = ia_intermediate_file_read(st, FILE_GAIN_DOWN, gaindown_wav[lay_out], gain_down_in, st->frame_size);
-      reorder_channels(st->ia_encoder_dcg[i].enc_stream_map, st->ia_encoder_dcg[i].channel, st->frame_size, gain_down_in);
-      for (int j = 0; j < st->ia_encoder_dcg[i].stream_count; j++)
-      {
-        if (j < st->ia_encoder_dcg[i].coupled_stream_count)
-        {
-          extract_pcm_from_group(gain_down_in, extract_pcm, st->ia_encoder_dcg[i].channel, j * 2, 0, st->frame_size);
-          int32_t encoded_size = st->encode_frame(st, i, j, 2, extract_pcm, encoded_frame);
-          ia_intermediate_file_write(st, FILE_ENCODED, encoded_ia[lay_out], encoded_frame, encoded_size);
-          int ret = st->decode_frame(st, i, j, 2, encoded_frame, encoded_size, extract_pcm_dec);
-          insert_pcm_to_group(extract_pcm_dec, decoded_frame, st->ia_encoder_dcg[i].channel, j * 2, 0, st->frame_size);
-        }
-        else
-        {
-          extract_pcm_from_group(gain_down_in, extract_pcm, st->ia_encoder_dcg[i].channel, st->ia_encoder_dcg[i].coupled_stream_count + j, 1, st->frame_size);
-          int32_t encoded_size = st->encode_frame(st, i, j, 1, extract_pcm, encoded_frame);
-          ia_intermediate_file_write(st, FILE_ENCODED, encoded_ia[lay_out], encoded_frame, encoded_size);
-          int ret = st->decode_frame(st, i, j, 1, encoded_frame, encoded_size, extract_pcm_dec);
-          insert_pcm_to_group(extract_pcm_dec, decoded_frame, st->ia_encoder_dcg[i].channel, st->ia_encoder_dcg[i].coupled_stream_count + j, 1, st->frame_size);
-        }
-      }
-
-      reorder_channels(st->ia_decoder_dcg[i].dec_stream_map, st->ia_decoder_dcg[i].channel, st->frame_size, (int16_t*)decoded_frame);
-
-      if (presize[lay_out] > 0)
-      {
-        memset(decoded_frame, 0x00, presize[lay_out] * st->fc.f_gaindown_wav[lay_out].info.channels * sizeof(int16_t));
-        presize[lay_out] = 0;
-      }
-
-      ia_intermediate_file_write(st, FILE_DECODED, decoded_wav[lay_out], decoded_frame, st->frame_size);
+      QueuePop(&(st->queue_d[lay_out]), up_input[lay_out], st->frame_size);
+      /////////////////dummy recon gain, start////////////////////
+      QueuePush(&(st->queue_rg[lay_out]), st->mdhr.scalablefactor[lay_out]);
+      /////////////////dummy recon gain, end//////////////////////
     }
-#else
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+    /////////////////dummy demix mode, start////////////////////
+    uint8_t dmix_index = default_dmix_index, w_index = default_w_index;
+    QueuePush(&(st->queue_dm[QUEUE_RG]), &dmix_index);
+    QueuePush(&(st->queue_wg[QUEUE_RG]), &w_index);
+    /////////////////dummy demix mode, end//////////////////////
+  }
+  else if (QueueLength(&(st->queue_dm[QUEUE_SF])) == st->the_preskip_frame)
+  {
+    uint8_t dmix_index = default_dmix_index, w_index = default_w_index;
+    QueuePop(&(st->queue_dm[QUEUE_SF]), &dmix_index, 1);
+    QueuePop(&(st->queue_wg[QUEUE_SF]), &w_index, 1);
+
+    QueuePush(&(st->queue_dm[QUEUE_RG]), &dmix_index);
+    QueuePush(&(st->queue_wg[QUEUE_RG]), &w_index);
+
+    st->upmixer->mdhr_c = st->mdhr;
+    st->upmixer->mdhr_c.dmix_matrix_type = dmix_index;
+    st->upmixer->mdhr_c.weight_type = w_index;
+    //printf("%d\n", st->upmixer->mdhr_c.weight_type);
+
+    for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
     {
       int lay_out = st->channel_layout_map[i];
-      if (lay_out == CHANNEL_LAYOUT_MAX)
+      if (lay_out == IA_CHANNEL_LAYOUT_COUNT)
         break;
-      pcm_data = ia_intermediate_file_read(st, FILE_GAIN_DOWN, gaindown_wav[lay_out], gain_down_in, st->frame_size);
-      reorder_channels(st->ia_encoder_dcg[i].enc_stream_map, st->ia_encoder_dcg[i].channel, st->frame_size, gain_down_in);
-      int32_t encoded_size = opus_multistream_encode(st->ia_encoder_dcg[i].dep_encoder,
-        gain_down_in,
-        st->frame_size,
-        encoded_frame,
-        MAX_PACKET_SIZE);
-
-      ia_intermediate_file_write(st, FILE_ENCODED, encoded_ia[lay_out], encoded_frame, encoded_size);
-      int pcm_size = sizeof(int16_t) * st->fc.f_gaindown_wav[lay_out].info.channels * st->frame_size;
-      int ret = opus_multistream_decode(st->ia_decoder_dcg[i].dep_decoder,
-        encoded_frame, encoded_size, (int16_t*)decoded_frame, pcm_size, 0);
-
-      reorder_channels(st->ia_decoder_dcg[i].dec_stream_map, st->ia_decoder_dcg[i].channel, ret, (int16_t*)decoded_frame);
-
-      if (presize[lay_out] > 0)
-      {
-        memset(decoded_frame, 0x00, presize[lay_out] * st->fc.f_gaindown_wav[lay_out].info.channels * sizeof(int16_t));
-        presize[lay_out] = 0;
-      }
-
-      ia_intermediate_file_write(st, FILE_DECODED, decoded_wav[lay_out], decoded_frame, st->frame_size);
+      QueuePop(&(st->queue_d[lay_out]), up_input[lay_out], st->frame_size);
+      //ia_intermediate_file_write(st, FILE_DECODED, decoded_wav[lay_out], up_input[lay_out], st->frame_size);
     }
-#endif
+    //int16_t temp1[IA_FRAME_MAXSIZE * 12 * 2];
+    upmix3(st->upmixer, st->gaindown_map);
+    for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
+    {
+      int lay_out = st->channel_layout_map[i];
+      if (lay_out == IA_CHANNEL_LAYOUT_COUNT)
+        break;
+      //conv_writtenfloat(st->upmixer->upmix[lay_out], temp1, channel_map714[lay_out], st->frame_size);//
+      //ia_intermediate_file_write(st, FILE_UPMIX, upmix_wav[lay_out], temp1, st->frame_size);//
+      conv_writtenfloat1(st->upmixer->upmix[lay_out], temp, channel_map714[lay_out], st->frame_size);
+      QueuePush(&(st->queue_r[lay_out]), temp);
+    }
   }
 
-  ia_intermediate_file_readclose(st, FILE_GAIN_DOWN, "ALL");
-  ia_intermediate_file_writeclose(st, FILE_DECODED, "ALL");
-  ia_intermediate_file_writeclose(st, FILE_ENCODED, "ALL");
-}
-
-int immersive_audio_encoder_scalefactor(IAEncoder *st)//
-{
-  if (st->recon_gain_flag == 0)
-    return 0;
-  /////////////USED FOR DEBUG
-  st->fp_dmix = fopen(st->dmix_fn, "r");
-  st->fp_weight = fopen(st->weight_fn, "r");
-  if (st->fp_dmix == NULL)
+  for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
   {
-    printf("no *_dmix.txt, use default value:1\n");
+    int lay_out = st->channel_layout_map[i];
+    if (lay_out == IA_CHANNEL_LAYOUT_COUNT)
+      break;
+    if (up_input[lay_out])
+      free(up_input[lay_out]);
   }
-  if (st->fp_weight == NULL)
+
+  int layout = st->channel_layout_map[0];
+  if (QueueLength(&(st->queue_r[layout])) > 0)
   {
-    printf("no *_w.txt, use default value:0\n");
-  }
-  ///////////////////////////
-
-  extension_encode_priv(st);
-
-  int16_t temp[IA_FRAME_MAXSIZE * 12 * 2];
-  //calculate scalefactor
-  if (st->recon_gain_flag)
-  {
-    ia_intermediate_file_readopen(st, FILE_DECODED, "ALL");
-    ia_intermediate_file_writeopen(st, FILE_UPMIX, "ALL");
-
-    int16_t *up_input[CHANNEL_LAYOUT_MAX];
-    int pcm_frames = 0;
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
-    {
-      int layout = st->channel_layout_map[i];
-      if (layout == CHANNEL_LAYOUT_MAX)
-        break;
-      up_input[layout] = (int16_t *)malloc(st->frame_size * MAX_CHANNELS * sizeof(int16_t));
-	  if(!up_input[layout])goto FAILED;
-      memset(up_input[layout], 0x00, st->frame_size * MAX_CHANNELS * sizeof(int16_t));
-      st->upmixer->up_input[layout] = up_input[layout];
-      if (st->codec_id == IA_DEP_CODEC_OPUS)
-        pcm_frames = ia_intermediate_file_read(st, FILE_DECODED, decoded_wav[layout], up_input[layout], st->frame_size);
-      else if (st->codec_id == IA_DEP_CODEC_AAC)
-      {
-        pcm_frames = ia_intermediate_file_read(st, FILE_DECODED, decoded_wav[layout], up_input[layout], st->frame_size);
-        pcm_frames = ia_intermediate_file_read(st, FILE_DECODED, decoded_wav[layout], up_input[layout], st->frame_size);
-        pcm_frames = ia_intermediate_file_read(st, FILE_DECODED, decoded_wav[layout], up_input[layout], st->frame_size);
-      }
-    }
-
-
-    while (pcm_frames)
-    {
-      int dmix_index = default_dmix_index, w_index = default_w_index;
-      if (st->fp_dmix)
-        fscanf(st->fp_dmix, "%d", &dmix_index);
-      if (st->fp_weight)
-        fscanf(st->fp_weight, "%d", &w_index);
-      st->mdhr.dmix_matrix_type = dmix_index;
-      st->mdhr.weight_type = w_index;
-
-      st->upmixer->mdhr_c = st->mdhr;
-
-      upmix3(st->upmixer, st->gaindown_map);
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
-      {
-        int layout = st->channel_layout_map[i];
-        if (layout == CHANNEL_LAYOUT_MAX)
-          break;
-        //pcm_frames = ia_intermediate_file_read(st, FILE_DECODED, decoded_wav[layout], up_input[layout], st->frame_size);
-
-        conv_writtenfloat(st->upmixer->upmix[layout], temp, st->fc.f_upmix_wav[layout].info.channels, st->frame_size);
-        ia_intermediate_file_write(st, FILE_UPMIX, upmix_wav[layout], temp, st->frame_size);
-      }
-
-
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
-      {
-        int layout = st->channel_layout_map[i];
-        if (layout == CHANNEL_LAYOUT_MAX)
-          break;
-        pcm_frames = ia_intermediate_file_read(st, FILE_DECODED, decoded_wav[layout], up_input[layout], st->frame_size);
-      }
-    }
-
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
-    {
-      int layout = st->channel_layout_map[i];
-      if (layout == CHANNEL_LAYOUT_MAX)
-        break;
-      if (up_input[layout])
-        free(up_input[layout]);
-    }
-
-    ia_intermediate_file_readclose(st, FILE_DECODED, "ALL");
-    ia_intermediate_file_writeclose(st, FILE_UPMIX, "ALL");
-
-    if (st->fp_dmix)
-    {
-      fclose(st->fp_dmix);
-      st->fp_dmix = NULL;
-    }
-    if (st->fp_weight)
-    {
-      fclose(st->fp_weight);
-      st->fp_weight = NULL;
-    }
-
     float *m_input = NULL, *r_input = NULL, *s_input = NULL;
     m_input = (float*)malloc(st->frame_size * MAX_CHANNELS*sizeof(float));
     r_input = (float*)malloc(st->frame_size * MAX_CHANNELS*sizeof(float));
     s_input = (float*)malloc(st->frame_size * MAX_CHANNELS*sizeof(float));
-    if(!m_input||!r_input||!s_input)goto FAILED;
-
-    float  tmp_s[IA_FRAME_MAXSIZE * MAX_CHANNELS];
-    ia_intermediate_file_writeopen(st, FILE_SCALEFACTOR, "ALL");
-    ia_intermediate_file_readopen(st, FILE_DOWNMIX_M, "ALL");
-    //ia_intermediate_file_readopen(st, FILE_DOWNMIX_S, "ALL");
-    ia_intermediate_file_readopen(st, FILE_UPMIX, "ALL");
-    
-    unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
-#if 0
-    int read_size = 0;
-    int s_channel = 0;
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+    if (QueueLength(&(st->queue_r[layout])) == 1)
     {
-      int layout = st->channel_layout_map[i];
-      if (layout == CHANNEL_LAYOUT_MAX)
-        break;
-      pcm_frames = ia_intermediate_file_read(st, FILE_DOWNMIX_S, downmix_s_wav[layout], tmp_s, st->frame_size);
-      int channel = st->fc.f_downmix_s_wav[layout].info.channels;
-      for (int j = 0; j < channel; j++)
+      //
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
-        for (int k = 0; k < st->frame_size; k++)
-        {
-          s_input[(j + s_channel)*st->frame_size + k] = tmp_s[j + k*channel];
-        }
+        int lay_out = st->channel_layout_map[i];
+        if (lay_out == IA_CHANNEL_LAYOUT_COUNT)
+          break;
+        QueuePop(&(st->queue_r[lay_out]), r_input, st->preskip_size);
       }
-      read_size = st->frame_size * st->fc.f_downmix_s_wav[layout].info.channels;
-      s_channel += channel;
     }
-#endif
-    printf("\nCalculate Scalable Factor start...\n");
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+    else
     {
-      int layout = st->channel_layout_map[i];
-      if (layout == CHANNEL_LAYOUT_MAX)
-        break;
-      //ia_intermediate_file_read(st, FILE_DOWNMIX_M, downmix_m_wav[layout], m_input, st->preskip_size);
-      pcm_frames = ia_intermediate_file_read(st, FILE_UPMIX, upmix_wav[layout], r_input, st->preskip_size);
-    }
-
-    st->sf->scalefactor_mode = st->scalefactor_mode;
-    int s_channel = 0;
-    int last_layout = 0;
-    while (pcm_frames)
-    {
+      st->sf->scalefactor_mode = st->scalefactor_mode;
+      int s_channel = 0;
+      int last_layout = 0;
       InScalableBuffer scalable_buff;
       memset(&scalable_buff, 0x00, sizeof(scalable_buff));
       scalable_buff.gaindown_map = st->gaindown_map;
 
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
-        int layout = st->channel_layout_map[i];
-        if (layout == CHANNEL_LAYOUT_MAX)
+        int lay_out = st->channel_layout_map[i];
+        if (lay_out == IA_CHANNEL_LAYOUT_COUNT)
           break;
-        pcm_frames = ia_intermediate_file_read(st, FILE_DOWNMIX_M, downmix_m_wav[layout], m_input, st->frame_size);
-        ia_intermediate_file_read(st, FILE_UPMIX, upmix_wav[layout], r_input, st->frame_size);
+        QueuePop(&(st->queue_m[lay_out]), m_input, st->frame_size);
+        QueuePop(&(st->queue_r[lay_out]), r_input, st->frame_size);
 
         scalable_buff.channels_s = s_channel;
         scalable_buff.inbuffer_s = (unsigned char*)s_input;
         scalable_buff.dtype_s = 1;
 
-        scalable_buff.scalable_map = st->upmixer->scalable_map[layout];
-        scalable_buff.channels_m = channel_map714[layout];
+        scalable_buff.scalable_map = st->upmixer->scalable_map[lay_out];
+        scalable_buff.channels_m = channel_map714[lay_out];
         scalable_buff.inbuffer_m = (unsigned char*)m_input;
         scalable_buff.dtype_m = 1;
 
-        scalable_buff.channels_r = channel_map714[layout];
+        scalable_buff.channels_r = channel_map714[lay_out];
         scalable_buff.inbuffer_r = (unsigned char*)r_input;
-        scalable_buff.dtype_r= 1;
-        if(i != 0)
-          cal_scalablefactor2(st->sf, &(st->mdhr), scalable_buff, layout, last_layout);
-        ia_intermediate_file_write(st, FILE_SCALEFACTOR, scalefactor_cfg[layout], st->mdhr.scalablefactor[layout], channel_map714[layout]);
+        scalable_buff.dtype_r = 1;
+        if (i != 0)
+          cal_scalablefactor2(st->sf, &(st->mdhr), scalable_buff, lay_out, last_layout);
+        QueuePush(&(st->queue_rg[lay_out]), st->mdhr.scalablefactor[lay_out]); // save recon gain
 
-        s_channel = channel_map714[layout];
-        last_layout = layout;
+        s_channel = channel_map714[lay_out];
+        last_layout = lay_out;
         memcpy(s_input, m_input, st->frame_size * MAX_CHANNELS*sizeof(float));
       }
-
-      //printf("st->mdhr %lu %lu %lu\n", st->mdhr.chsilence[CHANNEL_LAYER_MDHR_312], st->mdhr.chsilence[CHANNEL_LAYER_MDHR_512], st->mdhr.chsilence[CHANNEL_LAYER_MDHR_714]);
-
     }
     if (m_input)
       free(m_input);
@@ -1721,238 +1399,151 @@ int immersive_audio_encoder_scalefactor(IAEncoder *st)//
       free(r_input);
     if (s_input)
       free(s_input);
-   
-    printf("Calculate Scalable Factor stop!!!\n\n");
-    ia_intermediate_file_writeclose(st, FILE_SCALEFACTOR, "ALL");
-    //ia_intermediate_file_readclose(st, FILE_DOWNMIX_S, "ALL");
-    ia_intermediate_file_readclose(st, FILE_DOWNMIX_M, "ALL");
-    ia_intermediate_file_readclose(st, FILE_UPMIX, "ALL");
-
-
-
-    //
-    ia_intermediate_file_readopen(st, FILE_SCALEFACTOR, "ALL");
-    ia_intermediate_file_readopen(st, FILE_ENCODED, "ALL");
-
-    /////////////USED FOR DEBUG
-    st->fp_dmix = fopen(st->dmix_fn, "r");
-    st->fp_weight = fopen(st->weight_fn, "r");
-    if (st->fp_dmix == NULL)
-    {
-      printf("no *_dmix.txt, use default value:1\n");
-    }
-    if (st->fp_weight == NULL)
-    {
-      printf("no *_w.txt, use default value:0\n");
-    }
-	return 0;
-FAILED:
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
-    {
-      int layout = st->channel_layout_map[i];
-      if (layout == CHANNEL_LAYOUT_MAX)
-        break;
-      if(up_input[layout])
-        free(up_input[layout]);
-    }
-    if (m_input)
-      free(m_input);
-    if (r_input)
-      free(r_input);
-    if (s_input)
-      free(s_input);
-    return -1;
-
   }
 
   return 0;
 }
 
-
 int immersive_audio_encode(IAEncoder *st, 
   const int16_t *pcm, int frame_size, unsigned char* data, int *demix_mode, int32_t max_data_bytes)
 {
+
   int ret_size = 0;
   unsigned char meta_info[255];
-  unsigned char coded_data[MAX_PACKET_SIZE*3];
-  int putsize_recon_gain = 0, putsize_sample = 0;
-  if (st->recon_gain_flag == 1)
+  unsigned char coded_data[MAX_PACKET_SIZE * 3];
+  int putsize_recon_gain = 0, recon_gain_obu_size = 0;
+
+
+
+  int16_t gain_down_out[IA_FRAME_MAXSIZE * MAX_CHANNELS];
+  unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
+  int pre_ch = 0;
+  int16_t extract_pcm[IA_FRAME_MAXSIZE * 2];
+
+
+  //write substream obu
+  int sub_stream_obu_size = 0;
+  if (st->channel_groups > 1)
   {
-    int dmix_index = default_dmix_index, w_index = default_w_index;
-    if (st->fp_dmix)
-      fscanf(st->fp_dmix, "%d", &dmix_index);
-    if (st->fp_weight)
-      fscanf(st->fp_weight, "%d", &w_index);
-    st->mdhr.dmix_matrix_type = dmix_index;
-    st->mdhr.weight_type = w_index;
-
-    unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+    if (st->recon_gain_flag == 1)
     {
-      int layout = st->channel_layout_map[i];
-      if (layout == CHANNEL_LAYOUT_MAX)
-        break;
-      ia_intermediate_file_read(st, FILE_SCALEFACTOR, scalefactor_cfg[layout], st->mdhr.scalablefactor[layout], channel_map714[layout]);
+      unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
+      {
+        int layout = st->channel_layout_map[i];
+        if (layout == IA_CHANNEL_LAYOUT_COUNT)
+          break;
+        QueuePop(&(st->queue_rg[layout]), st->mdhr.scalablefactor[layout], channel_map714[layout]);
+      }
+      //write recon gain obu
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
+      {
+        int layout = st->channel_layout_map[i];
+        if (layout == IA_CHANNEL_LAYOUT_COUNT)
+          break;
+        putsize_recon_gain += write_recon_gain(st, meta_info + putsize_recon_gain, i);
+      }
+      recon_gain_obu_size = iac_write_obu_unit(meta_info, putsize_recon_gain, data, OBU_RECON_GAIN_INFO);
     }
-
-
-    int encoded_size = 0;
-    int buffer_p = 0;
+    uint8_t dmix_index = default_dmix_index, w_index = default_w_index;
+    QueuePop(&(st->queue_dm[QUEUE_RG]), &dmix_index, 1);
+    QueuePop(&(st->queue_wg[QUEUE_RG]), &w_index, 1);
 
     if (w_index > 0)
       *demix_mode = dmix_index + 3;
     else
       *demix_mode = dmix_index - 1;
 
-    //write recon gain obu
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
-    {
-      int layout = st->channel_layout_map[i];
-      if (layout == CHANNEL_LAYOUT_MAX)
-        break;
-      putsize_recon_gain += write_recon_gain(st, meta_info + putsize_recon_gain, i);
-    }
-    int recon_gain_obu_size = iac_write_obu_unit(meta_info, putsize_recon_gain, data, OBU_RECON_GAIN_INFO);
+    downmix2(st->downmixer_enc, pcm, dmix_index, w_index);
+    gaindown(st->downmixer_enc->downmix_s, st->channel_layout_map, st->gaindown_map, st->mdhr.dmixgain_f, st->frame_size);
 
-    //write substream obu
-    int sub_stream_obu_size = 0;
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+    pre_ch = 0;
+    for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
     {
-      int layout = st->channel_layout_map[i];
-      if (layout == CHANNEL_LAYOUT_MAX)
+      int lay_out = st->channel_layout_map[i];
+      if (lay_out == IA_CHANNEL_LAYOUT_COUNT)
         break;
-      /////////////////////////////TODO TODO, should update with laset Spec//////////////////////
+      conv_writtenpcm(st->downmixer_enc->downmix_s[lay_out], gain_down_out, channel_map714[lay_out] - pre_ch, st->frame_size);
+      reorder_channels(st->ia_encoder_dcg[i].enc_stream_map, st->ia_encoder_dcg[i].channel, st->frame_size, gain_down_out);
+      int32_t encoded_size = 0;
       for (int j = 0; j < st->ia_encoder_dcg[i].stream_count; j++)
       {
-        ia_intermediate_file_read(st, FILE_ENCODED, encoded_ia[layout], &encoded_size, sizeof(int));
-        ia_intermediate_file_read(st, FILE_ENCODED, encoded_ia[layout], coded_data, encoded_size);
-
-        sub_stream_obu_size += iac_write_obu_unit(coded_data, encoded_size, data + recon_gain_obu_size + sub_stream_obu_size, OBU_SUBSTREAM);
-      }
-    }
-
-    return (recon_gain_obu_size + sub_stream_obu_size);
-  }
-  else
-  {
-    int dmix_index = default_dmix_index, w_index = default_w_index;
-    if (st->fp_dmix)
-      fscanf(st->fp_dmix, "%d", &dmix_index);
-    if (st->fp_weight)
-      fscanf(st->fp_weight, "%d", &w_index);
-    st->mdhr.dmix_matrix_type = dmix_index;
-    st->mdhr.weight_type = w_index;
-
-    if (w_index > 0)
-      *demix_mode = dmix_index + 3;
-    else
-      *demix_mode = dmix_index - 1;
-
-    int16_t gain_down_out[IA_FRAME_MAXSIZE * MAX_CHANNELS];
-    unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
-    int pre_ch = 0;
-    int16_t extract_pcm[IA_FRAME_MAXSIZE * 2];
-
-
-    //write substream obu
-    int sub_stream_obu_size = 0;
-    if (st->channel_groups > 1)
-    {
-      downmix2(st->downmixer, pcm, dmix_index, w_index);
-      gaindown(st->downmixer->downmix_s, st->channel_layout_map, st->gaindown_map, st->mdhr.dmixgain, st->frame_size);
-
-      pre_ch = 0;
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
-      {
-        int lay_out = st->channel_layout_map[i];
-        if (lay_out == CHANNEL_LAYOUT_MAX)
-          break;
-        conv_writtenpcm(st->downmixer->downmix_s[lay_out], gain_down_out, channel_map714[lay_out] - pre_ch, st->frame_size);
-        reorder_channels(st->ia_encoder_dcg[i].enc_stream_map, st->ia_encoder_dcg[i].channel, st->frame_size, gain_down_out);
-        int32_t encoded_size = 0;
-        for (int j = 0; j < st->ia_encoder_dcg[i].stream_count; j++)
+        if (j < st->ia_encoder_dcg[i].coupled_stream_count)
         {
-          if (j < st->ia_encoder_dcg[i].coupled_stream_count)
-          {
-            extract_pcm_from_group(gain_down_out, extract_pcm, st->ia_encoder_dcg[i].channel, j * 2, 0, st->frame_size);
-            encoded_size = st->encode_frame(st, i, j, 2, extract_pcm, coded_data);
-          }
-          else
-          {
-            extract_pcm_from_group(gain_down_out, extract_pcm, st->ia_encoder_dcg[i].channel, st->ia_encoder_dcg[i].coupled_stream_count + j, 1, st->frame_size);
-            encoded_size = st->encode_frame(st, i, j, 1, extract_pcm, coded_data);
-          }
-          sub_stream_obu_size += iac_write_obu_unit(coded_data, encoded_size, data  + sub_stream_obu_size, OBU_SUBSTREAM);
-        }
-        pre_ch = channel_map714[lay_out];
-      }
-    }
-    else
-    {
-      int lay_out = st->channel_layout_map[0];
-      memcpy(gain_down_out, pcm, sizeof(int16_t)*channel_map714[lay_out]* st->frame_size);
-      reorder_channels(st->ia_encoder_dcg[0].enc_stream_map, st->ia_encoder_dcg[0].channel, st->frame_size, gain_down_out);
-      int32_t encoded_size = 0;
-      for (int j = 0; j < st->ia_encoder_dcg[0].stream_count; j++)
-      {
-        if (j < st->ia_encoder_dcg[0].coupled_stream_count)
-        {
-          extract_pcm_from_group(gain_down_out, extract_pcm, st->ia_encoder_dcg[0].channel, j * 2, 0, st->frame_size);
-          encoded_size = st->encode_frame(st, 0, j, 2, extract_pcm, coded_data);
+          extract_pcm_from_group(gain_down_out, extract_pcm, st->ia_encoder_dcg[i].channel, j * 2, 0, st->frame_size);
+          encoded_size = st->encode_frame(st, i, j, 2, extract_pcm, coded_data);
         }
         else
         {
-          extract_pcm_from_group(gain_down_out, extract_pcm, st->ia_encoder_dcg[0].channel, st->ia_encoder_dcg[0].coupled_stream_count + j, 1, st->frame_size);
-          encoded_size = st->encode_frame(st, 0, j, 1, extract_pcm, coded_data);
+          extract_pcm_from_group(gain_down_out, extract_pcm, st->ia_encoder_dcg[i].channel, st->ia_encoder_dcg[i].coupled_stream_count + j, 1, st->frame_size);
+          encoded_size = st->encode_frame(st, i, j, 1, extract_pcm, coded_data);
         }
-        sub_stream_obu_size += iac_write_obu_unit(coded_data, encoded_size, data + sub_stream_obu_size, OBU_SUBSTREAM);
+        sub_stream_obu_size += iac_write_obu_unit(coded_data, encoded_size, data + recon_gain_obu_size + sub_stream_obu_size, OBU_SUBSTREAM);
       }
+      pre_ch = channel_map714[lay_out];
     }
-
-    return sub_stream_obu_size;
   }
- 
-  return ret_size;
+  else
+  {
+    int lay_out = st->channel_layout_map[0];
+    memcpy(gain_down_out, pcm, sizeof(int16_t)*channel_map714[lay_out] * st->frame_size);
+    reorder_channels(st->ia_encoder_dcg[0].enc_stream_map, st->ia_encoder_dcg[0].channel, st->frame_size, gain_down_out);
+    int32_t encoded_size = 0;
+    for (int j = 0; j < st->ia_encoder_dcg[0].stream_count; j++)
+    {
+      if (j < st->ia_encoder_dcg[0].coupled_stream_count)
+      {
+        extract_pcm_from_group(gain_down_out, extract_pcm, st->ia_encoder_dcg[0].channel, j * 2, 0, st->frame_size);
+        encoded_size = st->encode_frame(st, 0, j, 2, extract_pcm, coded_data);
+      }
+      else
+      {
+        extract_pcm_from_group(gain_down_out, extract_pcm, st->ia_encoder_dcg[0].channel, st->ia_encoder_dcg[0].coupled_stream_count + j, 1, st->frame_size);
+        encoded_size = st->encode_frame(st, 0, j, 1, extract_pcm, coded_data);
+      }
+      sub_stream_obu_size += iac_write_obu_unit(coded_data, encoded_size, data + sub_stream_obu_size, OBU_SUBSTREAM);
+    }
+  }
+
+  return (recon_gain_obu_size + sub_stream_obu_size);
 }
 
-#define REMOVE_TEMP_WAV_FILES 1
-#define REMOVE_TEMP_ASC_HEQ_FILES 1
 void immersive_audio_encoder_destroy(IAEncoder *et)
 {
-  downmix_destroy(et->downmixer);
+  downmix_destroy(et->downmixer_ld);
+  downmix_destroy(et->downmixer_rg);
+  downmix_destroy(et->downmixer_enc);
   immersive_audio_encoder_loudgain_destory(et->loudgain);
   upmix_destroy(et->upmixer);
   scalablefactor_destroy(et->sf);
 
-#ifdef REMOVE_TEMP_ASC_HEQ_FILES
-  if(et->fp_dmix)
-    remove(et->dmix_fn);
-  if (et->fp_weight)
-    remove(et->weight_fn);
-#endif
-  if(et->fp_dmix)
-    fclose(et->fp_dmix);
-  if(et->fp_weight)
-    fclose(et->fp_weight);
-
   ia_intermediate_file_readclose(et, FILE_ENCODED, "ALL");
   ia_intermediate_file_readclose(et, FILE_SCALEFACTOR, "ALL");
 
-#ifdef REMOVE_TEMP_WAV_FILES
-  for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+  for (int i = 0; i < QUEUE_STEP_MAX; i++)
   {
-    remove(downmix_m_wav[i]);
-    remove(downmix_s_wav[i]);
-    remove(gaindown_wav[i]);
-    remove(upmix_wav[i]);
-    remove(decoded_wav[i]);
-    remove(encoded_ia[i]);
-    remove(scalefactor_cfg[i]);
+    QueueDestroy(&(et->queue_dm[i]));
+    QueueDestroy(&(et->queue_wg[i]));
   }
-#endif
+
+  for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
+  {
+    int lay_out = et->channel_layout_map[i];
+    if (lay_out == IA_CHANNEL_LAYOUT_COUNT)
+      break;
+    QueueDestroy(&(et->queue_r[lay_out]));
+    QueueDestroy(&(et->queue_m[lay_out]));
+    QueueDestroy(&(et->queue_d[lay_out]));
+    QueueDestroy(&(et->queue_r[lay_out]));
+    QueueDestroy(&(et->queue_rg[lay_out]));
+  }
+
   et->encode_close(et);
   if (et->recon_gain_flag)
+  {
+    et->encode_close2(et);
     et->decode_close(et);
+  }
   free(et);
 
 }

@@ -130,7 +130,7 @@ static int mov_read_mvhd(mp4r_t *mp4r, int size)
 {
     uint32_t x;
     // version/flags
-    x = avio_rb32();
+    avio_rb32();
     // Creation time
     mp4r->ctime = avio_rb32();
     // Modification time
@@ -141,15 +141,15 @@ static int mov_read_mvhd(mp4r_t *mp4r, int size)
     mp4r->duration =
         avio_rb32();
     // reserved
-    x = avio_rb32();
-    x = avio_rb32();
-    for (int x = 0; x < 2; x++) {
+    avio_rb32();
+    avio_rb32();
+    for (x = 0; x < 2; x++) {
         avio_rb32();
     }
-    for (int x = 0; x < 9; x++) {
+    for (x = 0; x < 9; x++) {
         avio_rb32();
     }
-    for (int x = 0; x < 6; x++) {
+    for (x = 0; x < 6; x++) {
         avio_rb32();
     }
     // next track id
@@ -186,7 +186,6 @@ static int mov_read_mdhd(mp4r_t *mp4r, int size)
 
 static int mov_read_tkhd(mp4r_t *mp4r, int size)
 {
-    uint32_t x;
     // version/flags
     avio_rb32();
     // creation-time
@@ -206,10 +205,10 @@ static int mov_read_tkhd(mp4r_t *mp4r, int size)
         avio_rb32();
     }
     // reserved 16bit, 16bit, x == 0x01000000
-    x = avio_rb32();
+    avio_rb32();
     // reserved * 9
     for (int i = 0; i < 9; i++) {
-        x = avio_rb32();
+        avio_rb32();
     }
     // reserved
     uint32_t w = avio_rb32();
@@ -233,9 +232,8 @@ static int mov_read_tkhd(mp4r_t *mp4r, int size)
 
 static int mov_read_stsd(mp4r_t *mp4r, int size)
 {
-    int x;
     // version/flags
-    x = avio_rb32();
+    avio_rb32();
     // Number of entries(one 'mp4a' or 'opus')
     if (avio_rb32() != 1) { //fixme: error handling
         return ERR_FAIL;
@@ -455,7 +453,7 @@ static int mov_read_aiac(mp4r_t *mp4r, uint32_t size)
     // Reserved (6 bytes)
     avio_rb32(); // reserved
     avio_rb16(); // reserved
-    uint32_t data_reference_index = avio_rb16(); // data_reference_index
+    avio_rb16(); // data_reference_index
     avio_rb32(); // reserved
     avio_rb32(); // reserved
     uint16_t channel_count = avio_rb16();
@@ -494,11 +492,11 @@ static int mov_read_aiac(mp4r_t *mp4r, uint32_t size)
 
 static int mov_read_stts(mp4r_t *mp4r, int size)
 {
-    uint32_t versionflags;
     uint32_t entry_count;
     uint32_t sample_count, sample_delta;
     uint32_t *count_buf, *delta_buf;
     uint32_t x, cnt;
+    int      ret = size;
 
     /* if (size < 16) { //min stts size */
         /* return ERR_FAIL; */
@@ -509,7 +507,7 @@ static int mov_read_stts(mp4r_t *mp4r, int size)
     audio_rtr_t *atr = mp4r->a_trak;
 
     // version/flags
-    versionflags = avio_rb32();
+    avio_rb32();
 
     // entry count
     entry_count = avio_rb32();
@@ -544,20 +542,19 @@ static int mov_read_stts(mp4r_t *mp4r, int size)
     atr[sel_a_trak].frame.deltas = (uint32_t *)_dcalloc(count_detas + 1,
                                    sizeof(*atr[sel_a_trak].frame.deltas), __FILE__, __LINE__);
     if (!atr[sel_a_trak].frame.deltas) {
-        return ERR_FAIL;
-    }
-
-    for (cnt = 0, x = 0; cnt < entry_count; cnt++) {
-        // chunk entry loop
-        sample_count = count_buf[cnt];
-        sample_delta = delta_buf[cnt];
-        for (int i = 0; i < sample_count; i++) {
-            //
-            atr[sel_a_trak].frame.deltas[x] = sample_delta;
-            x++;
+        ret = ERR_FAIL;
+    } else {
+        for (cnt = 0, x = 0; cnt < entry_count; cnt++) {
+            // chunk entry loop
+            sample_count = count_buf[cnt];
+            sample_delta = delta_buf[cnt];
+            for (int i = 0; i < sample_count; i++) {
+                //
+                atr[sel_a_trak].frame.deltas[x] = sample_delta;
+                x++;
+            }
         }
     }
-
     if (count_buf) {
         _dfree(count_buf, __FILE__, __LINE__);
     }
@@ -565,12 +562,11 @@ static int mov_read_stts(mp4r_t *mp4r, int size)
         _dfree(delta_buf, __FILE__, __LINE__);
     }
 
-    return size;
+    return ret;
 }
 
 static int mov_read_stsc(mp4r_t *mp4r, int size)
 {
-    uint32_t versionflags;
     uint32_t entry_count;
     uint32_t first_chunk;
     uint32_t samples_in_chunk;
@@ -582,7 +578,7 @@ static int mov_read_stsc(mp4r_t *mp4r, int size)
     audio_rtr_t *atr = mp4r->a_trak;
 
     // version/flags
-    versionflags = avio_rb32();
+    avio_rb32();
     used_bytes += 4;
     // Sample size
     entry_count = avio_rb32();
@@ -619,21 +615,17 @@ static int mov_read_stsc(mp4r_t *mp4r, int size)
 static int mov_read_stsz(mp4r_t *mp4r, int size)
 {
     int cnt;
-    uint32_t versionflags;
     uint32_t sample_size;
     uint32_t sample_count;
-    int used_bytes = 0;
 
     int sel_a_trak;
     sel_a_trak = mp4r->sel_a_trak;
     audio_rtr_t *atr = mp4r->a_trak;
 
     // version/flags
-    versionflags = avio_rb32();
-    used_bytes += 4;
+    avio_rb32();
     // Sample size
     sample_size = avio_rb32();
-    used_bytes += 4;
     atr[sel_a_trak].sample_size = sample_size;
     /* atr[sel_a_trak].frame.maxsize = sample_size; */
     // Number of entries
@@ -641,7 +633,6 @@ static int mov_read_stsz(mp4r_t *mp4r, int size)
     /* fprintf(stderr, "stszin: entry_count %d, sample_size %u\n", sample_count, sample_size); */
     if (!sample_count)
         return size;
-    used_bytes += 4;
     atr[sel_a_trak].frame.ents = sample_count;
 
     if (!(atr[sel_a_trak].frame.ents + 1)) {
@@ -675,7 +666,6 @@ static int mov_read_stsz(mp4r_t *mp4r, int size)
 
 static int mov_read_stco(mp4r_t *mp4r, int size)
 {
-    uint32_t versionflags;
     uint32_t fofs, x;
     uint32_t cnt;
 
@@ -684,7 +674,7 @@ static int mov_read_stco(mp4r_t *mp4r, int size)
     audio_rtr_t *atr = mp4r->a_trak;
 
     // version/flags
-    versionflags = avio_rb32();
+    avio_rb32();
     // Number of entries
     uint32_t entry_count = avio_rb32();
     /* fprintf(stderr, "stcoin: entry_count %d\n", entry_count); */
@@ -705,7 +695,7 @@ static int mov_read_stco(mp4r_t *mp4r, int size)
         // chunk entry loop
         fofs = avio_rb32();
         // fprintf(stderr, "stcoin: entry (%d) offset %d\n", cnt, fofs);
-        uint32_t sample_size;
+        uint32_t sample_size = 0;
         for (int i = 0; i < atr[sel_a_trak].frame.chunk_count; i++) {
             sample_size = atr[sel_a_trak].frame.chunks[i].sample_per_chunk;
             if (atr[sel_a_trak].frame.chunks[i].first_chunk <= cnt + 1 &&
@@ -729,7 +719,7 @@ int mov_read_sgpd (mp4r_t *mp4r, int size)
 {
     uint8_t buf[5];
     uint32_t v;
-    uint32_t len, count, default_len;
+    uint32_t len, count, default_len = 0;
     int i;
     int sel_a_trak;
     sel_a_trak = mp4r->sel_a_trak;
@@ -896,7 +886,6 @@ static int mov_read_trun (mp4r_t *mp4r, int size)
     uint32_t vf;
     uint32_t sample_size;
     uint32_t sample_count;
-    int used_bytes = 0;
     uint32_t offset = 0;
 
     int sel_a_trak;
@@ -905,14 +894,12 @@ static int mov_read_trun (mp4r_t *mp4r, int size)
 
     // version/flags
     vf = avio_rb32();
-    used_bytes += 4;
     // Number of entries
     sample_count = avio_rb32();
     /* fprintf(stderr, "trunin: sle_a_trak %d, ents %d, entry_count %d, sample_size %u\n", */
             /* sel_a_trak, atr[sel_a_trak].frame.ents, sample_count, sample_size); */
     if (!sample_count)
         return size;
-    used_bytes += 4;
     cnt = atr[sel_a_trak].frame.ents;
     atr[sel_a_trak].frame.ents += sample_count;
 
@@ -1025,7 +1012,7 @@ int parse(mp4r_t *mp4r, uint32_t *sizemax)
         mp4r->atom++;
     }
     if (mp4r->atom->atom_type == MOV_ATOM_DESCENT) {
-        long apos = ftell(mp4r->fin);;
+        // apos = ftell(mp4r->fin);
 
         //fprintf(stderr, "descent\n");
         mp4r->atom++;
@@ -1298,7 +1285,8 @@ int mp4demux_audio(mp4r_t *mp4r, int trakn, int *delta)
             != atr[trakn].bitbuf.size) {
         fprintf(stderr, "can't read frame data(frame %d@0x%x)\n",
                 atr[trakn].frame.current,
-                atr[trakn].frame.sizes[atr[trakn].frame.current]);
+                atr[trakn].frame.sizes ?
+                atr[trakn].frame.sizes[atr[trakn].frame.current] : 0);
         return ERR_FAIL;
     }
 
@@ -1340,9 +1328,9 @@ int mp4demux_getframenum(mp4r_t *mp4r, int trakn, uint32_t offs)
     r = ents;
     while (0 < m && m < ents) {
         m_offs = atr[trakn].frame.offs[m];
-        l_offs = atr[trakn].frame.offs[l];
-        r_offs = (r == ents) ? (0xffffffff) : (atr[trakn].frame.offs[r] +
-                                               atr[trakn].frame.sizes[r] - 1);
+        /* l_offs = atr[trakn].frame.offs[l]; */
+        /* r_offs = (r == ents) ? (0xffffffff) : (atr[trakn].frame.offs[r] + */
+                                               /* atr[trakn].frame.sizes[r] - 1); */
         if (l != m && m != r) {
             if (offs < m_offs) {
                 r = m;

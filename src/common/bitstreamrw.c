@@ -62,17 +62,10 @@ uint32_t bs_getbits(bitstream_t *bs, uint32_t num)
 uint32_t bs_showbits(bitstream_t *bs, uint32_t num)
 {
 	assert(num <= 32);
-	uint8_t b1, b2, b3, b4;
 	int posBasePrev;
 	int posInBasePrev;
 	uint32_t result;
 	int i;
-
-	b1 = bs->m_ptr[0];
-	b2 = bs->m_ptr[1];
-	b3 = bs->m_ptr[2];
-	b4 = bs->m_ptr[3];
-
 
 	posBasePrev = bs->m_posBase;
 	posInBasePrev = bs->m_posInBase;
@@ -156,7 +149,6 @@ void bs_setbits(bitstream_t *bs, uint32_t num, int nbits)
 
 	for (i = 0; i < nbits; i++)
 	{
-		bit = 0;
 		bit = (num >> (nbits - i - 1)) & 0x01;
 		bs_setbit(bs, bit);
 	}

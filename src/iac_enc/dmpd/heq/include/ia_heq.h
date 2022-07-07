@@ -1,5 +1,6 @@
 #ifndef IA_HEQ_H
 #define IA_HEQ_H
+#include "queue_plus.h"
 
 typedef enum {
   HEQ_CHANNEL_LAYOUT_100, //1.0.0
@@ -36,9 +37,10 @@ typedef struct {
   int fcnt;
   double Wlevel;
   void *fp;
+  QueuePlus *pq;
 }IA_HEQ;
 
-IA_HEQ *ia_heq_start(int layout, int frame_rate);
+IA_HEQ *ia_heq_start(int layout, int frame_rate, QueuePlus *pq);
 int ia_heq_process(IA_HEQ *heq, int16_t *input, int size);
 int ia_heq_stop(IA_HEQ *heq);
 #endif /* IA_HEQ_H */

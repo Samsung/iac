@@ -44,7 +44,8 @@ static const char* gIAECString[] = {
     "Invalid packet",
     "Invalid state",
     "Unimplemented",
-    "Memory allocation failure"
+    "Memory allocation failure",
+    "need more data."
 };
 
 const char* ia_error_code_string (IAErrCode ec)
@@ -59,7 +60,7 @@ const char* ia_error_code_string (IAErrCode ec)
 
 int ia_channel_layout_type_check (IAChannelLayoutType type)
 {
-    return type > IA_CH_LAYOUT_TYPE_INVALID && type < IA_CH_LAYOUT_TYPE_COUNT;
+    return type > IA_CHANNEL_LAYOUT_INVALID && type < IA_CHANNEL_LAYOUT_COUNT;
 }
 
 
@@ -129,7 +130,7 @@ static const struct {
     int s;
     int w;
     int t;
-} gIACLC2Count[IA_CH_LAYOUT_TYPE_COUNT] = {
+} gIACLC2Count[IA_CHANNEL_LAYOUT_COUNT] = {
     {1, 0, 0},
     {2, 0, 0},
     {5, 1, 0},
@@ -224,7 +225,7 @@ int leb128_read (uint8_t *data, int32_t len, uint64_t* size)
     uint8_t leb128_byte;
     for ( i = 0; i < 8; i++ ) {
         leb128_byte = data[i];
-        value |= ( (leb128_byte & 0x7f) << (i*7) );
+        value |= ( ((uint64_t)leb128_byte & 0x7f) << (i*7) );
         Leb128Bytes += 1;
         if ( !(leb128_byte & 0x80) ) {
             break;

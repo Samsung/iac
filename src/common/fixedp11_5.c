@@ -20,15 +20,6 @@ q16_t float_to_q(float q, int frac)
   return (q16_t)(q * powf(2.0f, (float)frac));
 }
 
-q16_t float_to_q2(float q, int frac)
-{
-  if (q > 1)
-    q = 1.0;
-  else if (q < 0)
-    q = 0;
-  return (q16_t)(q * powf(2.0f, (float)frac));
-}
-
 float qf_to_float(qf_t qf, int frac)
 {
   return ((float)qf / (pow(2.0f, (float)frac) - 1.0)); //f = q / 255

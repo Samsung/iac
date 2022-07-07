@@ -21,7 +21,7 @@
 #define __DEMIXER_H_
 
 #include <stdint.h>
-#include "immersive_audio.h"
+#include "immersive_audio_defines.h"
 #include "immersive_audio_types.h"
 
 typedef struct Demixer Demixer;

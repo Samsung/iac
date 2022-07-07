@@ -10,6 +10,16 @@
 
 #define DEC_BUF_CNT 2
 
+typedef enum {
+    IA_CH_GAIN_RTF,
+    IA_CH_GAIN_LTF,
+    IA_CH_GAIN_RS,
+    IA_CH_GAIN_LS,
+    IA_CH_GAIN_R,
+    IA_CH_GAIN_L,
+    IA_CH_GAIN_COUNT
+} IAOutputGainChannel;
+
 struct IAParam {
     IAParamID   id;
     union {
@@ -87,9 +97,6 @@ typedef struct IADecoderContext {
     uint32_t                flags;
     int                     dmx_mode;
 
-    Queue                   *q_recon;
-    Queue                   *q_dmx_mode;
-
 } IADecoderContext;
 
 
@@ -97,12 +104,12 @@ struct IADecoder {
     IADecoderContext   *dctx;
 
     /* decoder for channel audio layer. */
-    IACoreDecoder      *ldec[IA_CH_LAYOUT_TYPE_COUNT];
+    IACoreDecoder      *ldec[IA_CHANNEL_LAYOUT_COUNT];
 
     /* decoder for ambisonics */
     IACoreDecoder      *adec;
 
-    uint8_t*        buffer[DEC_BUF_CNT];
+    float*              buffer[DEC_BUF_CNT];
 
     Demixer*                demixer;
     AudioEffectPeakLimiter  limiter;

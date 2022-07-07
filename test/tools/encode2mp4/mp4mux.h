@@ -27,6 +27,7 @@ typedef struct
 #endif
 
 typedef enum {
+  CODEC_UNKNOWN,
   CODEC_OPUS,
   CODEC_AAC,
   CODEC_MAX
@@ -106,7 +107,7 @@ typedef struct
     uint32_t sub_bitstream_count;
     void *csc; // codec specific
     uint32_t entry_count;
-    uint32_t codec_id; // OPUS=0, AAC=1, AC3=2, etc
+    uint32_t codec_id; // OPUS=1, AAC=2, AC3=3, etc
 
     // entry_count >0
     uint32_t sub_bitstream_number[MAX_CHANNELS];
@@ -202,7 +203,7 @@ typedef struct
 	int audio_trak_select;
   int video_trak_select;
 
-  int codec_id;// 0:opus, 1:aac
+  int codec_id;// 1:opus, 2:aac
 
   // below is for fragment mp4 writing.
   int flags; // mp4/fmp4

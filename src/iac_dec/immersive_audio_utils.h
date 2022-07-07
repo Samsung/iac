@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "immersive_audio.h"
+#include "immersive_audio_defines.h"
 #include "immersive_audio_types.h"
 
 #define IA_CH_CATE_SURROUND     0x100

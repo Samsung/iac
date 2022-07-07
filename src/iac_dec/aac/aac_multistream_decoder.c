@@ -3,9 +3,10 @@
 
 #include <aacdecoder_lib.h>
 
+#include "aac_multistream_decoder.h"
+#include "immersive_audio_defines.h"
 #include "immersive_audio_debug.h"
 #include "immersive_audio_types.h"
-#include "aac_multistream_decoder.h"
 
 #ifdef IA_TAG
 #undef IA_TAG
@@ -13,13 +14,15 @@
 
 #define IA_TAG "AACMS"
 
+#define MAX_BUFFER_SIZE     MAX_AAC_FRAME_SIZE * 2
+
 struct AACMSDecoder {
     uint32_t    flags;
     int         streams;
     int         coupled_streams;
 
     HANDLE_AACDECODER *handles;
-    INT_PCM     *buffer;
+    INT_PCM     buffer[MAX_BUFFER_SIZE];
 };
 
 typedef void (*aac_copy_channel_out_func)(void *dst, const void *src,
@@ -52,50 +55,69 @@ static int aac_ms_decode_list_native(AACMSDecoder *st,
     UINT valid;
     AAC_DECODER_ERROR err;
     INT_PCM *out = (INT_PCM *)pcm;
-
-    if (frame_size <= 0) {
-        return -1;
-    }
-
-    if (!st->buffer) {
-        void *buf = 0;
-        buf = malloc (sizeof(INT_PCM) * 2 * frame_size);
-        if (!buf)
-            return -1;
-        st->buffer = buf;
-        ia_logt("allocate buffer size %ld", sizeof(INT_PCM) * 2 * frame_size);
-    }
+    int fs = 0;
+    CStreamInfo *info;
 
     for (int i=0; i<st->streams; ++i) {
         ia_logt("stream %d", i);
         valid = size[i];
         err = aacDecoder_Fill(st->handles[i], &buffer[i], &size[i], &valid);
-        if (err != AAC_DEC_OK)
-            return -1;
-
-        err = aacDecoder_DecodeFrame(st->handles[i], st->buffer, frame_size * 2, 0);
-        if (err != AAC_DEC_OK)
-            return -1;
-
-        if (i < st->coupled_streams) {
-            (*copy_channel_out)(out, st->buffer, frame_size, 2);
-            out += (frame_size * 2);
-        } else {
-            (*copy_channel_out)(out, st->buffer, frame_size, 1);
-            out += frame_size;
+        if (err != AAC_DEC_OK) {
+            return IA_ERR_INVALID_PACKET;
         }
 
+        err = aacDecoder_DecodeFrame(st->handles[i], st->buffer, MAX_BUFFER_SIZE, 0);
+        if (err == AAC_DEC_NOT_ENOUGH_BITS)
+            return IA_ERR_NOT_ENOUGH_DATA;
+        if (err != AAC_DEC_OK) {
+            ia_loge("stream %d : fail to decode", i);
+            return IA_ERR_INTERNAL;
+        }
+
+        info = aacDecoder_GetStreamInfo(st->handles[i]);
+        if (info) {
+            fs = info->frameSize;
+            if (fs > MAX_AAC_FRAME_SIZE) {
+                ia_logw("frame size %d , is larger than %u",
+                        fs, MAX_AAC_FRAME_SIZE);
+                fs = MAX_AAC_FRAME_SIZE;
+            }
+
+            ia_logt ("aac decoder %d:", i);
+            ia_logt (" > sampleRate : %d.", info->sampleRate);
+            ia_logt (" > frameSize  : %d.", info->frameSize);
+            ia_logt (" > numChannels: %d.", info->numChannels);
+            ia_logt (" > outputDelay: %u.", info->outputDelay);
+
+        } else {
+            fs = frame_size;
+        }
+
+        if (info) {
+            (*copy_channel_out)(out, st->buffer, fs, info->numChannels);
+            out += (fs * info->numChannels);
+        } else if (i < st->coupled_streams) {
+            (*copy_channel_out)(out, st->buffer, fs, 2);
+            out += (fs * 2);
+        } else {
+            (*copy_channel_out)(out, st->buffer, fs, 1);
+            out += fs;
+        }
     }
-    return frame_size;
+
+    return fs;
 }
 
-AACMSDecoder *aac_multistream_decoder_open (int streams, int coupled_streams,
+
+AACMSDecoder *aac_multistream_decoder_open (uint8_t *config, uint32_t size,
+                                            int streams, int coupled_streams,
                                             uint32_t flags, int *error)
 {
-    int i, ret = 0;
-    AACMSDecoder *st = 0;
-    HANDLE_AACDECODER *handles;
-    HANDLE_AACDECODER handle;
+    AACMSDecoder        *st = 0;
+    HANDLE_AACDECODER   *handles = 0;
+    HANDLE_AACDECODER   handle;
+
+    int     i, ret = 0;
 
     UCHAR extra_data_s[] = { 0x11, 0x88 };
     UCHAR extra_data_c[] = { 0x11, 0x90 };
@@ -104,12 +126,15 @@ AACMSDecoder *aac_multistream_decoder_open (int streams, int coupled_streams,
 
     st = (AACMSDecoder *)malloc(sizeof(AACMSDecoder));
     handles = (HANDLE_AACDECODER *)malloc(sizeof (HANDLE_AACDECODER) * streams);
+
     if (!st || !handles) {
         ia_loge("alloc fail.");
         if (error)
-            *error = 0; // TODO
+            *error = IA_ERR_ALLOC_FAIL;
         if (st)
             aac_multistream_decoder_close(st);
+        if (handles)
+            free (handles);
         return 0;
     }
     memset(st, 0, sizeof(AACMSDecoder));
@@ -123,12 +148,15 @@ AACMSDecoder *aac_multistream_decoder_open (int streams, int coupled_streams,
     for (i=0; i<st->streams; ++i) {
         handle = aacDecoder_Open(TT_MP4_RAW, 1);
         if (!handle) {
-            ret = -1;
+            ret = IA_ERR_INVALID_STATE;
             break;
         }
 
         st->handles[i] = handle;
-        if (i < coupled_streams) {
+        if (config) {
+            conf[0] = config;
+            clen = size;
+        } else if (i < coupled_streams) {
             conf[0] =  extra_data_c;
             clen = sizeof(extra_data_c);
         } else {
@@ -139,18 +167,20 @@ AACMSDecoder *aac_multistream_decoder_open (int streams, int coupled_streams,
         ret = aacDecoder_ConfigRaw (handle, conf, &clen);
         if (ret != AAC_DEC_OK) {
             ia_loge("aac config raw error code %d", ret);
-            ret = -ret;
+            ret = IA_ERR_INTERNAL;
             break;
         }
         ret = aacDecoder_SetParam (handle, AAC_CONCEAL_METHOD, 1);
         if (ret != AAC_DEC_OK) {
             ia_loge("aac set parameter error code %d", ret);
-            ret = -ret;
+            ret = IA_ERR_INTERNAL;
             break;
         }
     }
 
     if (ret < 0) {
+        if (error)
+            *error = ret;
         aac_multistream_decoder_close(st);
         st = 0;
     }
@@ -171,17 +201,16 @@ int aac_multistream_decode_list (AACMSDecoder *st,
 
 void aac_multistream_decoder_close (AACMSDecoder *st)
 {
-    if (st->handles) {
-        for(int i=0; i<st->streams; ++i) {
-            if (st->handles[i])
-                aacDecoder_Close(st->handles[i]);
+    if (st) {
+        if (st->handles) {
+            for(int i=0; i<st->streams; ++i) {
+                if (st->handles[i])
+                    aacDecoder_Close(st->handles[i]);
+            }
+            free (st->handles);
         }
-        free (st->handles);
+
+        free (st);
     }
-
-    if (st->buffer)
-        free (st->buffer);
-
-    free (st);
 }
 

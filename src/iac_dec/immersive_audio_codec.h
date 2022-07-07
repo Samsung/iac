@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#include "immersive_audio.h"
+#include "immersive_audio_defines.h"
 
 
 typedef struct IACodecContext {
@@ -30,7 +30,6 @@ typedef struct IACodec {
     uint32_t  flags;
     uint32_t  priv_size;
     IAErrCode (*init) (IACodecContext *ths);
-    IAErrCode (*init_final) (IACodecContext *ths);
     int       (*decode_list) (IACodecContext *ths,
                               uint8_t *buf[], uint32_t len[], uint32_t count,
                               void* pcm, const uint32_t frame_size);

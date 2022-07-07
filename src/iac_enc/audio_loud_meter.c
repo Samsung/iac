@@ -529,6 +529,8 @@ float _getchannelweight(AudioLoudMeter *thisp, int channel)
   case CHANNEL51:
   case CHANNEL71:
   case CHANNEL512:
+  case CHANNEL514:
+  case CHANNEL712:
   case CHANNEL714:
     if (channel == 4 || channel == 5) // #Ls, Rs
       weight = 1.41f;

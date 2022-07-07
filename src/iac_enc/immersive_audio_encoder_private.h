@@ -11,6 +11,7 @@
 #include "gaindown.h"
 #include "scalable_factor.h"
 #include "intermediate_file_context.h"
+#include "queue_plus.h"
 
 #include "ia_asc.h"
 #include "ia_heq.h"
@@ -35,14 +36,15 @@ typedef struct {
   float dmixgain_lin[MAX_CHANNELS];
   int measure_end;
 
-  unsigned char channel_layout_map[CHANNEL_LAYOUT_MAX];
-  unsigned char gaindown_flag[CHANNEL_LAYOUT_MAX]; // channel layout that have gain value.
+  unsigned char channel_layout_map[IA_CHANNEL_LAYOUT_COUNT];
+  unsigned char gaindown_flag[IA_CHANNEL_LAYOUT_COUNT]; // channel layout that have gain value.
 }LoudGainMeasure;
 
 typedef struct
 {
   int opcode;
   int(*init)(IAEncoder *st);
+  int(*control)(IAEncoder *, int, va_list);
   int(*encode)(IAEncoder *, int, int, int, int16_t *, unsigned char*);
   int(*close)(IAEncoder *st);
 } encode_creator_t;
@@ -58,6 +60,7 @@ typedef struct
 #define ENTRY_COUNT 7
 typedef struct {
   void *dep_encoder[ENTRY_COUNT];
+  void *dep_encoder2[ENTRY_COUNT];
   int channel;
   int stream_count;
   int coupled_stream_count;
@@ -74,31 +77,48 @@ typedef struct {
   unsigned char extra_data_size;
 }IA_DECODER_DCG;
 
+
+enum QUEUE_STEPS {
+  QUEUE_DMPD,
+  QUEUE_LD,
+  QUEUE_SF,
+  QUEUE_RG,
+  QUEUE_STEP_MAX
+};
 struct IAEncoder {
   uint32_t input_sample_rate;
   int frame_size;
   int preskip_size;
   int codec_id;
   int channel_groups; //1: Non-Scalable format, >1: Scalable format
-  IA_ENCODER_DCG ia_encoder_dcg[CHANNEL_LAYOUT_MAX];
+  IA_ENCODER_DCG ia_encoder_dcg[IA_CHANNEL_LAYOUT_COUNT];
+  //below interfaces are defined for encoding to get encoded frame
   int(*encode_init)(IAEncoder *st);
+  int(*encode_ctl)(IAEncoder *, int, va_list);
   int(*encode_frame)(IAEncoder *, int, int, int, int16_t *, unsigned char*);
   int(*encode_close)(IAEncoder *st);
 
-  uint32_t substream_size_flag;
+  //below interfaces are defined for encoding to get recon gain value
+  int(*encode_init2)(IAEncoder *st);
+  int(*encode_ctl2)(IAEncoder *, int, va_list);
+  int(*encode_frame2)(IAEncoder *, int, int, int, int16_t *, unsigned char*);
+  int(*encode_close2)(IAEncoder *st);
+
   uint32_t recon_gain_flag;
   uint32_t output_gain_flag;
 
-  IA_DECODER_DCG ia_decoder_dcg[CHANNEL_LAYOUT_MAX];
+  IA_DECODER_DCG ia_decoder_dcg[IA_CHANNEL_LAYOUT_COUNT];
   int(*decode_init)(IAEncoder *st);
   int(*decode_frame)(IAEncoder *, int, int, int, unsigned char*, int, int16_t *);
   int(*decode_close)(IAEncoder *st);
 
   uint32_t scalefactor_mode;
 
-  unsigned char channel_layout_map[CHANNEL_LAYOUT_MAX];
+  unsigned char channel_layout_map[IA_CHANNEL_LAYOUT_COUNT];
   unsigned char gaindown_map[MAX_CHANNELS]; // channles that have gain value.
-  DownMixer *downmixer;
+  DownMixer *downmixer_ld;
+  DownMixer *downmixer_rg;
+  DownMixer *downmixer_enc;
   LoudGainMeasure *loudgain;
   Mdhr mdhr;
   UpMixer *upmixer;
@@ -111,6 +131,13 @@ struct IAEncoder {
   char dmix_fn[255];
   FILE *fp_weight;
   char weight_fn[255];
+  int the_preskip_frame;
+  QueuePlus queue_dm[QUEUE_STEP_MAX]; //asc
+  QueuePlus queue_wg[QUEUE_STEP_MAX]; //heq
+  QueuePlus queue_m[IA_CHANNEL_LAYOUT_COUNT];
+  QueuePlus queue_r[IA_CHANNEL_LAYOUT_COUNT];
+  QueuePlus queue_d[IA_CHANNEL_LAYOUT_COUNT];
+  QueuePlus queue_rg[IA_CHANNEL_LAYOUT_COUNT];
 
   //ASC and HEQ
   IA_ASC *asc;

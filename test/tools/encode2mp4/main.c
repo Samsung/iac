@@ -43,7 +43,6 @@ void print_usage(char* argv[])
 int main(int argc, char *argv[])
 {
 
-#if 1
   if (argc < 7) {
     print_usage(argv);
     return 0;
@@ -51,14 +50,14 @@ int main(int argc, char *argv[])
 
   char *channel_layout_string[] = { "1.0.0", "2.0.0", "5.1.0", "5.1.2", "5.1.4", "7.1.0", "7.1.2", "7.1.4", "3.1.2" };
 
-  CHANNEL_LAYOUT channel_layout_in = CHANNEL_LAYOUT_MAX;
-  unsigned char channel_layout_cb[CHANNEL_LAYOUT_MAX];
+  IAChannelLayoutType channel_layout_in = IA_CHANNEL_LAYOUT_COUNT;
+  unsigned char channel_layout_cb[IA_CHANNEL_LAYOUT_COUNT];
 
   int recon_gain_flag = 1;
   int output_gain_flag = 1;
-  int codec_id = 0;
+  int codec_id = IA_CODEC_UNKNOWN;
   int is_fragment_mp4 = 0;
-  char *in_file, *out_file;
+  char *in_file = NULL, *out_file = NULL;
   int args = 1;
   int index = 0;
   while (args < argc)
@@ -69,14 +68,14 @@ int main(int argc, char *argv[])
       {
         args++;
         if (!strncmp(argv[args], "opus", 4))
-          codec_id = 0;
+          codec_id = IA_CODEC_OPUS;
         else if (!strncmp(argv[args], "aac", 3))
-          codec_id = 1;
+          codec_id = IA_CODEC_AAC;
       }
       else if (argv[args][1] == 'm')
       {
         args++;
-        for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+        for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
         {
           if (!strncmp(channel_layout_string[i], argv[args], 5))
           {
@@ -85,7 +84,7 @@ int main(int argc, char *argv[])
             break;
           }
         }
-        if (channel_layout_in == CHANNEL_LAYOUT_MAX)
+        if (channel_layout_in == IA_CHANNEL_LAYOUT_COUNT)
         {
           printf(stderr, "Please check input channel layout format\n");
           return 0;
@@ -95,7 +94,7 @@ int main(int argc, char *argv[])
         printf("Channel layout combinations: ");
         while (channel_cb_ptr < strlen(argv[args] + 6))
         {
-          for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+          for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
           {
             if (!strncmp(channel_layout_string[i], argv[args] + 6 + channel_cb_ptr, 5))
             {
@@ -108,7 +107,7 @@ int main(int argc, char *argv[])
         }
         printf("\n \n");
 
-        channel_layout_cb[index] = CHANNEL_LAYOUT_MAX;
+        channel_layout_cb[index] = IA_CHANNEL_LAYOUT_COUNT;
         if (index == 0)
         {
           recon_gain_flag = 0;
@@ -123,41 +122,6 @@ int main(int argc, char *argv[])
     }
     args++;
   }
-
-#else
-  CHANNEL_LAYOUT channel_layout_in = CHANNEL_LAYOUT_714;
-  unsigned char channel_layout_cb[CHANNEL_LAYOUT_MAX]
-    = { CHANNEL_LAYOUT_200 ,CHANNEL_LAYOUT_312  ,CHANNEL_LAYOUT_512,  CHANNEL_LAYOUT_MAX , };
-
-  //unsigned char channel_layout_cb[CHANNEL_LAYOUT_MAX]
-  //  = { CHANNEL_LAYOUT_200 ,CHANNEL_LAYOUT_510 ,CHANNEL_LAYOUT_512 ,CHANNEL_LAYOUT_MAX , };
-
-  //unsigned char channel_layout_cb[CHANNEL_LAYOUT_MAX]
-  //  = { CHANNEL_LAYOUT_200 ,CHANNEL_LAYOUT_510 ,CHANNEL_LAYOUT_710 ,CHANNEL_LAYOUT_MAX , };
-  //char *in_file = "sine1k.wav";
-  char *in_file = "replace_audio.wav";
-  int recon_gain_flag = 1;
-  int output_gain_flag = 1;
-  int is_fragment_mp4 = 0;
-  int codec_id = IA_DEP_CODEC_OPUS;
-
-  char out_file[256];
-  char *ptr;
-  char prefix[256] = { 0 };
-  ptr = strrchr(in_file, '.');
-  if (ptr == 0) {
-    if (strlen(in_file)<256)
-      strncpy(prefix, in_file, strlen(in_file));
-  }
-  else {
-    if (ptr - in_file<256)
-      strncpy(prefix, in_file, ptr - in_file);
-  }
-  sprintf(out_file, "%s.mp4", prefix);
-
-#endif
-
-
 
   MOVMuxContext *movm;
   if ((movm = mov_write_open(out_file)) == NULL)
@@ -193,7 +157,7 @@ int main(int argc, char *argv[])
   in_wavf = wav_read_open(in_wav);
   if (!in_wavf)
   {
-    fprintf(stderr, "Could not open input file %s\n");
+    fprintf(stderr, "Could not open input file %s\n", in_wav);
     goto failure;
   }
   int size;
@@ -208,9 +172,9 @@ int main(int argc, char *argv[])
     format, channels, sample_rate, bits_per_sample, data_length);
 
   int chunk_size = 0;
-  if(codec_id == IA_DEP_CODEC_OPUS)
+  if(codec_id == IA_CODEC_OPUS)
     chunk_size = 960;
-  else if (codec_id == IA_DEP_CODEC_AAC)
+  else if (codec_id == IA_CODEC_AAC)
     chunk_size = 1024;
 
   int bsize_of_samples = chunk_size * channels * bits_per_sample / 8;
@@ -227,7 +191,7 @@ int main(int argc, char *argv[])
   IAEncoder *ia_enc = immersive_audio_encoder_create(sample_rate,
     channel_layout_in, // orignal channels
     channel_layout_cb,  // channel layout combination
-    codec_id,  //0:opus, 1:aac
+    codec_id,  //1:opus, 2:aac
     &error);
 
   /**
@@ -235,9 +199,6 @@ int main(int argc, char *argv[])
   * */
   immersive_audio_encoder_ctl(ia_enc, IA_SET_RECON_GAIN_FLAG((int)(recon_gain_flag)));
   immersive_audio_encoder_ctl(ia_enc, IA_SET_OUTPUT_GAIN_FLAG((int)output_gain_flag));
-  //immersive_audio_encoder_ctl(ia_enc, IA_SET_SUBSTREAM_SIZE_FLAG(0));
-  immersive_audio_encoder_ctl(ia_enc, IA_SET_SCALE_FACTOR_MODE((int)(2)));
-  //immersive_audio_encoder_ctl(ia_enc, IA_SET_TEMP_DOWNMIX_FILE, in_file); //temp code. Need to remove in the future
 
   /**
   * 3. ASC and HEQ pre-process.
@@ -266,7 +227,6 @@ int main(int argc, char *argv[])
   /**
   * 4. loudness and gain pre-process.
   * */
-  immersive_audio_encoder_loudness_gain_start(ia_enc);
   in_wavf = wav_read_open(in_wav);
   int pcm_frames = wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
   ProgressBar bar;
@@ -290,19 +250,24 @@ int main(int argc, char *argv[])
   }
   bar.endBar(&bar, 100);
 
-  immersive_audio_encoder_loudness_gain_stop(ia_enc);
-
-  /**
-  * 5. gaindown and calculate scalable factor.
-  * */
-  immersive_audio_encoder_gaindown(ia_enc);
-  immersive_audio_encoder_scalefactor(ia_enc);
+  immersive_audio_encoder_loudness_gain_end(ia_enc);
 
   if (in_wavf)
     wav_read_close(in_wavf);
+  /**
+  * 5. calculate recon gain.
+  * */
+  in_wavf = wav_read_open(in_wav);
+  pcm_frames = wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
 
+  while (pcm_frames)
+  {
+    immersive_audio_encoder_recon_gain(ia_enc, wav_samples, chunk_size);
+    pcm_frames = wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
+  }
 
-
+  if (in_wavf)
+    wav_read_close(in_wavf);
 /////////////////////////audio trak setting, start//////////////////////////////////////////////
 
   //audio trak
@@ -315,7 +280,7 @@ int main(int argc, char *argv[])
   //audio_t[0].aiac.codec_id = 0;
   //audio_t[0].aiac.sub_bitstream_count = sub_bitstream_count_map[channel_layout_in]; //
   // codec specific info
-  if (movm->codec_id == IA_DEP_CODEC_OPUS)
+  if (movm->codec_id == IA_CODEC_OPUS)
   {
     OpusHeader *header = (OpusHeader *)audio_t[0].aiac.csc;
     header->output_channel_count = 2;
@@ -324,7 +289,7 @@ int main(int argc, char *argv[])
     header->output_gain = 0;
     header->channel_mapping_family = 0;
   }
-  else if (movm->codec_id == IA_DEP_CODEC_AAC)
+  else if (movm->codec_id == IA_CODEC_AAC)
   {
     AacHeader *header = (AacHeader *)audio_t[0].aiac.csc;
     header->sample_rate = 48000;

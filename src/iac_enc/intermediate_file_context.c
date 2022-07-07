@@ -8,10 +8,10 @@ void ia_intermediate_file_writeopen(IAEncoder *st, int file_type, const char* fi
   case 0:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         st->fc.f_downmix_m_wav[map].file = wav_write_open3(downmix_m_wav[map], WAVE_FORMAT_FLOAT2, st->input_sample_rate, 16 * 2, channel_map714[map]);
         st->fc.f_downmix_m_wav[map].info.channels = channel_map714[map];
@@ -19,10 +19,10 @@ void ia_intermediate_file_writeopen(IAEncoder *st, int file_type, const char* fi
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (!strcmp(file_name, downmix_m_wav[map]))
         {
@@ -37,10 +37,10 @@ void ia_intermediate_file_writeopen(IAEncoder *st, int file_type, const char* fi
     if (!strcmp(file_name, "ALL"))
     {
       int pre_ch = 0;
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         st->fc.f_downmix_s_wav[map].file = wav_write_open3(downmix_s_wav[map], WAVE_FORMAT_FLOAT2, st->input_sample_rate, 16 * 2, channel_map714[map] - pre_ch);
         st->fc.f_downmix_s_wav[map].info.channels = channel_map714[map] - pre_ch;
@@ -51,10 +51,10 @@ void ia_intermediate_file_writeopen(IAEncoder *st, int file_type, const char* fi
     else
     {
       int pre_ch = 0;
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (!strcmp(file_name, downmix_s_wav[map]))
         {
@@ -70,10 +70,10 @@ void ia_intermediate_file_writeopen(IAEncoder *st, int file_type, const char* fi
     if (!strcmp(file_name, "ALL"))
     {
       int pre_ch = 0;
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         st->fc.f_gaindown_wav[map].file = wav_write_open3(gaindown_wav[map], WAVE_FORMAT_PCM2, st->input_sample_rate, 16, channel_map714[map] - pre_ch);
         st->fc.f_gaindown_wav[map].info.channels = channel_map714[map] - pre_ch;
@@ -83,10 +83,10 @@ void ia_intermediate_file_writeopen(IAEncoder *st, int file_type, const char* fi
     else
     {
       int pre_ch = 0;
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (!strcmp(file_name, gaindown_wav[map]))
         {
@@ -101,10 +101,10 @@ void ia_intermediate_file_writeopen(IAEncoder *st, int file_type, const char* fi
   case 3:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         st->fc.f_upmix_wav[map].file = wav_write_open3(upmix_wav[map], WAVE_FORMAT_FLOAT2, st->input_sample_rate, 16 * 2, channel_map714[map]);
         st->fc.f_upmix_wav[map].info.channels = channel_map714[map];
@@ -112,10 +112,10 @@ void ia_intermediate_file_writeopen(IAEncoder *st, int file_type, const char* fi
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (!strcmp(file_name, upmix_wav[map]))
         {
@@ -130,10 +130,10 @@ void ia_intermediate_file_writeopen(IAEncoder *st, int file_type, const char* fi
     if (!strcmp(file_name, "ALL"))
     {
       int pre_ch = 0;
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         st->fc.f_decoded_wav[map].file = wav_write_open3(decoded_wav[map], WAVE_FORMAT_PCM2, st->input_sample_rate, 16, channel_map714[map] - pre_ch);
         st->fc.f_decoded_wav[map].info.channels = channel_map714[map] - pre_ch;
@@ -143,10 +143,10 @@ void ia_intermediate_file_writeopen(IAEncoder *st, int file_type, const char* fi
     else
     {
       int pre_ch = 0;
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (!strcmp(file_name, decoded_wav[map]))
         {
@@ -161,20 +161,20 @@ void ia_intermediate_file_writeopen(IAEncoder *st, int file_type, const char* fi
   case 5:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         st->fc.f_encoded_ia[map].file = (void*)fopen(encoded_ia[map], "wb");
       }
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (!strcmp(file_name, encoded_ia[map]))
         {
@@ -187,20 +187,20 @@ void ia_intermediate_file_writeopen(IAEncoder *st, int file_type, const char* fi
   case 6:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         st->fc.f_scalefactor_cfg[map].file = (void*)fopen(scalefactor_cfg[map], "wb");
       }
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (!strcmp(file_name, scalefactor_cfg[map]))
         {
@@ -224,10 +224,10 @@ void ia_intermediate_file_readopen(IAEncoder *st, int file_type, const char* fil
   case 0:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         st->fc.f_downmix_m_wav[map].file = wav_read_open2(downmix_m_wav[map]);
         wav_get_header2(st->fc.f_downmix_m_wav[map].file, NULL, &(st->fc.f_downmix_m_wav[map].info.channels), NULL, &(st->fc.f_downmix_m_wav[map].info.bits_per_sample), NULL);
@@ -235,10 +235,10 @@ void ia_intermediate_file_readopen(IAEncoder *st, int file_type, const char* fil
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (!strcmp(file_name, downmix_m_wav[map]))
         {
@@ -252,10 +252,10 @@ void ia_intermediate_file_readopen(IAEncoder *st, int file_type, const char* fil
   case 1:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         st->fc.f_downmix_s_wav[map].file = wav_read_open2(downmix_s_wav[map]);
         wav_get_header2(st->fc.f_downmix_s_wav[map].file, NULL, &(st->fc.f_downmix_s_wav[map].info.channels), NULL, &(st->fc.f_downmix_s_wav[map].info.bits_per_sample), NULL);
@@ -263,10 +263,10 @@ void ia_intermediate_file_readopen(IAEncoder *st, int file_type, const char* fil
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (!strcmp(file_name, downmix_s_wav[map]))
         {
@@ -280,10 +280,10 @@ void ia_intermediate_file_readopen(IAEncoder *st, int file_type, const char* fil
   case 2:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         st->fc.f_gaindown_wav[map].file = wav_read_open2(gaindown_wav[map]);
         wav_get_header2(st->fc.f_gaindown_wav[map].file, NULL, &(st->fc.f_gaindown_wav[map].info.channels), NULL, &(st->fc.f_gaindown_wav[map].info.bits_per_sample), NULL);
@@ -291,10 +291,10 @@ void ia_intermediate_file_readopen(IAEncoder *st, int file_type, const char* fil
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (!strcmp(file_name, gaindown_wav[map]))
         {
@@ -308,10 +308,10 @@ void ia_intermediate_file_readopen(IAEncoder *st, int file_type, const char* fil
   case 3:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         st->fc.f_upmix_wav[map].file = wav_read_open2(upmix_wav[map]);
         wav_get_header2(st->fc.f_upmix_wav[map].file, NULL, &(st->fc.f_upmix_wav[map].info.channels), NULL, &(st->fc.f_upmix_wav[map].info.bits_per_sample), NULL);
@@ -319,10 +319,10 @@ void ia_intermediate_file_readopen(IAEncoder *st, int file_type, const char* fil
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (!strcmp(file_name, upmix_wav[map]))
         {
@@ -336,10 +336,10 @@ void ia_intermediate_file_readopen(IAEncoder *st, int file_type, const char* fil
   case 4:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         st->fc.f_decoded_wav[map].file = wav_read_open2(decoded_wav[map]);
         wav_get_header2(st->fc.f_decoded_wav[map].file, NULL, &(st->fc.f_decoded_wav[map].info.channels), NULL, &(st->fc.f_decoded_wav[map].info.bits_per_sample), NULL);
@@ -347,10 +347,10 @@ void ia_intermediate_file_readopen(IAEncoder *st, int file_type, const char* fil
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (!strcmp(file_name, decoded_wav[map]))
         {
@@ -364,20 +364,20 @@ void ia_intermediate_file_readopen(IAEncoder *st, int file_type, const char* fil
   case 5:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         st->fc.f_encoded_ia[map].file = (void*)fopen(encoded_ia[map], "rb");
       }
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (!strcmp(file_name, encoded_ia[map]))
         {
@@ -390,20 +390,20 @@ void ia_intermediate_file_readopen(IAEncoder *st, int file_type, const char* fil
   case 6:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         st->fc.f_scalefactor_cfg[map].file = (void*)fopen(scalefactor_cfg[map], "rb");
       }
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (!strcmp(file_name, scalefactor_cfg[map]))
         {
@@ -424,7 +424,7 @@ void ia_intermediate_file_write(IAEncoder *st, int file_type, const char* file_n
   switch (file_type)
   {
   case 0:
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+    for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
     {
       if (!strcmp(file_name, downmix_m_wav[i]))
       {
@@ -435,7 +435,7 @@ void ia_intermediate_file_write(IAEncoder *st, int file_type, const char* file_n
     }
     break;
   case 1:
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+    for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
     {
       if (!strcmp(file_name, downmix_s_wav[i]))
       {
@@ -446,7 +446,7 @@ void ia_intermediate_file_write(IAEncoder *st, int file_type, const char* file_n
     }
     break;
   case 2:
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+    for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
     {
       if (!strcmp(file_name, gaindown_wav[i]))
       {
@@ -457,7 +457,7 @@ void ia_intermediate_file_write(IAEncoder *st, int file_type, const char* file_n
     }
     break;
   case 3:
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+    for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
     {
       if (!strcmp(file_name, upmix_wav[i]))
       {
@@ -468,7 +468,7 @@ void ia_intermediate_file_write(IAEncoder *st, int file_type, const char* file_n
     }
     break;
   case 4:
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+    for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
     {
       if (!strcmp(file_name, decoded_wav[i]))
       {
@@ -479,7 +479,7 @@ void ia_intermediate_file_write(IAEncoder *st, int file_type, const char* file_n
     }
     break;
   case 5:
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+    for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
     {
       if (!strcmp(file_name, encoded_ia[i]))
       {
@@ -491,7 +491,7 @@ void ia_intermediate_file_write(IAEncoder *st, int file_type, const char* file_n
     }
     break;
   case 6:
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+    for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
     {
       if (!strcmp(file_name, scalefactor_cfg[i]))
       {
@@ -512,7 +512,7 @@ int ia_intermediate_file_read(IAEncoder *st, int file_type, const char* file_nam
   switch (file_type)
   {
   case 0:
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+    for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
     {
       if (!strcmp(file_name, downmix_m_wav[i]))
       {
@@ -523,7 +523,7 @@ int ia_intermediate_file_read(IAEncoder *st, int file_type, const char* file_nam
     }
     break;
   case 1:
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+    for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
     {
       if (!strcmp(file_name, downmix_s_wav[i]))
       {
@@ -534,7 +534,7 @@ int ia_intermediate_file_read(IAEncoder *st, int file_type, const char* file_nam
     }
     break;
   case 2:
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+    for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
     {
       if (!strcmp(file_name, gaindown_wav[i]))
       {
@@ -545,7 +545,7 @@ int ia_intermediate_file_read(IAEncoder *st, int file_type, const char* file_nam
     }
     break;
   case 3:
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+    for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
     {
       if (!strcmp(file_name, upmix_wav[i]))
       {
@@ -556,7 +556,7 @@ int ia_intermediate_file_read(IAEncoder *st, int file_type, const char* file_nam
     }
     break;
   case 4:
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+    for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
     {
       if (!strcmp(file_name, decoded_wav[i]))
       {
@@ -567,7 +567,7 @@ int ia_intermediate_file_read(IAEncoder *st, int file_type, const char* file_nam
     }
     break;
   case 5:
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+    for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
     {
       if (!strcmp(file_name, encoded_ia[i]))
       {
@@ -577,7 +577,7 @@ int ia_intermediate_file_read(IAEncoder *st, int file_type, const char* file_nam
     }
     break;
   case 6:
-    for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+    for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
     {
       if (!strcmp(file_name, scalefactor_cfg[i]))
       {
@@ -601,10 +601,10 @@ void ia_intermediate_file_writeclose(IAEncoder *st, int file_type, const char* f
   case 0:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (st->fc.f_downmix_m_wav[map].file)
         {
@@ -616,7 +616,7 @@ void ia_intermediate_file_writeclose(IAEncoder *st, int file_type, const char* f
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         if (!strcmp(file_name, downmix_m_wav[i]))
         {
@@ -633,10 +633,10 @@ void ia_intermediate_file_writeclose(IAEncoder *st, int file_type, const char* f
   case 1:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (st->fc.f_downmix_s_wav[map].file)
         {
@@ -647,7 +647,7 @@ void ia_intermediate_file_writeclose(IAEncoder *st, int file_type, const char* f
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         if (!strcmp(file_name, downmix_s_wav[i]))
         {
@@ -664,10 +664,10 @@ void ia_intermediate_file_writeclose(IAEncoder *st, int file_type, const char* f
   case 2:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (st->fc.f_gaindown_wav[map].file)
         {
@@ -678,7 +678,7 @@ void ia_intermediate_file_writeclose(IAEncoder *st, int file_type, const char* f
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         if (!strcmp(file_name, gaindown_wav[i]))
         {
@@ -695,10 +695,10 @@ void ia_intermediate_file_writeclose(IAEncoder *st, int file_type, const char* f
   case 3:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (st->fc.f_upmix_wav[map].file)
         {
@@ -709,7 +709,7 @@ void ia_intermediate_file_writeclose(IAEncoder *st, int file_type, const char* f
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         if (!strcmp(file_name, upmix_wav[i]))
         {
@@ -726,10 +726,10 @@ void ia_intermediate_file_writeclose(IAEncoder *st, int file_type, const char* f
   case 4:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (st->fc.f_decoded_wav[map].file)
         {
@@ -740,7 +740,7 @@ void ia_intermediate_file_writeclose(IAEncoder *st, int file_type, const char* f
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         if (!strcmp(file_name, decoded_wav[i]))
         {
@@ -757,10 +757,10 @@ void ia_intermediate_file_writeclose(IAEncoder *st, int file_type, const char* f
   case 5:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (st->fc.f_encoded_ia[map].file)
         {
@@ -771,7 +771,7 @@ void ia_intermediate_file_writeclose(IAEncoder *st, int file_type, const char* f
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         if (!strcmp(file_name, encoded_ia[i]))
         {
@@ -788,10 +788,10 @@ void ia_intermediate_file_writeclose(IAEncoder *st, int file_type, const char* f
   case 6:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (st->fc.f_scalefactor_cfg[map].file)
         {
@@ -802,7 +802,7 @@ void ia_intermediate_file_writeclose(IAEncoder *st, int file_type, const char* f
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         if (!strcmp(file_name, scalefactor_cfg[i]))
         {
@@ -830,10 +830,10 @@ void ia_intermediate_file_readclose(IAEncoder *st, int file_type, const char* fi
   case 0:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (st->fc.f_downmix_m_wav[map].file)
         {
@@ -844,7 +844,7 @@ void ia_intermediate_file_readclose(IAEncoder *st, int file_type, const char* fi
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         if (!strcmp(file_name, downmix_m_wav[i]))
         {
@@ -861,10 +861,10 @@ void ia_intermediate_file_readclose(IAEncoder *st, int file_type, const char* fi
   case 1:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (st->fc.f_downmix_s_wav[map].file)
         {
@@ -875,7 +875,7 @@ void ia_intermediate_file_readclose(IAEncoder *st, int file_type, const char* fi
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         if (!strcmp(file_name, downmix_s_wav[i]))
         {
@@ -892,10 +892,10 @@ void ia_intermediate_file_readclose(IAEncoder *st, int file_type, const char* fi
   case 2:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (st->fc.f_gaindown_wav[map].file)
         {
@@ -907,7 +907,7 @@ void ia_intermediate_file_readclose(IAEncoder *st, int file_type, const char* fi
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         if (!strcmp(file_name, gaindown_wav[i]))
         {
@@ -924,10 +924,10 @@ void ia_intermediate_file_readclose(IAEncoder *st, int file_type, const char* fi
   case 3:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (st->fc.f_upmix_wav[map].file)
         {
@@ -938,7 +938,7 @@ void ia_intermediate_file_readclose(IAEncoder *st, int file_type, const char* fi
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         if (!strcmp(file_name, upmix_wav[i]))
         {
@@ -955,10 +955,10 @@ void ia_intermediate_file_readclose(IAEncoder *st, int file_type, const char* fi
   case 4:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (st->fc.f_decoded_wav[map].file)
         {
@@ -969,7 +969,7 @@ void ia_intermediate_file_readclose(IAEncoder *st, int file_type, const char* fi
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         if (!strcmp(file_name, decoded_wav[i]))
         {
@@ -986,10 +986,10 @@ void ia_intermediate_file_readclose(IAEncoder *st, int file_type, const char* fi
   case 5:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (st->fc.f_encoded_ia[map].file)
         {
@@ -1000,7 +1000,7 @@ void ia_intermediate_file_readclose(IAEncoder *st, int file_type, const char* fi
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         if (!strcmp(file_name, encoded_ia[i]))
         {
@@ -1017,10 +1017,10 @@ void ia_intermediate_file_readclose(IAEncoder *st, int file_type, const char* fi
   case 6:
     if (!strcmp(file_name, "ALL"))
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         unsigned char map = st->channel_layout_map[i];
-        if (map == CHANNEL_LAYOUT_MAX)
+        if (map == IA_CHANNEL_LAYOUT_COUNT)
           break;
         if (st->fc.f_scalefactor_cfg[map].file)
         {
@@ -1031,7 +1031,7 @@ void ia_intermediate_file_readclose(IAEncoder *st, int file_type, const char* fi
     }
     else
     {
-      for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++)
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         if (!strcmp(file_name, scalefactor_cfg[i]))
         {

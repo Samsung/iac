@@ -86,31 +86,31 @@ int get_surround_channels(int lay_out)
   int ret;
   switch (lay_out)
   {
-  case FORMAT_CHANNEL_LAYOUT_100:
+  case CHANNEL_LAYOUT_100:
     ret = 1;
     break;
-  case FORMAT_CHANNEL_LAYOUT_200:
+  case CHANNEL_LAYOUT_200:
     ret = 2;
     break;
-  case FORMAT_CHANNEL_LAYOUT_510:
+  case CHANNEL_LAYOUT_510:
     ret = 5;
     break;
-  case FORMAT_CHANNEL_LAYOUT_512:
+  case CHANNEL_LAYOUT_512:
     ret = 5;
     break;
-  case FORMAT_CHANNEL_LAYOUT_514:
+  case CHANNEL_LAYOUT_514:
     ret = 5;
     break;
-  case FORMAT_CHANNEL_LAYOUT_710:
+  case CHANNEL_LAYOUT_710:
     ret = 7;
     break;
-  case FORMAT_CHANNEL_LAYOUT_712:
+  case CHANNEL_LAYOUT_712:
     ret = 7;
     break;
-  case FORMAT_CHANNEL_LAYOUT_714:
+  case CHANNEL_LAYOUT_714:
     ret = 7;
     break;
-  case FORMAT_CHANNEL_LAYOUT_312:
+  case CHANNEL_LAYOUT_312:
     ret = 3;
     break;
   default:
@@ -125,31 +125,31 @@ int get_height_channels(int lay_out)
   int ret;
   switch (lay_out)
   {
-  case FORMAT_CHANNEL_LAYOUT_100:
+  case CHANNEL_LAYOUT_100:
     ret = 0;
     break;
-  case FORMAT_CHANNEL_LAYOUT_200:
+  case CHANNEL_LAYOUT_200:
     ret = 0;
     break;
-  case FORMAT_CHANNEL_LAYOUT_510:
+  case CHANNEL_LAYOUT_510:
     ret = 0;
     break;
-  case FORMAT_CHANNEL_LAYOUT_512:
+  case CHANNEL_LAYOUT_512:
     ret = 2;
     break;
-  case FORMAT_CHANNEL_LAYOUT_514:
+  case CHANNEL_LAYOUT_514:
     ret = 4;
     break;
-  case FORMAT_CHANNEL_LAYOUT_710:
+  case CHANNEL_LAYOUT_710:
     ret = 0;
     break;
-  case FORMAT_CHANNEL_LAYOUT_712:
+  case CHANNEL_LAYOUT_712:
     ret = 2;
     break;
-  case FORMAT_CHANNEL_LAYOUT_714:
+  case CHANNEL_LAYOUT_714:
     ret = 4;
     break;
-  case FORMAT_CHANNEL_LAYOUT_312:
+  case CHANNEL_LAYOUT_312:
     ret = 2;
     break;
   default:
@@ -164,31 +164,31 @@ int get_lfe_channels(int lay_out)
   int ret;
   switch (lay_out)
   {
-  case FORMAT_CHANNEL_LAYOUT_100:
+  case CHANNEL_LAYOUT_100:
     ret = 0;
     break;
-  case FORMAT_CHANNEL_LAYOUT_200:
+  case CHANNEL_LAYOUT_200:
     ret = 0;
     break;
-  case FORMAT_CHANNEL_LAYOUT_510:
+  case CHANNEL_LAYOUT_510:
     ret = 1;
     break;
-  case FORMAT_CHANNEL_LAYOUT_512:
+  case CHANNEL_LAYOUT_512:
     ret = 1;
     break;
-  case FORMAT_CHANNEL_LAYOUT_514:
+  case CHANNEL_LAYOUT_514:
     ret = 1;
     break;
-  case FORMAT_CHANNEL_LAYOUT_710:
+  case CHANNEL_LAYOUT_710:
     ret = 1;
     break;
-  case FORMAT_CHANNEL_LAYOUT_712:
+  case CHANNEL_LAYOUT_712:
     ret = 1;
     break;
-  case FORMAT_CHANNEL_LAYOUT_714:
+  case CHANNEL_LAYOUT_714:
     ret = 1;
     break;
-  case FORMAT_CHANNEL_LAYOUT_312:
+  case CHANNEL_LAYOUT_312:
     ret = 1;
     break;
   default:

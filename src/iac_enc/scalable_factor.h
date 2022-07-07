@@ -10,23 +10,9 @@
 #include "metadata_write.h"
 #include "audio_defines.h"
 #include "opus_types.h"
-
+#include "scalable_format.h"
 
 #define SF_LEN 16
-
-
-typedef enum {
-  CHANNEL_LAYER_MDHR_100, //1.0.0
-  CHANNEL_LAYER_MDHR_200, //2.0.0 
-  CHANNEL_LAYER_MDHR_510, //5.1.0
-  CHANNEL_LAYER_MDHR_512, //5.1.2
-  CHANNEL_LAYER_MDHR_514, //5.1.4
-  CHANNEL_LAYER_MDHR_710, //7.1.0
-  CHANNEL_LAYER_MDHR_712, //7.1.2
-  CHANNEL_LAYER_MDHR_714, //7.1.4
-  CHANNEL_LAYER_MDHR_312, //3.1.2
-  CHANNEL_LAYER_MDHR_MAX
-}ChannelLayerMdhr;
 
 
 typedef struct {
@@ -59,14 +45,14 @@ typedef struct {
 }InScalableBuffer;
 
 typedef struct {
-  float spl_avg_data[CHANNEL_LAYER_MDHR_MAX][12];
-  unsigned char channel_layout_map[CHANNEL_LAYER_MDHR_MAX];
+  float spl_avg_data[CHANNEL_LAYOUT_MAX][12];
+  unsigned char channel_layout_map[CHANNEL_LAYOUT_MAX];
   int scalefactor_mode;
   int frame_size;
 }ScalableFactor;
 int scalablefactor_init();
 ScalableFactor * scalablefactor_create(const unsigned char *channel_layout_map, int frame_size);
-void cal_scalablefactor(Mdhr *mdhr, InScalableBuffer inbuffer, int scalefactor, ChannelLayerMdhr clayer);
-void cal_scalablefactor2(ScalableFactor *sf, Mdhr *mdhr, InScalableBuffer inbuffer, ChannelLayerMdhr clayer, ChannelLayerMdhr llayer);
+void cal_scalablefactor(Mdhr *mdhr, InScalableBuffer inbuffer, int scalefactor, CHANNEL_LAYOUT_TYPE clayer);
+void cal_scalablefactor2(ScalableFactor *sf, Mdhr *mdhr, InScalableBuffer inbuffer, CHANNEL_LAYOUT_TYPE clayer, CHANNEL_LAYOUT_TYPE llayer);
 void scalablefactor_destroy(ScalableFactor *sf);
 #endif

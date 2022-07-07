@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.1)
 
 set(SRC flitflit.cpp)
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --std=c++11") 
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --std=c++11 -Wno-ignored-attributes") 
 
 add_library(decimate ${SRC})
 target_compile_options(decimate PRIVATE "-fPIC")
