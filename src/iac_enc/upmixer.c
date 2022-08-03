@@ -141,6 +141,7 @@ static int upmix_s1to2(UpMixer *um, float *w_x)
   um->ch_data[enc_channel_l2] = um->buffer[enc_channel_mixed_s2_l];
   um->ch_data[enc_channel_r2] = um->buffer[enc_channel_mixed_s2_r];
   um->scalable_map[CHANNEL_LAYOUT_200][enc_channel_r2] = 1;
+  um->relevant_mixed_cl[CHANNEL_LAYOUT_100][enc_channel_mono] = 1;
 
   return 0;
 }
@@ -160,6 +161,9 @@ static int upmix_s2to3(UpMixer *um, float *w_x)
 
   um->scalable_map[CHANNEL_LAYOUT_312][enc_channel_l3] = 1;
   um->scalable_map[CHANNEL_LAYOUT_312][enc_channel_r3] = 1;
+
+  um->relevant_mixed_cl[CHANNEL_LAYOUT_200][enc_channel_l2] = 1;
+  um->relevant_mixed_cl[CHANNEL_LAYOUT_200][enc_channel_r2] = 1;
 
   return 0;
 }
@@ -211,6 +215,9 @@ static int upmix_s3to5(UpMixer *um, float *w_x)
   um->scalable_map[CHANNEL_LAYOUT_514][enc_channel_sl5] = 1;
   um->scalable_map[CHANNEL_LAYOUT_514][enc_channel_sr5] = 1;
 
+  um->relevant_mixed_cl[CHANNEL_LAYOUT_312][enc_channel_l3] = 1;
+  um->relevant_mixed_cl[CHANNEL_LAYOUT_312][enc_channel_r3] = 1;
+
   return 0;
 }
 
@@ -257,6 +264,13 @@ static int upmix_s5to7(UpMixer *um, float *w_x)
   um->scalable_map[CHANNEL_LAYOUT_714][enc_channel_bl7] = 1;
   um->scalable_map[CHANNEL_LAYOUT_714][enc_channel_br7] = 1;
 
+  um->relevant_mixed_cl[CHANNEL_LAYOUT_510][enc_channel_sl5] = 1;
+  um->relevant_mixed_cl[CHANNEL_LAYOUT_510][enc_channel_sr5] = 1;
+  um->relevant_mixed_cl[CHANNEL_LAYOUT_512][enc_channel_sl5] = 1;
+  um->relevant_mixed_cl[CHANNEL_LAYOUT_512][enc_channel_sr5] = 1;
+  um->relevant_mixed_cl[CHANNEL_LAYOUT_514][enc_channel_sl5] = 1;
+  um->relevant_mixed_cl[CHANNEL_LAYOUT_514][enc_channel_sr5] = 1;
+
   return 0;
 }
 
@@ -299,6 +313,9 @@ static int upmix_hf2toh2(UpMixer *um, float *w_x)
   um->scalable_map[CHANNEL_LAYOUT_712][enc_channel_hl] = 1;
   um->scalable_map[CHANNEL_LAYOUT_712][enc_channel_hr] = 1;
 
+  um->relevant_mixed_cl[CHANNEL_LAYOUT_312][enc_channel_tl] = 1;
+  um->relevant_mixed_cl[CHANNEL_LAYOUT_312][enc_channel_tr] = 1;
+
   return 0;
 }
 
@@ -338,6 +355,11 @@ static int upmix_h2toh4(UpMixer *um, float *w_x)
   um->scalable_map[CHANNEL_LAYOUT_514][enc_channel_hbr] = 1;
   um->scalable_map[CHANNEL_LAYOUT_714][enc_channel_hbl] = 1;
   um->scalable_map[CHANNEL_LAYOUT_714][enc_channel_hbr] = 1;
+
+  um->relevant_mixed_cl[CHANNEL_LAYOUT_512][enc_channel_hl] = 1;
+  um->relevant_mixed_cl[CHANNEL_LAYOUT_512][enc_channel_hr] = 1;
+  um->relevant_mixed_cl[CHANNEL_LAYOUT_712][enc_channel_hl] = 1;
+  um->relevant_mixed_cl[CHANNEL_LAYOUT_712][enc_channel_hr] = 1;
 
   return 0;
 }
@@ -714,6 +736,8 @@ UpMixer * upmix_create(int recon_gain_flag, const unsigned char *channel_layout_
   um->startWin = (float *)malloc(um->frame_size * sizeof(float));
   um->stopWin = (float *)malloc(um->frame_size * sizeof(float));
 
+  if(!um->hanning||!um->startWin|!um->stopWin)goto FAILED;
+
   int frameLen = um->frame_size / 8;
   float den = (float)(frameLen - 1);
   //create hanning window
@@ -797,6 +821,12 @@ FAILED:
     if(um->upmix[layout])
 		free(um->upmix[layout]);
   }
+  if(um->hanning)
+    free(um->hanning);
+  if(um->startWin)
+    free(um->startWin);
+  if(um->stopWin)
+    free(um->stopWin);
   for (int i = 0; i < enc_channel_mixed_cnt; i++)
   {
     if(um->buffer[i])

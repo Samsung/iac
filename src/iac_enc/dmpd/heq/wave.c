@@ -144,12 +144,15 @@ int ia_heq_process(IA_HEQ *heq, int16_t *input, int size)
   int ret = 0;
 
   unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
-  double dspInBuf_[12][CHUNK_LEN];
-  double hgtArray_[4 * CHUNK_LEN] = { 0 };
-  double totalArray_[10 * CHUNK_LEN] = { 0 };
-  double srdArray_[6 * CHUNK_LEN] = { 0 };
-  double short_win = (short_duration * heq->frame_rate) / CHUNK_LEN;
-  double long_win = (long_duration *  heq->frame_rate) / CHUNK_LEN;
+  double dspInBuf_[12][IA_FRAME_MAXSIZE];
+  double hgtArray_[4 * IA_FRAME_MAXSIZE] = { 0 };
+  double totalArray_[10 * IA_FRAME_MAXSIZE] = { 0 };
+  double srdArray_[6 * IA_FRAME_MAXSIZE] = { 0 };
+  int den_factor = IA_FRAME_MAXSIZE;
+  if (size > 0)
+    den_factor = size;
+  double short_win = (short_duration * heq->frame_rate) / den_factor;
+  double long_win = (long_duration *  heq->frame_rate) / den_factor;
 #ifdef USE_QUEUE_METHOD
   if (heq->pq == NULL)
     return 0;
@@ -163,7 +166,7 @@ int ia_heq_process(IA_HEQ *heq, int16_t *input, int size)
 
   for (int i = 0; i < nch; i++)
   {
-    for (int j = 0; j < CHUNK_LEN; j++)
+    for (int j = 0; j < size; j++)
     {
       dspInBuf_[i][j] = (double)(input[i + j*nch]);
     }
@@ -171,24 +174,24 @@ int ia_heq_process(IA_HEQ *heq, int16_t *input, int size)
   //createHgtArray
   for (int i = 0; i<h_length; i++)
   {
-    for (int j = 0; j<CHUNK_LEN; j++) {
-      hgtArray_[i*CHUNK_LEN + j] = dspInBuf_[i + nch - h_length][j];
+    for (int j = 0; j<size; j++) {
+      hgtArray_[i*size + j] = dspInBuf_[i + nch - h_length][j];
     }
   }
-  heq->dhe.dspOutBuf_rmse_hgt_short = rmse_ema_t2(hgtArray_, h_length*CHUNK_LEN, heq->dhe.dspOutBuf_rmse_hgt_short, short_win);
+  heq->dhe.dspOutBuf_rmse_hgt_short = rmse_ema_t2(hgtArray_, h_length*size, heq->dhe.dspOutBuf_rmse_hgt_short, short_win);
   //createTotalArray
   int loop = 0;
   for (int i = 0; i<nch; i++)
   {
     if (2 == i || 3 == i)
       continue;
-    for (int j = 0; j<CHUNK_LEN; j++) {
-      totalArray_[loop*CHUNK_LEN + j] = dspInBuf_[i][j];
+    for (int j = 0; j<size; j++) {
+      totalArray_[loop*size + j] = dspInBuf_[i][j];
     }
     loop++;
   }
-  heq->dhe.dspOutBuf_rmse_total_long = rmse_ema_t2(totalArray_, (nch - 2)*CHUNK_LEN, heq->dhe.dspOutBuf_rmse_total_long, long_win);
-  heq->dhe.dspOutBuf_rmse_total_short = rmse_ema_t2(totalArray_, (nch - 2)*CHUNK_LEN, heq->dhe.dspOutBuf_rmse_total_short, short_win);
+  heq->dhe.dspOutBuf_rmse_total_long = rmse_ema_t2(totalArray_, (nch - 2)*size, heq->dhe.dspOutBuf_rmse_total_long, long_win);
+  heq->dhe.dspOutBuf_rmse_total_short = rmse_ema_t2(totalArray_, (nch - 2)*size, heq->dhe.dspOutBuf_rmse_total_short, short_win);
 
   double dspOutBuf_rmse_total_short_in_dbunit = 20 * log(heq->dhe.dspOutBuf_rmse_total_short);
 
@@ -198,12 +201,12 @@ int ia_heq_process(IA_HEQ *heq, int16_t *input, int size)
   {
     if (2 == i || 3 == i)
       continue;
-    for (int j = 0; j<CHUNK_LEN; j++) {
-      srdArray_[loop*CHUNK_LEN + j] = dspInBuf_[i][j];
+    for (int j = 0; j<size; j++) {
+      srdArray_[loop*size + j] = dspInBuf_[i][j];
     }
     loop++;
   }
-  heq->dhe.dspOutBuf_rmse_srd_long = rmse_ema_t2(srdArray_, (nch - 2 - h_length)*CHUNK_LEN, heq->dhe.dspOutBuf_rmse_srd_long, long_win);
+  heq->dhe.dspOutBuf_rmse_srd_long = rmse_ema_t2(srdArray_, (nch - 2 - h_length)*size, heq->dhe.dspOutBuf_rmse_srd_long, long_win);
 
   if ((heq->fcnt % (int)short_win) == 0) {
     if (dspOutBuf_rmse_total_short_in_dbunit < heq->threshold.ThreM) {

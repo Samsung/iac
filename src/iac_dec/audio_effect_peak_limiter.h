@@ -10,10 +10,6 @@
 #include <stdint.h>
 #include "audio_defines.h"
 
-void apply_gain(float *inblock, int in_len, int num_channels, float gain_db);
-void apply_gain_from_to(float *inblock, int in_len, int num_channels,
-        float from_db, float to_db);
-
 typedef struct AudioEffectPeakLimiter
 {
     float currentGain;
@@ -36,8 +32,6 @@ typedef struct AudioEffectPeakLimiter
     int peak_pos;
 #endif
 
-    float *audioBlock;
-
 #if USE_TRUEPEAK
     AudioTruePeakMeter truePeakMeters[MAX_CHANNELS];
 #endif
@@ -47,9 +41,9 @@ typedef struct AudioEffectPeakLimiter
 AudioEffectPeakLimiter* audio_effect_peak_limiter_create (void);
 void audio_effect_peak_limiter_init (AudioEffectPeakLimiter* ,
         float threashold_db, int sample_rate, int num_channels,
-        float atk_sec, float rel_sec, int block_size, int delay_size);
+        float atk_sec, float rel_sec, int delay_size);
 int audio_effect_peak_limiter_process_block (AudioEffectPeakLimiter* ,
-        float *inblock, float *outblock, int block_len);
+        float *inblock, float *outblock, int frame_size);
 void audio_effect_peak_limiter_uninit (AudioEffectPeakLimiter* );
 void audio_effect_peak_limiter_destroy (AudioEffectPeakLimiter* );
 

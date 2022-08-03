@@ -46,6 +46,22 @@ void    immersive_audio_param_free(IAParam *param);
 typedef struct IADecoder IADecoder;
 
 /**
+ *  For AV application, it only applies Limiter at -1dBTP.
+ *
+ *  For TV application, it only applies Loudness normalization at -24LKFS and
+ *  Limiter at -1dBTP.
+ *
+ *  For Mobile application, it applies Loudness normalization at -24LKFS,
+ *  the pre-defined DRC control and adjusting of target loudness at -16 LKFS,
+ *  and Limiter at -1dBTP.
+ * */
+enum {
+    IA_DRC_AV_MODE,
+    IA_DRC_TV_MODE,
+    IA_DRC_MODILE_MODE
+};
+
+/**
  * @brief   Get the number of channels of the channel layout.
  * @param   [in] type : see @ref IAChannelLayoutType.
  * @return  the number of channels.
@@ -100,6 +116,13 @@ int     immersive_audio_decoder_decode (IADecoder* ths,
  * */
 IAErrCode   immersive_audio_decoder_set_channel_layout (IADecoder* ths,
                                                         IAChannelLayoutType type);
+
+/**
+ * @brief   Set drc mode to immersive audio handler.
+ * @param   [in] ths : an immersive audio decoder handler.
+ * @param   [in] mode : see @ref IA_DRC_AV_MODE, @ref IA_DRC_TV_MODE, @ref IA_DRC_MODILE_MODE.
+ * */
+IAErrCode   immersive_audio_decoder_set_drc_mode (IADecoder* ths, int mode);
 
 /**@}*/
 

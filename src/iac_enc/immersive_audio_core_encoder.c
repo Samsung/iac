@@ -64,8 +64,7 @@ static int opus_encode_init(IAEncoder *st)
       opus_multistream_encoder_ctl(st->ia_encoder_dcg[i].dep_encoder[j], OPUS_SET_BANDWIDTH(OPUS_BANDWIDTH_FULLBAND));
       opus_multistream_encoder_ctl(st->ia_encoder_dcg[i].dep_encoder[j], OPUS_SET_VBR(1));
       opus_multistream_encoder_ctl(st->ia_encoder_dcg[i].dep_encoder[j], OPUS_SET_COMPLEXITY(10));
-      int32_t preskip = 0;
-      opus_multistream_encoder_ctl(st->ia_encoder_dcg[i].dep_encoder[j], OPUS_GET_LOOKAHEAD(&preskip));
+      opus_multistream_encoder_ctl(st->ia_encoder_dcg[i].dep_encoder[j], OPUS_GET_LOOKAHEAD(&(st->initial_padding)));
       opus_multistream_encoder_ctl(st->ia_encoder_dcg[i].dep_encoder[j], __OPUS_SET_FORCE_MODE(__OPUS_MODE_CELT_ONLY));
     }
   }
@@ -137,6 +136,12 @@ static int opus_encode_ctl(IAEncoder *st, int request,
         opus_multistream_encoder_ctl(st->ia_encoder_dcg[i].dep_encoder[j], IA_SET_COMPLEXITY(value));
       }
     }
+  }
+  break;
+  case IA_GET_LOOKAHEAD_REQUEST:
+  {
+    int32_t *value = va_arg(ap, int32_t*);
+    opus_multistream_encoder_ctl(st->ia_encoder_dcg[0].dep_encoder[0], OPUS_GET_LOOKAHEAD(value));
   }
   break;
   default:
@@ -387,7 +392,6 @@ static int opus_decode_frame(IAEncoder *st, int cg, int stream, int channels, un
   int decoded_size;
   decoded_size = sizeof(int16_t) * channels * st->frame_size;
   int ret;
-  decoded_size = sizeof(int16_t) * channels * st->frame_size;
   ret = opus_multistream_decode(st->ia_decoder_dcg[cg].dep_decoder[stream],
     encoded_frame, encoded_size, (int16_t*)pcm_data, decoded_size, 0);
   return ret;
@@ -531,6 +535,12 @@ static int aac_encode_init(IAEncoder *st)
       }
     }
   }
+  AACENC_InfoStruct info = { 0 };
+  if ((err = aacEncInfo(st->ia_encoder_dcg[0].dep_encoder[0], &info)) != AACENC_OK) {
+    printf("Unable to get encoder info: %s\n", aac_get_error(err));
+    goto error;
+  }
+  st->initial_padding = info.nDelay;
   return ret;
 
 
@@ -632,6 +642,17 @@ static int aac_encode_ctl(IAEncoder *st, int request,
         }
       }
     }
+  }
+  break;
+  case IA_GET_LOOKAHEAD_REQUEST:
+  {
+    int32_t *value = va_arg(ap, int32_t*);
+    AACENC_InfoStruct info = { 0 };
+    if ((err = aacEncInfo(st->ia_encoder_dcg[0].dep_encoder[0], &info)) != AACENC_OK) {
+      printf("Unable to get encoder info: %s\n",aac_get_error(err));
+      goto bad_arg;
+    }
+    *value = info.nDelay;
   }
   break;
   default:

@@ -5,319 +5,17 @@
 #include "fixedp11_5.h"
 #include "obuwrite.h"
 
+//#define INTER_FILE_DUMP 1
+
 static int default_dmix_index = 1;
 static int default_w_index = 0;
+static int default_recon_gain[12] = { 255,255,255,255,255,255,255,255,255,255,255,255 };
 
 union trans2char
 {
   float f;
   unsigned char c[4];
 };
-
-
-static void get_dec_map(unsigned channels, int metamode, int *stream_count, int *coupled_stream_count, unsigned char *stream_map)
-{
-  int done = 0;
-  switch (channels)
-  {
-  case 1:
-    stream_map[0] = 0;
-    done = 1;
-    break;
-  case 2:
-    *stream_count = 1;
-    *coupled_stream_count = 1;
-    stream_map[0] = 0;
-    stream_map[1] = 1;
-    done = 1;
-    break;
-  case 3:
-    *stream_count = 2;
-    *coupled_stream_count = 1;
-    stream_map[0] = 0; // L
-    stream_map[1] = 2; // C
-    stream_map[2] = 1; // R
-    done = 1;
-    break;
-  case 4:
-    switch (metamode)
-    {
-    case 0: // fL fR bL bR
-    case 1: // sL sR bL bR
-      *stream_count = 2;
-      *coupled_stream_count = 2;
-      stream_map[0] = 0;
-      stream_map[1] = 1;
-      stream_map[2] = 2;
-      stream_map[3] = 3;
-      done = 1;
-      break;
-    case 2: // fC LFE sL sR
-      *stream_count = 3;
-      *coupled_stream_count = 1;
-      stream_map[0] = 2;
-      stream_map[1] = 3;
-      stream_map[2] = 0;
-      stream_map[3] = 1;
-      done = 1;
-      break;
-    }
-    break;
-  case 5:
-    switch (metamode)
-    {
-    case 0: // fL fC fR bL bR
-      *stream_count = 3;
-      *coupled_stream_count = 2;
-      stream_map[0] = 0; // fL
-      stream_map[1] = 4; // fC
-      stream_map[2] = 1; // fR
-      stream_map[3] = 2; // bL
-      stream_map[4] = 3; // bR
-      done = 1;
-      break;
-    case 1: case 2:
-      break;
-    }
-    break;
-  case 6:
-    switch (metamode)
-    {
-    case 0: // fL fC fR bL bR LFE
-      *stream_count = 4;
-      *coupled_stream_count = 2;
-      stream_map[0] = 0; // fL
-      stream_map[1] = 4; // fC
-      stream_map[2] = 1; // fR
-      stream_map[3] = 2; // bL
-      stream_map[4] = 3; // bR
-      stream_map[5] = 5; // LFE
-      done = 1;
-      break;
-    case 1: // fC LFE sL sR bL bR
-      *stream_count = 4;
-      *coupled_stream_count = 2;
-      stream_map[0] = 4; // fC
-      stream_map[1] = 0; // sL
-      stream_map[2] = 1; // sR
-      stream_map[3] = 2; // bL
-      stream_map[4] = 3; // bR
-      stream_map[5] = 5; // LFE
-      done = 1;
-      break;
-    case 2: // fL fR sL sR bL bR
-      *stream_count = 3;
-      *coupled_stream_count = 3;
-      stream_map[0] = 0; // fL
-      stream_map[1] = 1; // fR
-      stream_map[2] = 2; // sL
-      stream_map[3] = 3; // sR
-      stream_map[4] = 4; // bL
-      stream_map[5] = 5; // bR
-      done = 1;
-      break;
-    }
-    break;
-  case 7:
-    switch (metamode)
-    {
-    case 0: // fL fR fC LFE bC sL sR
-      *stream_count = 5;
-      *coupled_stream_count = 2;
-      stream_map[0] = 0; // fL
-      stream_map[1] = 4; // fC
-      stream_map[2] = 1; // fR
-      stream_map[3] = 2; // sL
-      stream_map[4] = 3; // sR
-      stream_map[5] = 5; // bC
-      stream_map[6] = 6; // LFE
-      done = 1;
-      break;
-    case 1: case 2:
-      break;
-    }
-    break;
-  case 8:
-    switch (metamode)
-    {
-    case 0: // fL fR fC LFE sL sR bL bR
-      *stream_count = 5;
-      *coupled_stream_count = 2;
-      stream_map[0] = 0; // fL
-      stream_map[1] = 6; // fC
-      stream_map[2] = 1; // fR
-      stream_map[3] = 2; // sL
-      stream_map[4] = 3; // sR
-      stream_map[5] = 4; // bL
-      stream_map[6] = 5; // bR
-      stream_map[7] = 7; // LFE
-      break;
-    case 1: case 2:
-      break;
-    }
-    break;
-  }
-  if (done == 0)
-  {
-    *stream_count = channels;
-    *coupled_stream_count = 0;
-    for (int i = 0; i < channels; i++)
-      stream_map[i] = 255;
-  }
-}
-
-static void get_enc_map(unsigned channels, int metamode, int *stream_count, int *coupled_stream_count, unsigned char *stream_map)
-{
-  int done = 0;
-  switch (channels)
-  {
-  case 1:
-    stream_map[0] = 0;
-    done = 1;
-    break;
-  case 2:
-    *stream_count = 1;
-    *coupled_stream_count = 1;
-    stream_map[0] = 0;
-    stream_map[1] = 1;
-    done = 1;
-    break;
-  case 3:
-    *stream_count = 2;
-    *coupled_stream_count = 1;
-    stream_map[0] = 0; // L
-    stream_map[1] = 1; // R
-    stream_map[2] = 2; // C
-    done = 1;
-    break;
-  case 4:
-    switch (metamode)
-    {
-    case 0: // fL fR bL bR
-    case 1: // sL sR bL bR
-      *stream_count = 2;
-      *coupled_stream_count = 2;
-      stream_map[0] = 0;
-      stream_map[1] = 1;
-      stream_map[2] = 2;
-      stream_map[3] = 3;
-      done = 1;
-      break;
-    case 2: // fC LFE sL sR
-      *stream_count = 3;
-      *coupled_stream_count = 1;
-      stream_map[0] = 2;
-      stream_map[1] = 3;
-      stream_map[2] = 0;
-      stream_map[3] = 1;
-      done = 1;
-      break;
-    }
-    break;
-  case 5:
-    switch (metamode)
-    {
-    case 0: // fL fR fC bL bR
-      *stream_count = 3;
-      *coupled_stream_count = 2;
-      stream_map[0] = 0; // fL
-      stream_map[1] = 1; // fR
-      stream_map[2] = 3; // bL
-      stream_map[3] = 4; // bR
-      stream_map[4] = 2; // fC
-      done = 1;
-      break;
-    case 1: case 2:
-      break;
-    }
-    break;
-  case 6:
-    switch (metamode)
-    {
-    case 0: // fL fR fC LFE bL bR
-      *stream_count = 4;
-      *coupled_stream_count = 2;
-      stream_map[0] = 0; // fL
-      stream_map[1] = 1; // fR
-      stream_map[2] = 4; // bL
-      stream_map[3] = 5; // bR
-      stream_map[4] = 2; // fC
-      stream_map[5] = 3; // LFE
-      done = 1;
-      break;
-    case 1: // fC LFE sL sR bL bR
-      *stream_count = 4;
-      *coupled_stream_count = 2;
-      stream_map[0] = 2; // sL
-      stream_map[1] = 3; // sR
-      stream_map[2] = 4; // bL
-      stream_map[3] = 5; // bR
-      stream_map[4] = 0; // fC
-      stream_map[5] = 1; // LFE
-      done = 1;
-      break;
-    case 2: // fL fR sL sR bL bR
-      *stream_count = 3;
-      *coupled_stream_count = 3;
-      stream_map[0] = 0; // fL
-      stream_map[1] = 1; // fR
-      stream_map[2] = 2; // sL
-      stream_map[3] = 3; // sR
-      stream_map[4] = 4; // bL
-      stream_map[5] = 5; // bR
-      done = 1;
-      break;
-    }
-    break;
-  case 7:
-    switch (metamode)
-    {
-    case 0: // fL fR fC LFE bC bL bR
-      *stream_count = 5;
-      *coupled_stream_count = 2;
-      stream_map[0] = 0; // fL
-      stream_map[1] = 1; // fR
-      stream_map[2] = 5; // bL
-      stream_map[3] = 6; // bR
-      stream_map[4] = 2; // fC
-      stream_map[5] = 4; // bC
-      stream_map[6] = 3; // LFE
-      done = 1;
-      break;
-    case 1: case 2:
-      break;
-    }
-    break;
-  case 8:
-    switch (metamode)
-    {
-    case 0: // fL fR fC LFE sL sR bL bR
-      *stream_count = 5;
-      *coupled_stream_count = 2;
-      stream_map[0] = 0; // fL
-      stream_map[1] = 1; // fR
-      stream_map[2] = 4; // sL
-      stream_map[3] = 5; // sR
-      stream_map[4] = 6; // bL
-      stream_map[5] = 7; // bR
-      stream_map[6] = 2; // fC
-      stream_map[7] = 3; // LFE
-      done = 1;
-      break;
-    case 1: case 2:
-      break;
-    }
-    break;
-  }
-
-  if (done == 0)
-  {
-    *stream_count = channels;
-    *coupled_stream_count = 0;
-    for (int i = 0; i < channels; i++)
-      stream_map[i] = i;
-  }
-}
 
 
 static void reorder_channels(uint8_t *channel_map, int channels, unsigned pcm_frames, int16_t *samples)
@@ -463,35 +161,22 @@ void conv_writtenpcm(float *pcmbuf, void *wavbuf, int nch, int frame_size)
   }
 }
 
-void conv_writtenpcm1(float *pcmbuf, void *wavbuf, int nch, int frame_size)
+void conv_writtenpcm2(float *pcmbuf, void *wavbuf, int nch, int size, int frame_size)
 {
   int16_t *wbuf = (int16_t *)wavbuf;
   for (int i = 0; i < nch; i++)
   {
     for (int j = 0; j < frame_size; j++)
     {
-      wbuf[i + j*nch] = (int16_t)(pcmbuf[i + j*nch] * 32767.0);
-    }
-  }
-}
-void conv_writtenfloat(float *pcmbuf, void *wavbuf, int nch, int frame_size)
-{
-  unsigned char *wbuf = (unsigned char *)wavbuf;
-  for (int i = 0; i < nch; i++)
-  {
-    for (int j = 0; j < frame_size; j++)
-    {
-      union trans2char trans;
-      trans.f = pcmbuf[i*frame_size + j];
-      wbuf[(i + j*nch) * 4] = trans.c[0];
-      wbuf[(i + j*nch) * 4 + 1] = trans.c[1];
-      wbuf[(i + j*nch) * 4 + 2] = trans.c[2];
-      wbuf[(i + j*nch) * 4 + 3] = trans.c[3];
+      if (j < size)
+        wbuf[i + j*nch] = (int16_t)(pcmbuf[i * frame_size + j] * 32767.0);
+      else
+        wbuf[i + j*nch] = 0;
     }
   }
 }
 
-void conv_writtenfloat1(float *pcmbuf, float *wavbuf, int nch, int frame_size)
+void conv_writtenfloat(float *pcmbuf, float *wavbuf, int nch, int frame_size)
 {
   for (int i = 0; i < nch; i++)
   {
@@ -656,6 +341,11 @@ int immersive_audio_encoder_ctl_va_list(IAEncoder *et, int request,
     et->encode_ctl2(et, request, ap);
   }
   break;
+  case IA_GET_LOOKAHEAD_REQUEST:
+  {
+    et->encode_ctl(et, request, ap);
+  }
+  break;
   default:
     ret = IA_ERR_UNIMPLEMENTED;
     break;
@@ -675,7 +365,7 @@ int immersive_audio_encoder_ctl(IAEncoder *et, int request, ...)
   return ret;
 }
 
-static int get_scalable_format(IAEncoder *st, int channel_layout_in, const unsigned char *channel_layout_cb)
+static int get_scalable_format(IAEncoder *st, IAChannelLayoutType channel_layout_in, const IAChannelLayoutType *channel_layout_cb)
 {
   unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
   unsigned char channel_layout_map[IA_CHANNEL_LAYOUT_COUNT] = { IA_CHANNEL_LAYOUT_COUNT , };
@@ -712,7 +402,7 @@ static int get_scalable_format(IAEncoder *st, int channel_layout_in, const unsig
   }
 
 #if 1
-  int idx = 0, ret = 0;;
+  int idx = 0, ret = 0;
   int last_cl_layout = CHANNEL_LAYOUT_INVALID;
   uint8_t new_channels[256];
   printf("\nTransmission Channels Order: \n");
@@ -824,8 +514,8 @@ static const char* dep_codec_name[] = {
 "unknow", "opus", "aac"};
 
 IAEncoder *immersive_audio_encoder_create(int32_t Fs,
-  int channel_layout_in,
-  const unsigned char *channel_layout_cb,
+  IAChannelLayoutType channel_layout_in,
+  const IAChannelLayoutType *channel_layout_cb,
   int codec_id,  //1:opus, 2:aac
   int *error)
 {
@@ -834,6 +524,13 @@ IAEncoder *immersive_audio_encoder_create(int32_t Fs,
   memset(st, 0x00, sizeof(IAEncoder));
 
   st->input_sample_rate = Fs;
+  int frame_size = 960, preskip_size = 312;//opus
+  if (codec_id == IA_CODEC_AAC)
+  {
+    frame_size = 1024;
+    preskip_size = 720;
+  }
+
   int channel_groups = 1;
   channel_groups = get_scalable_format(st, channel_layout_in, channel_layout_cb);
   st->channel_groups = channel_groups;
@@ -885,12 +582,7 @@ IAEncoder *immersive_audio_encoder_create(int32_t Fs,
   st->recon_gain_flag = 0;
   st->scalefactor_mode = 2;
 
-  int frame_size = 960, preskip_size = 312;//opus
-  if (codec_id == IA_CODEC_AAC)
-  {
-    frame_size = 1024;
-    preskip_size = 720;
-  }
+
   st->codec_id = codec_id;
   //int frame_size = 1024 //aac
   st->frame_size = frame_size;
@@ -978,6 +670,14 @@ IAEncoder *immersive_audio_encoder_create(int32_t Fs,
       }
     }
   }
+
+#ifdef INTER_FILE_DUMP
+  ia_intermediate_file_writeopen(st, FILE_DOWNMIX_M, "ALL");
+  ia_intermediate_file_writeopen(st, FILE_DOWNMIX_S, "ALL");
+  ia_intermediate_file_writeopen(st, FILE_GAIN_DOWN, "ALL");
+  ia_intermediate_file_writeopen(st, FILE_UPMIX, "ALL");
+  ia_intermediate_file_writeopen(st, FILE_DECODED, "ALL");
+#endif
   return st;
 }
 
@@ -995,8 +695,7 @@ int immersive_audio_encoder_loudness_gain(IAEncoder *st, const int16_t *pcm, int
   /////////////////////////////////////////////////
   //printf("dmix_index %d , w_index %d \n", dmix_index, w_index);
 
-  int16_t temp[IA_FRAME_MAXSIZE * 12 * 2];
-  downmix2(st->downmixer_ld, pcm, dmix_index, w_index);
+  downmix2(st->downmixer_ld, pcm, frame_size, dmix_index, w_index);
 
   unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
   unsigned char pre_ch = 0;
@@ -1006,12 +705,16 @@ int immersive_audio_encoder_loudness_gain(IAEncoder *st, const int16_t *pcm, int
     if (lay_out == IA_CHANNEL_LAYOUT_COUNT)
       break;
     immersive_audio_encoder_loudness_measure(st->loudgain, st->downmixer_ld->downmix_m[lay_out], lay_out);
+
+#ifdef INTER_FILE_DUMP
+    float temp[IA_FRAME_MAXSIZE * MAX_CHANNELS];
     conv_writtenfloat(st->downmixer_ld->downmix_m[lay_out], temp, channel_map714[lay_out], st->frame_size);
-    //ia_intermediate_file_write(st, FILE_DOWNMIX_M, downmix_m_wav[lay_out], temp, st->frame_size);
+    ia_intermediate_file_write(st, FILE_DOWNMIX_M, downmix_m_wav[lay_out], temp, st->frame_size);
 
     conv_writtenfloat(st->downmixer_ld->downmix_s[lay_out], temp, channel_map714[lay_out] - pre_ch, st->frame_size);
-    //ia_intermediate_file_write(st, FILE_DOWNMIX_S, downmix_s_wav[lay_out], temp, st->frame_size);
+    ia_intermediate_file_write(st, FILE_DOWNMIX_S, downmix_s_wav[lay_out], temp, st->frame_size);
     pre_ch = channel_map714[lay_out];
+#endif
   }
 
   pre_ch = 0;
@@ -1221,7 +924,7 @@ int immersive_audio_encoder_recon_gain(IAEncoder *st, const int16_t *pcm, int fr
   unsigned char encoded_frame[MAX_PACKET_SIZE] = { 0, };
   int16_t decoded_frame[MAX_PACKET_SIZE];
 
-  downmix2(st->downmixer_rg, pcm, dmix_index, w_index);
+  downmix2(st->downmixer_rg, pcm, frame_size, dmix_index, w_index);
   gaindown(st->downmixer_rg->downmix_s, st->channel_layout_map, st->gaindown_map, st->mdhr.dmixgain_f, st->frame_size);
 
 
@@ -1233,9 +936,11 @@ int immersive_audio_encoder_recon_gain(IAEncoder *st, const int16_t *pcm, int fr
     int lay_out = st->channel_layout_map[i];
     if (lay_out == IA_CHANNEL_LAYOUT_COUNT)
       break;
-    conv_writtenfloat1(st->downmixer_rg->downmix_m[lay_out], temp, channel_map714[lay_out], st->frame_size);
+    conv_writtenfloat(st->downmixer_rg->downmix_m[lay_out], temp, channel_map714[lay_out], st->frame_size);
     conv_writtenpcm(st->downmixer_rg->downmix_s[lay_out], gain_down_in, channel_map714[lay_out] - pre_ch, st->frame_size);
-    //ia_intermediate_file_write(st, FILE_GAIN_DOWN, gaindown_wav[lay_out], gain_down_in, st->frame_size);
+#ifdef INTER_FILE_DUMP
+    ia_intermediate_file_write(st, FILE_GAIN_DOWN, gaindown_wav[lay_out], gain_down_in, st->frame_size);
+#endif
     reorder_channels(st->ia_encoder_dcg[i].enc_stream_map, st->ia_encoder_dcg[i].channel, st->frame_size, gain_down_in);
 
     for (int j = 0; j < st->ia_encoder_dcg[i].stream_count; j++)
@@ -1255,7 +960,9 @@ int immersive_audio_encoder_recon_gain(IAEncoder *st, const int16_t *pcm, int fr
         insert_pcm_to_group(extract_pcm_dec, decoded_frame, st->ia_encoder_dcg[i].channel, st->ia_encoder_dcg[i].coupled_stream_count + j, 1, st->frame_size);
       }
     }
-
+#ifdef INTER_FILE_DUMP
+    ia_intermediate_file_write(st, FILE_DECODED, decoded_wav[lay_out], decoded_frame, st->frame_size);
+#endif
     reorder_channels(st->ia_decoder_dcg[i].dec_stream_map, st->ia_decoder_dcg[i].channel, st->frame_size, (int16_t*)decoded_frame);
     pre_ch = channel_map714[lay_out];
 
@@ -1312,19 +1019,19 @@ int immersive_audio_encoder_recon_gain(IAEncoder *st, const int16_t *pcm, int fr
       if (lay_out == IA_CHANNEL_LAYOUT_COUNT)
         break;
       QueuePop(&(st->queue_d[lay_out]), up_input[lay_out], st->frame_size);
-      //ia_intermediate_file_write(st, FILE_DECODED, decoded_wav[lay_out], up_input[lay_out], st->frame_size);
     }
-    //int16_t temp1[IA_FRAME_MAXSIZE * 12 * 2];
+
     upmix3(st->upmixer, st->gaindown_map);
     for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
     {
       int lay_out = st->channel_layout_map[i];
       if (lay_out == IA_CHANNEL_LAYOUT_COUNT)
         break;
-      //conv_writtenfloat(st->upmixer->upmix[lay_out], temp1, channel_map714[lay_out], st->frame_size);//
-      //ia_intermediate_file_write(st, FILE_UPMIX, upmix_wav[lay_out], temp1, st->frame_size);//
-      conv_writtenfloat1(st->upmixer->upmix[lay_out], temp, channel_map714[lay_out], st->frame_size);
+      conv_writtenfloat(st->upmixer->upmix[lay_out], temp, channel_map714[lay_out], st->frame_size);
       QueuePush(&(st->queue_r[lay_out]), temp);
+#ifdef INTER_FILE_DUMP
+      ia_intermediate_file_write(st, FILE_UPMIX, upmix_wav[lay_out], temp, st->frame_size);//
+#endif
     }
   }
 
@@ -1363,7 +1070,11 @@ int immersive_audio_encoder_recon_gain(IAEncoder *st, const int16_t *pcm, int fr
       InScalableBuffer scalable_buff;
       memset(&scalable_buff, 0x00, sizeof(scalable_buff));
       scalable_buff.gaindown_map = st->gaindown_map;
-
+      int recongain_cls[enc_channel_cnt];
+      for (int i = 0; i < enc_channel_cnt; i++)
+      {
+        recongain_cls[i] = -1;
+      }
       for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++)
       {
         int lay_out = st->channel_layout_map[i];
@@ -1377,6 +1088,7 @@ int immersive_audio_encoder_recon_gain(IAEncoder *st, const int16_t *pcm, int fr
         scalable_buff.dtype_s = 1;
 
         scalable_buff.scalable_map = st->upmixer->scalable_map[lay_out];
+        scalable_buff.relevant_mixed_cl = st->upmixer->relevant_mixed_cl[last_layout];
         scalable_buff.channels_m = channel_map714[lay_out];
         scalable_buff.inbuffer_m = (unsigned char*)m_input;
         scalable_buff.dtype_m = 1;
@@ -1385,7 +1097,7 @@ int immersive_audio_encoder_recon_gain(IAEncoder *st, const int16_t *pcm, int fr
         scalable_buff.inbuffer_r = (unsigned char*)r_input;
         scalable_buff.dtype_r = 1;
         if (i != 0)
-          cal_scalablefactor2(st->sf, &(st->mdhr), scalable_buff, lay_out, last_layout);
+          cal_scalablefactor2(st->sf, &(st->mdhr), scalable_buff, lay_out, last_layout, recongain_cls);
         QueuePush(&(st->queue_rg[lay_out]), st->mdhr.scalablefactor[lay_out]); // save recon gain
 
         s_channel = channel_map714[lay_out];
@@ -1407,7 +1119,15 @@ int immersive_audio_encoder_recon_gain(IAEncoder *st, const int16_t *pcm, int fr
 int immersive_audio_encode(IAEncoder *st, 
   const int16_t *pcm, int frame_size, unsigned char* data, int *demix_mode, int32_t max_data_bytes)
 {
-
+  if (pcm)
+  {
+    st->initial_padding += st->frame_size;
+  }
+  else
+  {
+    if (st->initial_padding <= 0)
+      return 0;
+  }
   int ret_size = 0;
   unsigned char meta_info[255];
   unsigned char coded_data[MAX_PACKET_SIZE * 3];
@@ -1416,6 +1136,7 @@ int immersive_audio_encode(IAEncoder *st,
 
 
   int16_t gain_down_out[IA_FRAME_MAXSIZE * MAX_CHANNELS];
+  memset(gain_down_out, 0x00, sizeof(gain_down_out));
   unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
   int pre_ch = 0;
   int16_t extract_pcm[IA_FRAME_MAXSIZE * 2];
@@ -1433,6 +1154,8 @@ int immersive_audio_encode(IAEncoder *st,
         int layout = st->channel_layout_map[i];
         if (layout == IA_CHANNEL_LAYOUT_COUNT)
           break;
+        for (int j = 0; j < MAX_CHANNELS; j++)
+          st->mdhr.scalablefactor[layout][j] = default_recon_gain[j];
         QueuePop(&(st->queue_rg[layout]), st->mdhr.scalablefactor[layout], channel_map714[layout]);
       }
       //write recon gain obu
@@ -1454,7 +1177,7 @@ int immersive_audio_encode(IAEncoder *st,
     else
       *demix_mode = dmix_index - 1;
 
-    downmix2(st->downmixer_enc, pcm, dmix_index, w_index);
+    downmix2(st->downmixer_enc, pcm, frame_size, dmix_index, w_index);
     gaindown(st->downmixer_enc->downmix_s, st->channel_layout_map, st->gaindown_map, st->mdhr.dmixgain_f, st->frame_size);
 
     pre_ch = 0;
@@ -1463,7 +1186,8 @@ int immersive_audio_encode(IAEncoder *st,
       int lay_out = st->channel_layout_map[i];
       if (lay_out == IA_CHANNEL_LAYOUT_COUNT)
         break;
-      conv_writtenpcm(st->downmixer_enc->downmix_s[lay_out], gain_down_out, channel_map714[lay_out] - pre_ch, st->frame_size);
+      //conv_writtenpcm(st->downmixer_enc->downmix_s[lay_out], gain_down_out, channel_map714[lay_out] - pre_ch, st->frame_size);
+      conv_writtenpcm2(st->downmixer_enc->downmix_s[lay_out], gain_down_out, channel_map714[lay_out] - pre_ch, frame_size, st->frame_size);
       reorder_channels(st->ia_encoder_dcg[i].enc_stream_map, st->ia_encoder_dcg[i].channel, st->frame_size, gain_down_out);
       int32_t encoded_size = 0;
       for (int j = 0; j < st->ia_encoder_dcg[i].stream_count; j++)
@@ -1486,7 +1210,7 @@ int immersive_audio_encode(IAEncoder *st,
   else
   {
     int lay_out = st->channel_layout_map[0];
-    memcpy(gain_down_out, pcm, sizeof(int16_t)*channel_map714[lay_out] * st->frame_size);
+    memcpy(gain_down_out, pcm, sizeof(int16_t)*channel_map714[lay_out] * frame_size);
     reorder_channels(st->ia_encoder_dcg[0].enc_stream_map, st->ia_encoder_dcg[0].channel, st->frame_size, gain_down_out);
     int32_t encoded_size = 0;
     for (int j = 0; j < st->ia_encoder_dcg[0].stream_count; j++)
@@ -1504,7 +1228,7 @@ int immersive_audio_encode(IAEncoder *st,
       sub_stream_obu_size += iac_write_obu_unit(coded_data, encoded_size, data + sub_stream_obu_size, OBU_SUBSTREAM);
     }
   }
-
+  st->initial_padding -= st->frame_size;
   return (recon_gain_obu_size + sub_stream_obu_size);
 }
 
@@ -1544,6 +1268,13 @@ void immersive_audio_encoder_destroy(IAEncoder *et)
     et->encode_close2(et);
     et->decode_close(et);
   }
+#ifdef INTER_FILE_DUMP
+  ia_intermediate_file_writeclose(et, FILE_DOWNMIX_M, "ALL");
+  ia_intermediate_file_writeclose(et, FILE_DOWNMIX_S, "ALL");
+  ia_intermediate_file_writeclose(et, FILE_GAIN_DOWN, "ALL");
+  ia_intermediate_file_writeclose(et, FILE_UPMIX, "ALL");
+  ia_intermediate_file_writeclose(et, FILE_DECODED, "ALL");
+#endif
   free(et);
 
 }

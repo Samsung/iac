@@ -23,7 +23,7 @@ typedef struct {
 }DownMixer;
 DownMixer * downmix_create(const unsigned char *channel_layout_map, int frame_size);
 void downmix_destroy(DownMixer *dm);
-int downmix2(DownMixer *dm, unsigned char* inbuffer, int dmix_type, int weight_type);
+int downmix2(DownMixer *dm, unsigned char* inbuffer, int size, int dmix_type, int weight_type);
 void downmix_clear(DownMixer *dm);
 //unsigned char* get_downmix_data(DownMixer *dm, DownmixChannelType type);
 #endif

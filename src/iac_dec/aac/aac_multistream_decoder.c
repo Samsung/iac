@@ -127,6 +127,9 @@ AACMSDecoder *aac_multistream_decoder_open (uint8_t *config, uint32_t size,
     st = (AACMSDecoder *)malloc(sizeof(AACMSDecoder));
     handles = (HANDLE_AACDECODER *)malloc(sizeof (HANDLE_AACDECODER) * streams);
 
+    if (st) memset(st, 0, sizeof(AACMSDecoder));
+    if (handles) memset(handles, 0, sizeof(sizeof (HANDLE_AACDECODER) * streams));
+
     if (!st || !handles) {
         ia_loge("alloc fail.");
         if (error)
@@ -137,8 +140,6 @@ AACMSDecoder *aac_multistream_decoder_open (uint8_t *config, uint32_t size,
             free (handles);
         return 0;
     }
-    memset(st, 0, sizeof(AACMSDecoder));
-    memset(handles, 0, sizeof(sizeof (HANDLE_AACDECODER) * streams));
 
     st->flags = flags;
     st->streams = streams;
@@ -196,7 +197,7 @@ int aac_multistream_decode_list (AACMSDecoder *st,
         return aac_ms_decode_list_native (st, buffer, size, pcm, frame_size,
                                           aac_copy_channel_out_plane);
     else
-        return -1;
+        return IA_ERR_UNIMPLEMENTED;
 }
 
 void aac_multistream_decoder_close (AACMSDecoder *st)
@@ -209,7 +210,6 @@ void aac_multistream_decoder_close (AACMSDecoder *st)
             }
             free (st->handles);
         }
-
         free (st);
     }
 }

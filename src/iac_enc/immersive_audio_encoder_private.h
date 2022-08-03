@@ -85,6 +85,7 @@ enum QUEUE_STEPS {
   QUEUE_RG,
   QUEUE_STEP_MAX
 };
+
 struct IAEncoder {
   uint32_t input_sample_rate;
   int frame_size;
@@ -93,12 +94,15 @@ struct IAEncoder {
   int channel_groups; //1: Non-Scalable format, >1: Scalable format
   IA_ENCODER_DCG ia_encoder_dcg[IA_CHANNEL_LAYOUT_COUNT];
   //below interfaces are defined for encoding to get encoded frame
+  uint8_t *samples;
   int(*encode_init)(IAEncoder *st);
   int(*encode_ctl)(IAEncoder *, int, va_list);
   int(*encode_frame)(IAEncoder *, int, int, int, int16_t *, unsigned char*);
   int(*encode_close)(IAEncoder *st);
+  int initial_padding;
 
   //below interfaces are defined for encoding to get recon gain value
+  uint8_t *samples2;
   int(*encode_init2)(IAEncoder *st);
   int(*encode_ctl2)(IAEncoder *, int, va_list);
   int(*encode_frame2)(IAEncoder *, int, int, int, int16_t *, unsigned char*);

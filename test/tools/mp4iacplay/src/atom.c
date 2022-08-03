@@ -491,17 +491,23 @@ int atom_dump(FILE *fp, long apos, uint32_t tmp)
     }
     switch (atom.type) {
     case ATOM_TYPE_FTYP:
-        return atom_parse_ftyp(&atom);
+        atom_parse_ftyp(&atom);
+        break;
     case ATOM_TYPE_MVHD:
-        return atom_parse_mvhd(&atom);
+        atom_parse_mvhd(&atom);
+        break;
     case ATOM_TYPE_META:
-        return atom_parse_meta(&atom);
+        atom_parse_meta(&atom);
+        break;
     case ATOM_TYPE_STYP:
-        return atom_parse_styp(&atom);
+        atom_parse_styp(&atom);
+        break;
     case ATOM_TYPE_SIDX:
-        return atom_parse_sidx(&atom);
+        atom_parse_sidx(&atom);
+        break;
     case ATOM_TYPE_MDAT:
-        return atom_parse_mdat(&atom);
+        atom_parse_mdat(&atom);
+        break;
     case ATOM_TYPE_MOOV:
     case ATOM_TYPE_TRAK:
     case ATOM_TYPE_TKHD:

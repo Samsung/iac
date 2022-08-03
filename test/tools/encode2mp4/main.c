@@ -37,7 +37,7 @@ void print_usage(char* argv[])
   fprintf(stderr, "-mode    : <input channel layout/channel layout combinations>\n");
   fprintf(stderr, "<input wav file>\n");
   fprintf(stderr, "<output mp4 file>\n\n");
-  fprintf(stderr, "Example:\nencode2mp4 -codec opus -mode 7.1.4/2.0.0+3.1.2+5.1.2 replace_audio.wav replace_audio.mp4\n");
+  fprintf(stderr, "Example:\nencode2mp4 -codec opus -mode 7.1.4/2.0.0+3.1.2+5.1.2 input.wav output.mp4\n");
 }
 
 int main(int argc, char *argv[])
@@ -51,7 +51,7 @@ int main(int argc, char *argv[])
   char *channel_layout_string[] = { "1.0.0", "2.0.0", "5.1.0", "5.1.2", "5.1.4", "7.1.0", "7.1.2", "7.1.4", "3.1.2" };
 
   IAChannelLayoutType channel_layout_in = IA_CHANNEL_LAYOUT_COUNT;
-  unsigned char channel_layout_cb[IA_CHANNEL_LAYOUT_COUNT];
+  IAChannelLayoutType channel_layout_cb[IA_CHANNEL_LAYOUT_COUNT];
 
   int recon_gain_flag = 1;
   int output_gain_flag = 1;
@@ -199,6 +199,8 @@ int main(int argc, char *argv[])
   * */
   immersive_audio_encoder_ctl(ia_enc, IA_SET_RECON_GAIN_FLAG((int)(recon_gain_flag)));
   immersive_audio_encoder_ctl(ia_enc, IA_SET_OUTPUT_GAIN_FLAG((int)output_gain_flag));
+  int preskip = 0;
+  immersive_audio_encoder_ctl(ia_enc, IA_GET_LOOKAHEAD(&preskip));
 
   /**
   * 3. ASC and HEQ pre-process.
@@ -210,7 +212,7 @@ int main(int argc, char *argv[])
     int pcm_frames = wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
     while (pcm_frames)
     {
-      immersive_audio_encoder_dmpd_process(ia_enc, wav_samples, chunk_size);
+      immersive_audio_encoder_dmpd_process(ia_enc, wav_samples, pcm_frames/ bsize_of_1sample);
       pcm_frames = wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
 
     }
@@ -239,7 +241,7 @@ int main(int argc, char *argv[])
   current = 0;
   while (pcm_frames)
   {
-    immersive_audio_encoder_loudness_gain(ia_enc, wav_samples, chunk_size);
+    immersive_audio_encoder_loudness_gain(ia_enc, wav_samples, pcm_frames / bsize_of_1sample);
 
     pcm_frames = wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
     wr = (wav_reader_s *)in_wavf;
@@ -262,7 +264,7 @@ int main(int argc, char *argv[])
 
   while (pcm_frames)
   {
-    immersive_audio_encoder_recon_gain(ia_enc, wav_samples, chunk_size);
+    immersive_audio_encoder_recon_gain(ia_enc, wav_samples, pcm_frames / bsize_of_1sample);
     pcm_frames = wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
   }
 
@@ -306,9 +308,9 @@ int main(int argc, char *argv[])
   * 6. get immersive audio static metadata info.
   * */
   IA_STATIC_METADATA ia_static_metadata = get_immersive_audio_encoder_ia_static_metadata(ia_enc);
+  audio_t[0].ia_static_meta.version = 0;
   audio_t[0].ia_static_meta.ambisonics_mode = ia_static_metadata.ambisonics_mode;
   audio_t[0].ia_static_meta.channel_audio_layer = ia_static_metadata.channel_audio_layer;
-  audio_t[0].ia_static_meta.ambisonics_mode = ia_static_metadata.ambisonics_mode;
   for (int i = 0; i < ia_static_metadata.channel_audio_layer; i++)
   {
     audio_t[0].ia_static_meta.ch_audio_layer_config[i].loudspeaker_layout = ia_static_metadata.channel_audio_layer_config[i].loudspeaker_layout;
@@ -333,14 +335,12 @@ int main(int argc, char *argv[])
   int demix_mode = 0;
   while (pcm_frames)
   {
-    int encoded_size = immersive_audio_encode(ia_enc, wav_samples, chunk_size, encode_ia, &demix_mode, MAX_PACKET_SIZE);
-    mov_write_audio2(movm, 0, encode_ia, encoded_size, chunk_size, demix_mode);
+    int encoded_size = immersive_audio_encode(ia_enc, wav_samples, pcm_frames / bsize_of_1sample, encode_ia, &demix_mode, MAX_PACKET_SIZE);
+    mov_write_audio2(movm, 0, encode_ia, encoded_size, pcm_frames / bsize_of_1sample, demix_mode);
 
     pcm_frames = wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
     frame_count ++;
   }
-
-
 
   stop_t = clock();
   printf("encoding total time %f(s), total count: %ld\n",(float)(stop_t-start_t)/CLOCKS_PER_SEC, frame_count);

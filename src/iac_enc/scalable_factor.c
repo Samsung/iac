@@ -295,7 +295,7 @@ void scalablefactor_destroy(ScalableFactor *sf)
     free(sf);
 }
 
-void cal_scalablefactor2(ScalableFactor *sf, Mdhr *mdhr, InScalableBuffer inbuffer, CHANNEL_LAYOUT_TYPE clayer, CHANNEL_LAYOUT_TYPE llayer)
+void cal_scalablefactor2(ScalableFactor *sf, Mdhr *mdhr, InScalableBuffer inbuffer, CHANNEL_LAYOUT_TYPE clayer, CHANNEL_LAYOUT_TYPE llayer, int recongain_cls[enc_channel_cnt])
 {
   unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
   int channels = channel_map714[clayer];
@@ -351,6 +351,7 @@ void cal_scalablefactor2(ScalableFactor *sf, Mdhr *mdhr, InScalableBuffer inbuff
         sfs.scalefactor_data[i] = 1;
       }
       uint8_t* cl_lay =  enc_get_layout_channels(clayer);
+      uint8_t* ll_lay = enc_get_layout_channels(llayer);
       int cl = 0;
       int last_cl = 0;
       for (int i = 0; i < channels; i++)
@@ -358,13 +359,23 @@ void cal_scalablefactor2(ScalableFactor *sf, Mdhr *mdhr, InScalableBuffer inbuff
         cl = cl_lay[i];
         if (inbuffer.scalable_map[cl] == 1)
         {
+          if (recongain_cls[cl] >= 0)
+          {
+            chx[i] = recongain_cls[cl];
+            continue;
+          }
           for (int j = last_cl; j < channels_last; j++)
           {
-            if (get_recon_gain_mixed_map[llayer][j] == 1)
+            int lcl = ll_lay[j];
+            if (inbuffer.relevant_mixed_cl[lcl] == 1)
             {
               calc_scalefactor2(mBuf[i], sBuf[j], rBuf[i], thres, (sf->spl_avg_data[clayer] + i), (sfs.scalefactor_index + i), (sfs.scalefactor_data + i), sf->frame_size);
               chx[i] = float_to_qf(sfs.scalefactor_data[i], 8);
-              last_cl = j + 1;
+              recongain_cls[cl] = chx[i];
+              if (lcl == enc_channel_mono)
+                last_cl = j;
+              else
+                last_cl = j + 1;
               break;
             }
           }

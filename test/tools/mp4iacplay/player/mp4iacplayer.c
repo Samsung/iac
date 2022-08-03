@@ -12,10 +12,14 @@
 
 #define PKT_SIZE 2048*12
 
+typedef struct {
+    int layout;
+    int drc;
+} InParam;
 
 static void dump_iac_header(IACHeader *);
 static void mp4_input_data_dump (char *);
-static void mp4_input_wav_output (char *, int flags);
+static void mp4_input_wav_output (char *, InParam *);
 static void wav_layout_out(int16_t *in, int16_t *out, int size,
         int channels, uint8_t* mapping);
 
@@ -26,14 +30,15 @@ static void print_usage (char *argv[])
     fprintf(stderr, "options:\n");
     fprintf(stderr, "-o1          : -o1(mp4 dump output)\n");
     fprintf(stderr, "-o2          : -o2(decode IAC bitstream, audio processing and output wave file).\n");
+    fprintf(stderr, "-d[0-2]      : DRC mode (0: av mode, 1:tv mode, 2:mobile mode).\n");
     fprintf(stderr, "-l[0-8]      : layout(0:mono, 1:stereo, 2:5.1, 3:5.1.2, 4:5.1.4, 5:7.1, 6:7.1.2, 7:7.1.4, 8:3.1.2.\n");
 }
 
 int main(int argc, char *argv[])
 {
-    int output_mode = -1;
-    int layout = -1;
+    InParam inparam = {-1, 0};
     int args;
+    int output_mode;
 
     if (argc < 2) {
         print_usage(argv);
@@ -46,7 +51,9 @@ int main(int argc, char *argv[])
             if (argv[args][1] == 'o') {
                 output_mode = atoi(argv[args] + 2);
             } else if (argv[args][1] == 'l') {
-                layout = atoi(argv[args] + 2);
+                inparam.layout = atoi(argv[args] + 2);
+            } else if (argv[args][1] == 'd') {
+                inparam.drc = atoi(argv[args] + 2);
             }
         }
         args++;
@@ -60,7 +67,7 @@ int main(int argc, char *argv[])
     if (output_mode == 1) {
         mp4_input_data_dump(argv[args]);
     } else if(output_mode == 2) {
-        mp4_input_wav_output(argv[args], layout);
+        mp4_input_wav_output(argv[args], &inparam);
     } else {
         print_usage(argv);
         fprintf(stderr, "invalid output mode %d\n", output_mode);
@@ -154,7 +161,7 @@ static const char* layout_str[] = {
 };
 
 
-void mp4_input_wav_output (char *fn, int flags)
+void mp4_input_wav_output (char *fn, InParam *params)
 {
     MP4IACParser mp4par;
     FILE *dump_f;
@@ -170,6 +177,7 @@ void mp4_input_wav_output (char *fn, int flags)
     IADecoder *dec = 0;
     IACodecID cid = IA_CODEC_OPUS;
     int layout = -1;
+    int drc = 0;
 
     int pkt_len;
     int64_t sample_offs;
@@ -219,12 +227,12 @@ void mp4_input_wav_output (char *fn, int flags)
         goto err_done;
     }
 
-    if (flags < 0) {
+    if (params->layout < 0) {
         layout = header->layout[header->layers-1];
     } else {
         for (int i=0; i<header->layers; ++i) {
-            if (header->layout[i] == flags) {
-                layout = flags;
+            if (header->layout[i] == params->layout) {
+                layout = params->layout;
                 break;
             }
         }
@@ -243,7 +251,12 @@ void mp4_input_wav_output (char *fn, int flags)
         goto err_done;
     }
 
+    if (params->drc >= IA_DRC_AV_MODE &&
+            params->drc <= IA_DRC_MODILE_MODE)
+        drc = params->drc;
+
     immersive_audio_decoder_set_channel_layout(dec, layout);
+    immersive_audio_decoder_set_drc_mode(dec, drc);
 
     snprintf(wav_fn, 256, "%s_%s.wav", prefix, layout_str[layout]);
     fprintf(stderr, "Sample rate: %u, channles: %d, layout %d.\n",

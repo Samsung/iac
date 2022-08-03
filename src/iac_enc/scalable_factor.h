@@ -42,6 +42,7 @@ typedef struct {
 
   unsigned char * gaindown_map;
   unsigned char * scalable_map;
+  unsigned char * relevant_mixed_cl;
 }InScalableBuffer;
 
 typedef struct {
@@ -53,6 +54,6 @@ typedef struct {
 int scalablefactor_init();
 ScalableFactor * scalablefactor_create(const unsigned char *channel_layout_map, int frame_size);
 void cal_scalablefactor(Mdhr *mdhr, InScalableBuffer inbuffer, int scalefactor, CHANNEL_LAYOUT_TYPE clayer);
-void cal_scalablefactor2(ScalableFactor *sf, Mdhr *mdhr, InScalableBuffer inbuffer, CHANNEL_LAYOUT_TYPE clayer, CHANNEL_LAYOUT_TYPE llayer);
+void cal_scalablefactor2(ScalableFactor *sf, Mdhr *mdhr, InScalableBuffer inbuffer, CHANNEL_LAYOUT_TYPE clayer, CHANNEL_LAYOUT_TYPE llayer, int recongain_cls[enc_channel_cnt]);
 void scalablefactor_destroy(ScalableFactor *sf);
 #endif

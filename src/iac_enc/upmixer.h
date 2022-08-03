@@ -38,7 +38,7 @@ typedef struct {
   unsigned char  channel_order[enc_channel_cnt];
   int pre_layout;
   unsigned char scalable_map[CHANNEL_LAYOUT_MAX][enc_channel_cnt];
-  unsigned char relevant_mixed_cl[enc_channel_cnt];
+  unsigned char relevant_mixed_cl[CHANNEL_LAYOUT_MAX][enc_channel_cnt];
   float *hanning;
   float *startWin;
   float *stopWin;
