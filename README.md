@@ -41,13 +41,13 @@ This tool aims to encode PCM data to IA bitstream and encapsulate to Mp4/Fmp4
 <input wav file>
 <output mp4 file>
 
-Example:  ./encode2mp4 -codec opus -mode 7.1.4/2.0.0+3.1.2+5.1.2 replace_audio.wav replace_audio.mp4
+Example:  ./encode2mp4 -codec opus -mode 7.1.4/2.0.0+3.1.2+5.1.2 input.wav outout.mp4
 ```
 Remark: "estimator_model.tflite" and "feature_model.tflite" are required in exacuting directory.
 
 2. encode non-scalable channel layout input format.
 ```sh
-Example:  ./encode2mp4 -codec opus -mode 7.1.4/0.0.0 replace_audio.wav replace_audio.mp4
+Example:  ./encode2mp4 -codec opus -mode 7.1.4/0.0.0 input.wav outout.mp4
 ```
 
 ### Tools(mp4iacplay)
@@ -57,9 +57,11 @@ This tool aims to parse Mp4/Fmp4, decode IA bitstream and dump to wav file.
 options:
 -o1          : -o1(mp4 dump output)
 -o2          : -o2(decode CMF4 opus bitstream, audio processing and output wave file).
+-d[0-2]      : DRC mode (0: av mode, 1:tv mode, 2:mobile mode).
 -l[1-8]      : layout(1:2.0, 2:5.1, 3:5.1.2, 4:5.1.4, 5:7.1, 6:7.1.2, 7:7.1.4, 8:3.1.2.
 
-Example:  ./mp4iacplayer -o2 -l1 replace_audio.mp4
+Example:  ./mp4iacplayer -o2 -l1 input.mp4
+          ./mp4iacplayer -d2 -o2 -l1 input.mp4
 ```
 
 

@@ -766,8 +766,9 @@ static void
 ia_decoder_frame_drc (IADecoder *ths, float *out, float *in, int frame_size)
 {
     IADecoderContext *ctx = ths->dctx;
-    drc_process_block(0, ctx->layer_info[ctx->layout].loudness, in, out,
-            frame_size, ia_channel_layout_get_channels_count(ctx->layout),
+    drc_process_block(ctx->drc_mode, ctx->layer_info[ctx->layer].loudness,
+            in, out, frame_size,
+            ia_channel_layout_get_channels_count(ctx->layout), ths->compressor,
             &ths->limiter);
 }
 
@@ -778,7 +779,7 @@ static void ia_decoder_plane2stride_out_short (void *dst, const float *src,
 
    ia_logd("channels %d", channels);
    for (int c = 0; c<channels; ++c) {
-       if (src != NULL) {
+       if (src) {
           for (int i=0; i<frame_size; i++)
              short_dst[i * channels + c] = FLOAT2INT16(src[frame_size * c + i]);
        } else {
@@ -935,7 +936,7 @@ IADecoder* immersive_audio_decoder_create (IACodecID cid,
     ia_decoder_configure_demixer (ths);
 
     /* initialize limiter. */
-    drc_init_limiter(&ths->limiter, 48000, ctx->channels, ctx->frame_size);
+    drc_init_limiter(&ths->limiter, 48000, ctx->channels);
 
     /* initialize buffers. */
     ia_logt ("buffer size %lu.", sizeof(float) * MAX_FRAME_SIZE * ctx->channels);
@@ -1093,9 +1094,48 @@ IAErrCode immersive_audio_decoder_set_channel_layout (IADecoder* ths,
             ia_channel_layout_name(type), type);
 
     ia_decoder_configure_demixer (ths);
-    drc_init_limiter(&ths->limiter, 48000, ctx->layout_channels, ctx->frame_size);
+    if (ctx->drc_mode == IA_DRC_MODILE_MODE)
+        drc_init_compressor (ths->compressor, 48000, ctx->layout_channels,
+                             ctx->frame_size);
+    drc_init_limiter (&ths->limiter, 48000, ctx->layout_channels);
     ec = IA_OK;
 
     return ec;
 }
+
+IAErrCode immersive_audio_decoder_set_drc_mode (IADecoder* ths, int mode)
+{
+    IADecoderContext   *ctx;
+
+    if (!ths || !ths->dctx)
+        return IA_ERR_INVALID_STATE;
+
+    if (mode < IA_DRC_AV_MODE || mode > IA_DRC_MODILE_MODE)
+        return IA_ERR_BAD_ARG;
+
+    ctx = ths->dctx;
+
+    if (mode == ctx->drc_mode)
+        return IA_OK;
+
+    if (mode == IA_DRC_MODILE_MODE) {
+        if (!ths->compressor) {
+            ths->compressor = audio_effect_compressor_create ();
+            if (!ths->compressor)
+                return IA_ERR_ALLOC_FAIL;
+        }
+        drc_init_compressor (ths->compressor, 48000, ctx->layout_channels,
+                             ctx->frame_size);
+    } else {
+        if (ths->compressor) {
+            audio_effect_compressor_destroy (ths->compressor);
+            ths->compressor = 0;
+        }
+    }
+
+    ctx->drc_mode = mode;
+
+    return IA_OK;
+}
+
 

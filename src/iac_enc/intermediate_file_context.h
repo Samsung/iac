@@ -25,8 +25,9 @@ typedef enum {
   FILE_UPMIX,
   FILE_DECODED,
   FILE_ENCODED,
-  FILE_SCALEFACTOR
-}INT_FILE_TYPE;
+  FILE_SCALEFACTOR,
+  INTER_FILE_MAX
+}INTER_FILE_TYPE;
 
 static char* downmix_m_wav[IA_CHANNEL_LAYOUT_COUNT] = { //0
   "m100_down.wav",

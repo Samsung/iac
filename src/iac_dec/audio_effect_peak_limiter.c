@@ -12,25 +12,6 @@ static int init_default(AudioEffectPeakLimiter* );
 static float compute_target_gain(AudioEffectPeakLimiter* , float);
 inline static float curve_accel(float x);
 
-void apply_gain(float *inblock, int in_len, int num_channels, float gain_db)
-{
-    float k = powf(10, gain_db / 20);
-    float *buffer;
-    for (int channel = 0; channel < num_channels; channel++)
-    {
-        buffer = inblock + channel * in_len;
-        for (int i = 0; i < in_len; i++)
-            buffer[i] = buffer[i] * k;
-    }
-}
-
-void apply_gain_from_to(float *inblock, int in_len, int num_channels,
-        float from_db, float to_db)
-{
-    float gain_db = to_db - from_db;
-    apply_gain(inblock, in_len, num_channels, gain_db);
-}
-
 
 AudioEffectPeakLimiter*
 audio_effect_peak_limiter_create (void)
@@ -43,9 +24,6 @@ audio_effect_peak_limiter_create (void)
 
 void audio_effect_peak_limiter_uninit (AudioEffectPeakLimiter* ths)
 {
-    if (ths && ths->audioBlock)
-        free(ths->audioBlock);
-
 #if USE_TRUEPEAK
         for (int c=0; c<MAX_CHANNELS; ++c) {
             audio_true_peak_meter_deinit(&ths->truePeakMeters[c]);
@@ -65,11 +43,10 @@ void audio_effect_peak_limiter_destroy (AudioEffectPeakLimiter* ths)
 //num_channels: number of channels in frame
 //atk_sec : attack duration in seconds
 //rel_sec : release duration in seconds
-//block_size: number of samples in frame
 //delay_size: number of samples in delay buffer
 void audio_effect_peak_limiter_init(AudioEffectPeakLimiter* ths,
         float threashold_db, int sample_rate, int num_channels,
-        float atk_sec, float rel_sec, int block_size, int delay_size)
+        float atk_sec, float rel_sec, int delay_size)
 {
     init_default(ths);
 
@@ -78,9 +55,6 @@ void audio_effect_peak_limiter_init(AudioEffectPeakLimiter* ths,
     ths->releaseSec = rel_sec;
     ths->incTC = (float)1 / (float)sample_rate;
     ths->numChannels = num_channels;
-
-    ths->audioBlock =
-        (float *)malloc(sizeof(float) * block_size * num_channels);
 
     ths->delaySize = delay_size;
     ths->delayBufferSize = delay_size;
@@ -93,7 +67,7 @@ void audio_effect_peak_limiter_init(AudioEffectPeakLimiter* ths,
 }
 
 int audio_effect_peak_limiter_process_block (AudioEffectPeakLimiter* ths,
-        float *inblock, float *outblock, int block_len)
+        float *inblock, float *outblock, int frame_size)
 {
     // Look ahead
     float peak;
@@ -101,24 +75,33 @@ int audio_effect_peak_limiter_process_block (AudioEffectPeakLimiter* ths,
     float gain;
     int k;
     float peakMax = 0.0f;
+    float *audioBlock = outblock;
+    float out;
+    int idx, pos;
 #if USE_TRUEPEAK
     float data;
 #endif
 
     if (!inblock)
         return (0);
-    memset(ths->audioBlock, 0, block_len * ths->numChannels * sizeof(float));
 
-    for (k = 0; k < block_len; k++) {
+#define DB_IDX(i) ((i) % ths->delayBufferSize)
+
+    for (k = 0; k < frame_size; k++) {
         peak = 0.0f;
+        idx = k + ths->entryIndex;
 #ifndef OLD_CODE
         if (ths->peak_pos < 0) {
 #endif
             for (int i = 0; i < ths->delaySize; i++) {
                 channel_peak =
-                    ths->peakData[(k + i + ths->entryIndex) % ths->delayBufferSize];
-                if (channel_peak > peak)
+                    ths->peakData[DB_IDX(i + idx)];
+                if (channel_peak > peak) {
                     peak = channel_peak;
+#ifndef OLD_CODE
+                    ths->peak_pos = DB_IDX(i + idx);
+#endif
+                }
             }
 
 #ifndef OLD_CODE
@@ -136,22 +119,21 @@ int audio_effect_peak_limiter_process_block (AudioEffectPeakLimiter* ths,
         peakMax = 0;
 
         for (int channel = 0; channel < ths->numChannels; channel++) {
+            pos = channel*frame_size;
             if (ths->delaySize > 0) {
-                ths->audioBlock[channel*block_len + k] =
-                    ths->delayData[channel][(k + ths->entryIndex) % ths->delayBufferSize] * gain;
+                out = ths->delayData[channel][DB_IDX(idx)] * gain;
 #if USE_TRUEPEAK
                 data =
 #endif
-                ths->delayData[channel][(k + ths->entryIndex) % ths->delayBufferSize] =
-                    inblock[channel*block_len + k];
+                ths->delayData[channel][DB_IDX(idx)] = inblock[pos+k];
+                audioBlock[pos+k] = out;
             }
             else
             { // no delay mode
-                ths->audioBlock[channel*block_len + k] =
-                    inblock[channel*block_len + k] * gain;
 #if USE_TRUEPEAK
-                data = inblock[channel*block_len + k];
+                data = inblock[pos+k];
 #endif
+                audioBlock[pos+k] = inblock[pos+k] * gain;
             }
 #if USE_TRUEPEAK
             // compute true peak if you want
@@ -162,32 +144,29 @@ int audio_effect_peak_limiter_process_block (AudioEffectPeakLimiter* ths,
             if (channel_peak > peakMax)
                 peakMax = channel_peak;
 #else
-            channel_peak =
-                fabs(ths->delayData[channel][(k + ths->entryIndex) % ths->delayBufferSize]);
+            channel_peak = fabs(ths->delayData[channel][DB_IDX(idx)]);
             if (channel_peak > peakMax)
                 peakMax = channel_peak;
 #endif
         }
 
 #ifndef OLD_CODE
-        if (ths->peak_pos == ((k + ths->entryIndex) % ths->delayBufferSize))
+        if (ths->peak_pos == DB_IDX(idx))
             ths->peak_pos = -1;
         else if (ths->peak_pos < 0 || ths->peakData[ths->peak_pos] < peakMax)
-            ths->peak_pos = (k + ths->entryIndex) % ths->delayBufferSize;
+            ths->peak_pos = DB_IDX(idx);
 #endif
 
-        ths->peakData[(k + ths->entryIndex) % ths->delayBufferSize] = peakMax;
+        ths->peakData[DB_IDX(idx)] = peakMax;
         ia_logt("index %d : peak max value %.10f", k, peakMax);
     }
 
     if (ths->delaySize > 0) {
-        ths->entryIndex = (ths->entryIndex + block_len) % ths->delayBufferSize;
+        ths->entryIndex = DB_IDX(ths->entryIndex + frame_size);
     }
 
     // transmit the block and release memory
-    memcpy(outblock, ths->audioBlock,
-            block_len * ths->numChannels * sizeof(float));
-    return (block_len);
+    return (frame_size);
 }
 
 int init_default(AudioEffectPeakLimiter* ths)

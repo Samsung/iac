@@ -58,8 +58,8 @@ typedef struct {
 *            if [in]channel_layout_cb is set with IA_CHANNEL_LAYOUT_COUNT, then it is non-scalable encoding.
 */
 IAEncoder *immersive_audio_encoder_create(int32_t Fs,
-  int channel_layout_in,
-  const unsigned char *channel_layout_cb,//
+  IAChannelLayoutType channel_layout_in,
+  const IAChannelLayoutType *channel_layout_cb,//
   int codec_id, //1:opus, 2:aac
   int *error);
 
@@ -129,7 +129,8 @@ int immersive_audio_encoder_recon_gain(IAEncoder *st, const int16_t *pcm, int fr
 * @param     [in] frame_size : Number of samples per channel in the input signal.
 * @param     [in] data : Output payload.
 * @param     [in] max_data_bytes : Size of the allocated memory for the output payload
-* @return    @0: success,@others: fail
+* @return    The length of the encoded packet (in bytes) on success or a
+*            negative error code (see @ref IAErrCode) on failure.
 */
 int immersive_audio_encode(IAEncoder *st, const int16_t *pcm, int frame_size, unsigned char* data, int *demix_mode, int32_t max_data_bytes);
 

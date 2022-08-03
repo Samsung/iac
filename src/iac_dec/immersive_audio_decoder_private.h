@@ -96,6 +96,7 @@ typedef struct IADecoderContext {
 
     uint32_t                flags;
     int                     dmx_mode;
+    int                     drc_mode;
 
 } IADecoderContext;
 
@@ -109,9 +110,10 @@ struct IADecoder {
     /* decoder for ambisonics */
     IACoreDecoder      *adec;
 
-    float*              buffer[DEC_BUF_CNT];
+    float              *buffer[DEC_BUF_CNT];
 
-    Demixer*                demixer;
+    Demixer                *demixer;
+    AudioEffectCompressor  *compressor;
     AudioEffectPeakLimiter  limiter;
 };
 

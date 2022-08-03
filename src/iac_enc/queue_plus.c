@@ -37,12 +37,12 @@ int QueueLength(QueuePlus *pq)
 int QueuePush(QueuePlus *pq, void * input)
 {
   QueueNode* newnode = (QueueNode*)malloc(sizeof(QueueNode));
-  memset(newnode, 0x00, sizeof(QueueNode));
   if (newnode == NULL)
   {
     printf("newnode alloate failed\n");
     return -1;
   }
+  memset(newnode, 0x00, sizeof(QueueNode));
   switch (pq->_type)
   {
   case kUInt8:

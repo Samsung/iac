@@ -1439,7 +1439,7 @@ int mp4_demix_info(mov_audio_track *audio_t, int demix_mode)
   int dmixp_mode_ponter = audio_t->demixing_info.dmixp_mode_ponter;
   if (dmixp_mode_group_size == 0)
   {
-    audio_t->demixing_info.dmixp_mode_group[0][dmixp_mode_group_size]++;
+    audio_t->demixing_info.dmixp_mode_group[0][dmixp_mode_group_size] = 1;
     audio_t->demixing_info.dmixp_mode_group[1][dmixp_mode_group_size] = 1;
     audio_t->demixing_info.dmixp_mode_group_size++;
   }
@@ -1451,7 +1451,7 @@ int mp4_demix_info(mov_audio_track *audio_t, int demix_mode)
   {
     audio_t->demixing_info.dmixp_mode_group_size++;
     dmixp_mode_group_size = audio_t->demixing_info.dmixp_mode_group_size;
-    audio_t->demixing_info.dmixp_mode_group[0][dmixp_mode_group_size - 1]++;
+    audio_t->demixing_info.dmixp_mode_group[0][dmixp_mode_group_size - 1] = 1;
     int find_i = 0;
     for (find_i = 0; find_i < audio_t->demixing_info.dmixp_mode_count; find_i++)
     {

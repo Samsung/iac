@@ -299,11 +299,14 @@ int ia_asc_process(IA_ASC *asc, int16_t *input, int size)
   }
   else
   {
-    for (int i = 0; i < size; i++)
+    for (int i = 0; i < chunk_size; i++)
     {
       for (int j = 0; j < nch; j++)
       {
-        down_sample[i*nch + j] = input[i*nch + j];
+        if (i < size)
+          down_sample[i*nch + j] = input[i*nch + j];
+        else
+          down_sample[i*nch + j] = 0;
       }
     }
   }

@@ -71,7 +71,7 @@ static float calc_w_v2(int weighttypenum, float w_x_prev, float *w_x)
   return (w_z);
 }
 
-void conv_downmixpcm(unsigned char *pcmbuf, void* dspbuf, int nch, int frame_size)
+void conv_downmixpcm(unsigned char *pcmbuf, void* dspbuf, int nch, int size, int frame_size)
 {
   int16_t *buff = (int16_t*)pcmbuf;
 
@@ -80,7 +80,10 @@ void conv_downmixpcm(unsigned char *pcmbuf, void* dspbuf, int nch, int frame_siz
   {
     for (int j = 0; j < frame_size; j++)
     {
-      outbuff[i][j] = (float)(buff[i + j*nch]) / 32768.0f; /// why / 32768.0f??
+      if (j < size)
+        outbuff[i][j] = (float)(buff[i + j*nch]) / 32768.0f;
+      else
+        outbuff[i][j] = 0.0f;
     }
   }
 }
@@ -357,7 +360,7 @@ static creator_t g_downmix[] = {
   { -1 }
 };
 
-int downmix2(DownMixer *dm, unsigned char* inbuffer, int dmix_type, int weight_type)
+int downmix2(DownMixer *dm, unsigned char* inbuffer, int size, int dmix_type, int weight_type)
 {
 
   int ret = 0;
@@ -366,7 +369,7 @@ int downmix2(DownMixer *dm, unsigned char* inbuffer, int dmix_type, int weight_t
   float weight_state_value_x_curr = 0.0;
   uint8_t *playout;
   int channel;
-  conv_downmixpcm(inbuffer, dspInBuf, dm->channels, dm->frame_size);
+  conv_downmixpcm(inbuffer, dspInBuf, dm->channels, size, dm->frame_size);
 
   unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
   unsigned char pre_ch = 0;
