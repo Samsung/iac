@@ -35,7 +35,7 @@ void init_dspInBuf(int channels,int chunkLen)
     }
 }
 
-void destory_dspInBuf()
+void destroy_dspInBuf()
 {
     for(int i=0;i<MAX_CHANNELS;i++){
         if(NULL != dspInBuf[i]){
@@ -335,7 +335,7 @@ int main(int argc, char* argv[])
     free(buffer);
     fclose(fp);
 
-    destory_dspInBuf();
+    destroy_dspInBuf();
         
 
         

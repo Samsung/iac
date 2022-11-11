@@ -246,7 +246,7 @@ int inference_asc_create(void ** inference)
   return 0;
 }
 
-int inference_asc_destory(void* asc_estimator_feature_)
+int inference_asc_destroy(void* asc_estimator_feature_)
 {
   extern int unload_asc_estimator_model(void *estimator_tflite_);
   extern int unload_asc_feature_model(void *feature_tflite_);

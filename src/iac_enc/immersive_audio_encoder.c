@@ -128,7 +128,7 @@ int immersive_audio_encoder_gain_measure2(LoudGainMeasure *lm, float * inbuffer,
   return 0;
 }
 
-int immersive_audio_encoder_loudgain_destory(LoudGainMeasure *lm)
+int immersive_audio_encoder_loudgain_destroy(LoudGainMeasure *lm)
 {
   if (!lm)
     return -1;
@@ -1237,7 +1237,7 @@ void immersive_audio_encoder_destroy(IAEncoder *et)
   downmix_destroy(et->downmixer_ld);
   downmix_destroy(et->downmixer_rg);
   downmix_destroy(et->downmixer_enc);
-  immersive_audio_encoder_loudgain_destory(et->loudgain);
+  immersive_audio_encoder_loudgain_destroy(et->loudgain);
   upmix_destroy(et->upmixer);
   scalablefactor_destroy(et->sf);
 

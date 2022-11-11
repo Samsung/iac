@@ -92,7 +92,7 @@ IADecoder*  immersive_audio_decoder_create (IACodecID codec,
  * @param   [in] ths : an immersive audio decoder handler.
  * @return  void.
  * */
-void    immersive_audio_decoder_destory (IADecoder* ths);
+void    immersive_audio_decoder_destroy (IADecoder* ths);
 
 /**
  * @brief   Decode an immersive audio packet.
