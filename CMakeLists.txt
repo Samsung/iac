@@ -4,6 +4,7 @@ project (iac)
 message(STATUS "start build iac")
 
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3") 
+SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 
 
