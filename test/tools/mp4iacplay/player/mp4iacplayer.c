@@ -294,7 +294,7 @@ err_done:
         free(wavpcm);
     }
     if (dec) {
-        immersive_audio_decoder_destory(dec);
+        immersive_audio_decoder_destroy(dec);
     }
     if (wav_f) {
         wav_write_close(wav_f);

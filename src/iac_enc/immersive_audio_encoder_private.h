@@ -152,5 +152,5 @@ struct IAEncoder {
 LoudGainMeasure * immersive_audio_encoder_loudgain_create(const unsigned char *channel_layout_map, int sample_rate, int frame_size);
 int immersive_audio_encoder_loudness_measure(LoudGainMeasure *lm, float * inbuffer, int channel_layout);
 int immersive_audio_encoder_gain_measure(LoudGainMeasure *lm, float * inbuffer, int channel_layout, int begin_ch, int nch);
-int immersive_audio_encoder_loudgain_destory(LoudGainMeasure *lm);
+int immersive_audio_encoder_loudgain_destroy(LoudGainMeasure *lm);
 #endif /*IMMERSIVE_AUDIO_ENCODER_PRIVATE_H*/

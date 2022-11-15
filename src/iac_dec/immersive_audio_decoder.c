@@ -952,7 +952,7 @@ IADecoder* immersive_audio_decoder_create (IACodecID cid,
 
 termination:
     if (ec < 0) {
-        immersive_audio_decoder_destory (ths);
+        immersive_audio_decoder_destroy (ths);
         ths = 0;
     }
 
@@ -1029,7 +1029,7 @@ int immersive_audio_decoder_decode (IADecoder* ths,
 }
 
 
-void immersive_audio_decoder_destory (IADecoder* ths)
+void immersive_audio_decoder_destroy (IADecoder* ths)
 {
     if (ths) {
         ia_logt ("close in");

@@ -117,7 +117,7 @@ IA_ASC * ia_asc_start(int layout, QueuePlus *pq)
   ia_asc->data_fs = (float*)malloc(unitNum*DOWN_CHANNELS*sizeof(float));
   return ia_asc;
 failure:
-  inference_asc_destory(ia_asc->asc_estimator_feature);
+  inference_asc_destroy(ia_asc->asc_estimator_feature);
   ia_asc->asc_estimator_feature = NULL;
   return ia_asc;
 }
@@ -373,7 +373,7 @@ int ia_asc_stop(IA_ASC *asc)
     frame_based_process(asc);
   if (asc && asc->asc_estimator_feature)
   {
-    inference_asc_destory(asc->asc_estimator_feature);
+    inference_asc_destroy(asc->asc_estimator_feature);
   }
   if (asc)
   {
@@ -578,7 +578,7 @@ int main(int argc, char* argv[])
 
 failure:
     
-    inference_asc_destory(asc_estimator_feature);
+    inference_asc_destroy(asc_estimator_feature);
     //refine
     if(NULL != sample_e){
         free(sample_e);
