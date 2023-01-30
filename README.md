@@ -1,7 +1,7 @@
-This library aims to be a friendly, portable C implementation of the immersive audio (IAC) 
-storage format, as described here:
+This library aims to be a friendly, portable C implementation of the immersive audio model and format(IAMF),
+as described here:
 
-<https://aomediacodec.github.io/iac/>
+<https://aomediacodec.github.io/iamf/>
 
 
 
@@ -10,11 +10,11 @@ storage format, as described here:
 Please see the examples in the "test/tools" directory. If you're already building this project.
 
 ### Compiling
-There are 2 parts to build: iac(iac_dec&iac_enc&dmpd) tools(encode2mp4&mp4iacplay).
+There are 2 parts to build: iamf(iamf_dec&iamf_enc) tools(iamfpackager&iamfplayer).
 
 "build_x86.sh" is an example to build, you can run it directly at your side.
 
-1. build iac in "src" directory.
+1. build iamf in "src" directory.
 ```sh
 % BUILD_LIBS=$PWD/build_libs
 % cmake ./ -DCMAKE_INSTALL_PREFIX=${BUILD_LIBS}
@@ -22,7 +22,7 @@ There are 2 parts to build: iac(iac_dec&iac_enc&dmpd) tools(encode2mp4&mp4iacpla
 % make install
 ```
 
-2. build tools in "test/tools/encode2mp4" and "test/tools/mp4iacplay" directory separately
+2. build tools in "test/tools/iamfpackager" and "test/tools/iamfplayer" directory separately
 ```sh
 % cmake ./-DCMAKE_INSTALL_PREFIX=${BUILD_LIBS}
 % make 
@@ -31,37 +31,48 @@ There are 2 parts to build: iac(iac_dec&iac_enc&dmpd) tools(encode2mp4&mp4iacpla
 Remark: please ensure that they have same CMAKE_INSTALL_PREFIX.
 
 
-### Tools(encode2mp4)
+### Tools(iamfpackager)
 This tool aims to encode PCM data to IA bitstream and encapsulate to Mp4/Fmp4
 
 1. encode scalable channel layout input format.
 ```sh
--codec   : <opus/aac>
--mode    : <input channel layout/channel layout combinations>
+-profile   : <0/1(simpe/base)>
+-codec   : <opus/aac/pcm>
+-mode    : <audio element type(0:channle-based,1:scene-based)/input channel layout/channel layout combinations>
 <input wav file>
-<output mp4 file>
+-o   : <0/1(mp4/bitstream)>
+<output file>
 
-Example:  ./encode2mp4 -codec opus -mode 7.1.4/2.0.0+3.1.2+5.1.2 input.wav outout.mp4
+Example:  
+./iamfpackager -profile 0 -codec opus -mode 0/7.1.4/2.0.0+3.1.2+5.1.2 input.wav -o 1 simple_profile.iamf
+or 
+./iamfpackager -profile 1 -codec opus -mode 0/7.1.4/2.0.0+3.1.2+5.1.2 input1.wav input2.wav -o 1 base_profile.iamf
 ```
 Remark: "estimator_model.tflite" and "feature_model.tflite" are required in exacuting directory.
 
 2. encode non-scalable channel layout input format.
 ```sh
-Example:  ./encode2mp4 -codec opus -mode 7.1.4/0.0.0 input.wav outout.mp4
+Example:  ./iamfpackager -profile 0 -codec opus -mode 0/7.1.4 input.wav -o 1 simple_profile.iamf
 ```
 
-### Tools(mp4iacplay)
-This tool aims to parse Mp4/Fmp4, decode IA bitstream and dump to wav file.
+3. encode ambisonics input format.
+```sh
+Example:
+./iamfpackager -profile 0 -codec opus -mode 1 input.wav -o 1 simple_profile.iamf
+or
+./iamfpackager -profile 1 -codec opus -mode 1 input1.wav input2.wav -o 1 base_profile.iamf
+```
+
+### Tools(iamfplayer)
+This tool aims to decode IA bitstream and dump to wav file.
 ```sh
 ./mp4iacplayer <options> <input/output file>
 options:
--o1          : -o1(mp4 dump output)
--o2          : -o2(decode CMF4 opus bitstream, audio processing and output wave file).
--d[0-2]      : DRC mode (0: av mode, 1:tv mode, 2:mobile mode).
--l[1-8]      : layout(1:2.0, 2:5.1, 3:5.1.2, 4:5.1.4, 5:7.1, 6:7.1.2, 7:7.1.4, 8:3.1.2.
+-o2          : -o2(decode IAMF bitstream and pcm output).
+-s[0~11]     : output layout, the sound system A~J and extensions (Upper + Middle + Bottom).
 
-Example:  ./mp4iacplayer -o2 -l1 input.mp4
-          ./mp4iacplayer -d2 -o2 -l1 input.mp4
+Example:  ./mp4iacplayer -o2 -s9 simple_profile.iamf
+
 ```
 
 
@@ -73,12 +84,11 @@ Example:  ./mp4iacplayer -o2 -l1 input.mp4
 and there are headers in "dep_codecs/include" already. If not, please build(patch_script.sh) and install in advance.
 
 3) "src/dmpd" part building relys on 3rd part libs("dep_external/lib": libfftw3f,libflatccrt)
-Thay have been provided already in "dep_external/lib", if meet target link issue, please download the opensource code,
+They have been provided already in "dep_external/lib", if meet target link issue, please download the opensource code,
 and build at your side. After building, please replace them.
 [fftw](http://www.fftw.org/).
 [flatcc](https://github.com/dvidelabs/flatcc).
-
-Remark: please add compile options:-fPIC  
+   (Remark: please add compile options:-fPIC when compiling fftw&flatcc)
 
 
 

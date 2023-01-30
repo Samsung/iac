@@ -1,0 +1,191 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{81ACC8CD-B461-45F5-85FE-9BB528A37C6C}</ProjectGuid>
+    <RootNamespace>asc</RootNamespace>
+    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v140</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v140</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v140</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v140</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <TargetExt>.lib</TargetExt>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <TargetExt>.lib</TargetExt>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>..\..\..\src\iamf_enc\dmpd\asc\generated\;..\..\..\src\iamf_enc\dmpd\asc\src\;..\..\..\src\iamf_enc\dmpd\asc\include;..\..\..\dep_external\include\;..\..\..\src\iamf_enc\dmpd\asc\3rdparty\stft\</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>HAVE_CONFIG_H;WIN32;_CRT_SECURE_NO_WARNINGS;DISABLE_EXECUTION;USE_QUEUE_METHOD;DISABLE_DEBUG_LOG</PreprocessorDefinitions>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>..\..\..\src\iamf_enc\dmpd\asc\generated\;..\..\..\src\iamf_enc\dmpd\asc\src\;..\..\..\src\iamf_enc\dmpd\asc\include;..\..\..\dep_external\include\;..\..\..\src\iamf_enc\dmpd\asc\3rdparty\stft\</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>HAVE_CONFIG_H;WIN32;_CRT_SECURE_NO_WARNINGS;DISABLE_EXECUTION;USE_QUEUE_METHOD;DISABLE_DEBUG_LOG</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\asc_common_bs.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\asc_dn.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\asc_test.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\common.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\effect_stft_abs.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\interpreter.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernel.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\abs.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\add.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\arg_max.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\concatenation.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\conv2d.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\depthwise_conv_2d.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\div.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\fully_connected.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\max_pool_2d.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\mean.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\mirror_pad.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\mul.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\neg.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\relu.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\reshape.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\rsqrt.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\softmax.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\sqrt.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\square_difference.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\strided_slice.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\sub.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\sum.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\tanh.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\transpose_conv.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\mel_matrix.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\opresolver.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\sample_d_data.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\sample_e_data.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\stft_abs.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\subgraph.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\tflite.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\transpose_1.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\transpose_3.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\util.c" />
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\wave.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\src\asc_common_bs.h" />
+    <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\src\asc_dn.h" />
+    <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\src\builtin_op_data.h" />
+    <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\src\common.h" />
+    <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\src\defs.h" />
+    <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\src\interpreter.h" />
+    <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernel.h" />
+    <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\src\opresolver.h" />
+    <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\src\subgraph.h" />
+    <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\src\util.h" />
+    <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\src\wave.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
