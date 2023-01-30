@@ -1,0 +1,221 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{DB1008B5-9EAF-423A-B6F5-3B0756F4829A}</ProjectGuid>
+    <RootNamespace>iamf</RootNamespace>
+    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v140</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v140</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v140</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v140</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <TargetExt>.lib</TargetExt>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <TargetExt>.lib</TargetExt>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>..\..\include\;..\..\src\common\;..\..\dep_codecs\include\opus\;..\..\dep_codecs\include\fdk-aac\;..\..\src\iamf_enc\dmpd\asc\include\;..\..\src\iamf_enc\dmpd\heq\include\;..\..\src\iamf_dec\;..\..\src\iamf_enc\</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
+      <AdditionalOptions>%(AdditionalOptions) -O3</AdditionalOptions>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>..\..\include\;..\..\src\common\;..\..\dep_codecs\include\opus\;..\..\dep_codecs\include\fdk-aac\;..\..\src\iamf_enc\dmpd\asc\include\;..\..\src\iamf_enc\dmpd\heq\include\;..\..\src\iamf_dec\</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\src\common\audio_true_peak_meter.c" />
+    <ClCompile Include="..\..\src\common\bitstreamrw.c" />
+    <ClCompile Include="..\..\src\common\fixedp11_5.c" />
+    <ClCompile Include="..\..\src\iamf_dec\aac\aac_multistream_decoder.c" />
+    <ClCompile Include="..\..\src\iamf_dec\aac\IAMF_aac_decoder.c" />
+    <ClCompile Include="..\..\src\iamf_dec\audio_effect_peak_limiter.c" />
+    <ClCompile Include="..\..\src\iamf_dec\bitstream.c" />
+    <ClCompile Include="..\..\src\iamf_dec\demixer.c" />
+    <ClCompile Include="..\..\src\iamf_dec\h2m_rdr.c" />
+    <ClCompile Include="..\..\src\iamf_dec\IAMF_core_decoder.c" />
+    <ClCompile Include="..\..\src\iamf_dec\IAMF_decoder.c" />
+    <ClCompile Include="..\..\src\iamf_dec\IAMF_OBU.c" />
+    <ClCompile Include="..\..\src\iamf_dec\IAMF_utils.c" />
+    <ClCompile Include="..\..\src\iamf_dec\m2m_rdr.c" />
+    <ClCompile Include="..\..\src\iamf_dec\opus\IAMF_opus_decoder.c" />
+    <ClCompile Include="..\..\src\iamf_dec\opus\opus_multistream2_decoder.c" />
+    <ClCompile Include="..\..\src\iamf_dec\pcm\IAMF_pcm_decoder.c" />
+    <ClCompile Include="..\..\src\iamf_enc\audio_loud_meter.c" />
+    <ClCompile Include="..\..\src\iamf_enc\biquad.c" />
+    <ClCompile Include="..\..\src\iamf_enc\downmixer.c" />
+    <ClCompile Include="..\..\src\iamf_enc\gaindown.c" />
+    <ClCompile Include="..\..\src\iamf_enc\IAMF_core_encoder.c" />
+    <ClCompile Include="..\..\src\iamf_enc\IAMF_encoder.c" />
+    <ClCompile Include="..\..\src\iamf_enc\intermediate_file_context.c" />
+    <ClCompile Include="..\..\src\iamf_enc\obuwrite.c" />
+    <ClCompile Include="..\..\src\iamf_enc\obu_multiway_tree.c" />
+    <ClCompile Include="..\..\src\iamf_enc\queue_plus.c" />
+    <ClCompile Include="..\..\src\iamf_enc\scalable_factor.c" />
+    <ClCompile Include="..\..\src\iamf_enc\scalable_format.c" />
+    <ClCompile Include="..\..\src\iamf_enc\upmixer.c" />
+    <ClCompile Include="..\..\src\iamf_enc\wavreader2.c" />
+    <ClCompile Include="..\..\src\iamf_enc\wavwriter2.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\include\IAMF_decoder.h" />
+    <ClInclude Include="..\..\include\IAMF_defines.h" />
+    <ClInclude Include="..\..\include\IAMF_encoder.h" />
+    <ClInclude Include="..\..\src\common\audio_defines.h" />
+    <ClInclude Include="..\..\src\common\audio_true_peak_meter.h" />
+    <ClInclude Include="..\..\src\common\bitstreamrw.h" />
+    <ClInclude Include="..\..\src\common\fixedp11_5.h" />
+    <ClInclude Include="..\..\src\iamf_dec\aac\aac_multistream_decoder.h" />
+    <ClInclude Include="..\..\src\iamf_dec\ae_rdr.h" />
+    <ClInclude Include="..\..\src\iamf_dec\audio_effect_peak_limiter.h" />
+    <ClInclude Include="..\..\src\iamf_dec\bitstream.h" />
+    <ClInclude Include="..\..\src\iamf_dec\demixer.h" />
+    <ClInclude Include="..\..\src\iamf_dec\IAMF_codec.h" />
+    <ClInclude Include="..\..\src\iamf_dec\IAMF_core_decoder.h" />
+    <ClInclude Include="..\..\src\iamf_dec\IAMF_debug.h" />
+    <ClInclude Include="..\..\src\iamf_dec\IAMF_debug_dev.h" />
+    <ClInclude Include="..\..\src\iamf_dec\IAMF_decoder_private.h" />
+    <ClInclude Include="..\..\src\iamf_dec\IAMF_OBU.h" />
+    <ClInclude Include="..\..\src\iamf_dec\IAMF_types.h" />
+    <ClInclude Include="..\..\src\iamf_dec\IAMF_utils.h" />
+    <ClInclude Include="..\..\src\iamf_dec\opus\opus_multistream2_decoder.h" />
+    <ClInclude Include="..\..\src\iamf_enc\audio_loud_meter.h" />
+    <ClInclude Include="..\..\src\iamf_enc\biquad.h" />
+    <ClInclude Include="..\..\src\iamf_enc\downmixer.h" />
+    <ClInclude Include="..\..\src\iamf_enc\gaindown.h" />
+    <ClInclude Include="..\..\src\iamf_enc\IAMF_encoder_private.h" />
+    <ClInclude Include="..\..\src\iamf_enc\intermediate_file_context.h" />
+    <ClInclude Include="..\..\src\iamf_enc\metadata_write.h" />
+    <ClInclude Include="..\..\src\iamf_enc\obuwrite.h" />
+    <ClInclude Include="..\..\src\iamf_enc\obu_multiway_tree.h" />
+    <ClInclude Include="..\..\src\iamf_enc\queue_plus.h" />
+    <ClInclude Include="..\..\src\iamf_enc\scalable_factor.h" />
+    <ClInclude Include="..\..\src\iamf_enc\scalable_format.h" />
+    <ClInclude Include="..\..\src\iamf_enc\upmixer.h" />
+    <ClInclude Include="..\..\src\iamf_enc\wavreader2.h" />
+    <ClInclude Include="..\..\src\iamf_enc\wavwriter2.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="asc\asc.vcxproj">
+      <Project>{81acc8cd-b461-45f5-85fe-9bb528a37c6c}</Project>
+    </ProjectReference>
+    <ProjectReference Include="decimate\decimate.vcxproj">
+      <Project>{6a777e34-be80-48f1-8258-46db5944560a}</Project>
+    </ProjectReference>
+    <ProjectReference Include="heq\heq.vcxproj">
+      <Project>{53b1d5df-4bd2-426d-bfce-6985d58ed59f}</Project>
+    </ProjectReference>
+    <ProjectReference Include="stft\stft.vcxproj">
+      <Project>{7d3a70e9-04f6-498b-b78b-e1aa6eaee644}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

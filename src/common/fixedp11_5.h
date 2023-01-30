@@ -24,4 +24,8 @@ qf_t float_to_qf(float q, int frac);
 
 float lin2db(float lin);
 float db2lin(float db);
+
+/// Mapping of wIdx(k) to w(k) for de-mixer
+float calc_w(int w_idx_offset, int w_idx_prev, int *w_idx);
+float get_w(int w_idx);
 #endif
