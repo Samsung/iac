@@ -1,12 +1,42 @@
+/*
+BSD 3-Clause Clear License The Clear BSD License
+
+Copyright (c) 2023, Alliance for Open Media.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+
 /**
  * @file IAMF_decoder.h
- * @brief Immersive audio decoder reference API
- */
+ * @brief IAMF decoder APIs.
+ * @version 0.1
+ * @date Created 03/03/2023
+ **/
 
 #ifndef IAMF_DECODER_H
 #define IAMF_DECODER_H
 
 #include <stdint.h>
+
 #include "IAMF_defines.h"
 
 #ifdef __cplusplus
@@ -17,119 +47,157 @@ extern "C" {
 /**\name Immersive audio decoder functions */
 /**@{*/
 
-typedef enum IAMF_SP_Label {
-    SP_LABEL_Mp000 = 0,
-    SP_LABEL_Mp022, SP_LABEL_Mn022,
-    SP_LABEL_MpSC, SP_LABEL_MnSC,
-    SP_LABEL_Mp030, SP_LABEL_Mn030,
-    SP_LABEL_Mp045, SP_LABEL_Mn045,
-    SP_LABEL_Mp060, SP_LABEL_Mn060,
-    SP_LABEL_Mp090, SP_LABEL_Mn090,
-    SP_LABEL_Mp110, SP_LABEL_Mn110,
-    SP_LABEL_Mp135, SP_LABEL_Mn135,
-    SP_LABEL_Mp180,
-
-    SP_LABEL_Up000 = 18,
-    SP_LABEL_Up022, SP_LABEL_Un022,
-    SP_LABEL_Up030, SP_LABEL_Un030,
-    SP_LABEL_Up045, SP_LABEL_Un045,
-    SP_LABEL_Up060, SP_LABEL_Un060,
-    SP_LABEL_Up090, SP_LABEL_Un090,
-    SP_LABEL_Up110, SP_LABEL_Un110,
-    SP_LABEL_Up135, SP_LABEL_Un135,
-    SP_LABEL_Up180,
-    SP_LABEL_UHp180,
-
-    SP_LABEL_Tp000 = 35,
-
-    SP_LABEL_Bp000 = 36,
-    SP_LABEL_Bp022, SP_LABEL_Bn022,
-    SP_LABEL_Bp030, SP_LABEL_Bn030,
-    SP_LABEL_Bp045, SP_LABEL_Bn045,
-    SP_LABEL_Bp060, SP_LABEL_Bn060,
-    SP_LABEL_Bp090, SP_LABEL_Bn090,
-    SP_LABEL_Bp110, SP_LABEL_Bn110,
-    SP_LABEL_Bp135, SP_LABEL_Bn135,
-    SP_LABEL_Bp180,
-
-    SP_LABEL_LFE1 = 52,
-    SP_LABEL_LFE2 = 53,
-} IAMF_SP_Label;
-
-
 typedef struct IAMF_Decoder *IAMF_DecoderHandle;
-typedef struct {
-    int channles;
-    int sample_rate;
-} IAMF_ConfInfo;
 
 typedef struct {
-    int     count;
-    char**  labels;
+  int count;
+  char **labels;
 } IAMF_Labels;
 
-typedef struct {
-    uint8_t    *data;
-    uint32_t    size;
-    uint64_t    pts;
-    uint64_t    dts;
-} IAMF_IPacket;
+/**
+ * @brief     Open an iamf decoder.
+ * @return    return an iamf decoder handle.
+ */
+IAMF_DecoderHandle IAMF_decoder_open(void);
 
-typedef struct {
-    void       *pcm;
-    uint32_t    frame_size;
-    int         channels;
-    uint64_t    pts;
-} IAMF_OFrame;
+/**
+ * @brief     Close an iamf decoder.
+ * @param     [in] handle : iamf decoder handle.
+ */
+int IAMF_decoder_close(IAMF_DecoderHandle handle);
+
+/**
+ * @brief     Configurate an iamf decoder.
+ * @param     [in] handle : iamf decoder handle.
+ * @param     [in] data : the bitstream.
+ * @param     [in] size : the size in bytes of bitstream.
+ * @param     [out] rsize : the size in bytes of bitstream that has been
+ * consumed.
+ * @return    @ref IAErrCode.
+ */
+int IAMF_decoder_configure(IAMF_DecoderHandle handle, const uint8_t *data,
+                           uint32_t size, uint32_t *rsize);
+
+/**
+ * @brief     Decode bitstream.
+ * @param     [in] handle : iamf decoder handle.
+ * @param     [in] data : the bitstream.
+ * @param     [in] size : the size in bytes of bitstream.
+ * @param     [out] rsize : the size in bytes of bitstream that has been
+ * consumed.
+ * @param     [out] pcm : output signal.
+ * @return    the number of decoded samples or @ref IAErrCode.
+ */
+int IAMF_decoder_decode(IAMF_DecoderHandle handle, const uint8_t *data,
+                        int32_t size, uint32_t *rsize, void *pcm);
+
+/**
+ * @brief     Get mix presentation labels.
+ * @param     [in] handle : iamf decoder handle.
+ * @return    @ref IAMF_Labels or 0.
+ */
+IAMF_Labels *IAMF_decoder_get_mix_presentation_labels(
+    IAMF_DecoderHandle handle);
+
+/**
+ * @brief     Set a mix presentation label.
+ * @param     [in] handle : iamf decoder handle.
+ * @param     [in] label : a human-friendly label (@ref
+ * IAMF_decoder_get_mix_presentation_labels) to describe mix presentation.
+ * @return    @ref IAErrCode.
+ */
+int IAMF_decoder_set_mix_presentation_label(IAMF_DecoderHandle handle,
+                                            const char *label);
+/**
+ * @brief     Set sound system output layout.
+ * @param     [in] handle : iamf decoder handle.
+ * @param     [in] ss : the sound system (@ref IAMF_SoundSystem).
+ * @return    @ref IAErrCode.
+ */
+int IAMF_decoder_output_layout_set_sound_system(IAMF_DecoderHandle handle,
+                                                IAMF_SoundSystem ss);
+
+/**
+ * @brief     Set binaural output layout.
+ * @param     [in] handle : iamf decoder handle.
+ * @return    @ref IAErrCode.
+ */
+int IAMF_decoder_output_layout_set_binaural(IAMF_DecoderHandle handle);
+
+/**
+ * @brief     Get the number of channels of the sound system.
+ * @param     [in] ss : the sound system (@ref IAMF_SoundSystem).
+ * @return    the number of channels.
+ */
+int IAMF_layout_sound_system_channels_count(IAMF_SoundSystem ss);
+
+/**
+ * @brief     Get the number of channels of binaural pattern.
+ * @return    the number of channels.
+ */
+int IAMF_layout_binaural_channels_count();
+
+/**
+ * @brief     Get the codec capability of iamf.Need to free string manually.
+ * @return    the supported codec string.
+ */
+char *IAMF_decoder_get_codec_capability();
+
+/**
+ * @brief     Set peak threshold value to limiter.
+ * @param     [in] handle : iamf decoder handle.
+ * @param     [in] db : peak threshold in dB.
+ * @return    @ref IAErrCode.
+ */
+int IAMF_decoder_peak_limiter_set_threshold(IAMF_DecoderHandle handle,
+                                            float db);
+
+/**
+ * @brief     Get peak threshold value.
+ * @param     [in] handle : iamf decoder handle.
+ * @return    Peak threshold in dB.
+ */
+float IAMF_decoder_peak_limiter_get_threshold(IAMF_DecoderHandle handle);
+
+// only for tizen
 
 typedef struct IAMF_Param {
-    int         parameter_length;
-    uint32_t    parameter_definition_type;
-    union {
-        uint32_t    dmixp_mode;
-    };
+  int parameter_length;
+  uint32_t parameter_definition_type;
+  union {
+    uint32_t dmixp_mode;
+  };
 } IAMF_Param;
 
+typedef enum IAMF_SoundMode {
+  IAMF_SOUND_MODE_NONE = -2,
+  IAMF_SOUND_MODE_NA = -1,
+  IAMF_SOUND_MODE_STEREO,
+  IAMF_SOUND_MODE_MULTICHANNEL,
+  IAMF_SOUND_MODE_BINAURAL
+} IAMF_SoundMode;
+
 typedef struct IAMF_extradata {
-    IAMF_Layout     target_layout;
-    uint32_t        number_of_samples;
-    uint32_t        bitdepth;
-    uint32_t        sampling_rate;
+  IAMF_SoundSystem output_sound_system;
+  uint32_t number_of_samples;
+  uint32_t bitdepth;
+  uint32_t sampling_rate;
+  IAMF_SoundMode output_sound_mode;
 
-    int                 num_loudness_layouts;
-    IAMF_Layout        *loudness_layout;
-    IAMF_LoudnessInfo  *loudness;
+  int num_loudness_layouts;
+  IAMF_Layout *loudness_layout;
+  IAMF_LoudnessInfo *loudness;
 
-    uint32_t        num_parameters;
-    IAMF_Param     *param;
+  uint32_t num_parameters;
+  IAMF_Param *param;
 } IAMF_extradata;
 
-IAMF_DecoderHandle  IAMF_decoder_open (void);
-int     IAMF_decoder_close (IAMF_DecoderHandle handle);
-
-int     IAMF_decoder_configure (IAMF_DecoderHandle handle, const uint8_t *data, uint32_t size, uint32_t *rsize);
-int     IAMF_decoder_get_configuration (IAMF_DecoderHandle handle, IAMF_ConfInfo *info);
-int     IAMF_decoder_decode (IAMF_DecoderHandle handle, const uint8_t *data, int32_t size, uint32_t *rsize, void *pcm);
-
-// TODO
-// int     IAMF_decoder_read_header (IAMF_DecoderHandle handle, IAMF_IPacket *packet);
-// int     IAMF_decoder_decode_packet (IAMF_DecoderHandle handle, IAMF_IPacket *packet);
-// int     IAMF_decoder_receive_frame (IAMF_DecoderHandle handle, IAMF_OFrame *frame);
-
-IAMF_Labels*    IAMF_decoder_get_mix_presentation_labels (IAMF_DecoderHandle handle);
-int     IAMF_decoder_output_layout_set_sound_system (IAMF_DecoderHandle handle, IAMF_SoundSystem ss);
-// int     IAMF_decoder_output_layout_set_sp_labels (IAMF_DecoderHandle handle, int count, IAMF_SP_Label *labels);
-int     IAMF_decoder_output_layout_set_binaural (IAMF_DecoderHandle handle);
-int     IAMF_decoder_output_layout_set_mix_presentation_label (IAMF_DecoderHandle handle, const char *label);
-int     IAMF_layout_sound_system_channels_count (IAMF_SoundSystem ss);
-int     IAMF_layout_binaural_channels_count ();
-
-int     IAMF_decoder_set_pts (IAMF_DecoderHandle handle, uint32_t pts, uint32_t time_base);
-int     IAMF_decoder_get_last_metadata (IAMF_DecoderHandle handle, uint32_t *pts, IAMF_extradata *metadata);
+int IAMF_decoder_set_pts(IAMF_DecoderHandle handle, uint32_t pts,
+                         uint32_t time_base);
+int IAMF_decoder_get_last_metadata(IAMF_DecoderHandle handle, uint32_t *pts,
+                                   IAMF_extradata *metadata);
 #ifdef __cplusplus
 }
 #endif
-
-
 
 #endif /* IAMF_DECODER_H */

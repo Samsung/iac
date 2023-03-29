@@ -80,7 +80,8 @@
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>..\..\..\dep_codecs\lib\;..\..\..\dep_external\lib\</AdditionalLibraryDirectories>
-      <AdditionalDependencies>opus.lib;fdk-aac.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>opus.lib;fdk-aac.lib;FLAC.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Console</SubSystem>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -123,9 +124,22 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\test\tools\iamfplayer\player\iamfplayer.c" />
+    <ClCompile Include="..\..\..\test\tools\iamfplayer\src\atom.c" />
+    <ClCompile Include="..\..\..\test\tools\iamfplayer\src\bitstreamrw.c" />
+    <ClCompile Include="..\..\..\test\tools\iamfplayer\src\dmemory.c" />
+    <ClCompile Include="..\..\..\test\tools\iamfplayer\src\iamf_header.c" />
+    <ClCompile Include="..\..\..\test\tools\iamfplayer\src\mp4demux.c" />
+    <ClCompile Include="..\..\..\test\tools\iamfplayer\src\mp4iamfpar.c" />
     <ClCompile Include="..\..\..\test\tools\iamfplayer\src\wavwriter.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\..\test\tools\iamfplayer\include\a2b_endian.h" />
+    <ClInclude Include="..\..\..\test\tools\iamfplayer\include\atom.h" />
+    <ClInclude Include="..\..\..\test\tools\iamfplayer\include\bitstreamrw.h" />
+    <ClInclude Include="..\..\..\test\tools\iamfplayer\include\dmemory.h" />
+    <ClInclude Include="..\..\..\test\tools\iamfplayer\include\iamf_header.h" />
+    <ClInclude Include="..\..\..\test\tools\iamfplayer\include\mp4demux.h" />
+    <ClInclude Include="..\..\..\test\tools\iamfplayer\include\mp4iamfpar.h" />
     <ClInclude Include="..\..\..\test\tools\iamfplayer\include\wavwriter.h" />
   </ItemGroup>
   <ItemGroup>

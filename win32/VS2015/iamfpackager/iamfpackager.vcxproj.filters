@@ -41,9 +41,6 @@
     <ClInclude Include="..\..\..\test\tools\iamfpackager\a2b_endian.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\test\tools\iamfpackager\aac_header.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\..\test\tools\iamfpackager\bitstreamrw.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -51,9 +48,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\test\tools\iamfpackager\mp4mux.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\test\tools\iamfpackager\opus_header.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\test\tools\iamfpackager\progressbar.h">

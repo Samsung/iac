@@ -34,44 +34,66 @@ Remark: please ensure that they have same CMAKE_INSTALL_PREFIX.
 ### Tools(iamfpackager)
 This tool aims to encode PCM data to IA bitstream and encapsulate to Mp4/Fmp4
 
-1. encode scalable channel layout input format.
 ```sh
--profile   : <0/1(simpe/base)>
--codec   : <opus/aac/pcm>
+-profile : <0/1(simpe/base)>
+-codec   : <codec name/frame size(opus,aac,flac,pcm/1024)>
 -mode    : <audio element type(0:channle-based,1:scene-based)/input channel layout/channel layout combinations>
-<input wav file>
--o   : <0/1(mp4/bitstream)>
-<output file>
+-gain    : <default mix gain(dB) (Not Necessary)>
+-target  : <target layout for measuring loudness(sound system) (Not Necessary)>
+-i       : <input wav file>
+-o       : <0/1/2(bitstream/mp4/fmp4)> <output file>
+```
 
+1. encode scalable channel layout input format for simple profile.
+```sh
 Example:  
-./iamfpackager -profile 0 -codec opus -mode 0/7.1.4/2.0.0+3.1.2+5.1.2 input.wav -o 1 simple_profile.iamf
-or 
-./iamfpackager -profile 1 -codec opus -mode 0/7.1.4/2.0.0+3.1.2+5.1.2 input1.wav input2.wav -o 1 base_profile.iamf
+./iamfpackager -profile 0 -codec opus -mode 0/7.1.4/2.0.0+3.1.2+5.1.2 -i input.wav -o 0 simple_profile.iamf
 ```
 Remark: "estimator_model.tflite" and "feature_model.tflite" are required in exacuting directory.
 
-2. encode non-scalable channel layout input format.
+2. encode non-scalable channel layout input format for simple profile.
 ```sh
-Example:  ./iamfpackager -profile 0 -codec opus -mode 0/7.1.4 input.wav -o 1 simple_profile.iamf
+Example:  ./iamfpackager -profile 0 -codec opus -mode 0/7.1.4 -i input.wav -o 0 simple_profile.iamf
 ```
 
-3. encode ambisonics input format.
+3. encode ambisonics input format for simple profile.
 ```sh
 Example:
-./iamfpackager -profile 0 -codec opus -mode 1 input.wav -o 1 simple_profile.iamf
-or
-./iamfpackager -profile 1 -codec opus -mode 1 input1.wav input2.wav -o 1 base_profile.iamf
+./iamfpackager -profile 0 -codec opus -mode 1 -i input.wav -o 0 simple_profile.iamf
+```
+
+4. encode for base profile.
+```sh
+Example:
+./iamfpackager -profile 1 -codec opus -mode 0/7.1.4/2.0.0+3.1.2+5.1.2 -gain 0.0 -i input1.wav -mode 1 -gain 0.0 -i input2.wav -target s0+s2+s9 -o 0 base_profile.iamf
 ```
 
 ### Tools(iamfplayer)
 This tool aims to decode IA bitstream and dump to wav file.
 ```sh
-./mp4iacplayer <options> <input/output file>
+./iamfplayer <options> <input file>
 options:
--o2          : -o2(decode IAMF bitstream and pcm output).
--s[0~11]     : output layout, the sound system A~J and extensions (Upper + Middle + Bottom).
+-i[0-1]    0 : IAMF bitstream input.(default)
+           1 : mp4 input.
+-o2        2 : pcm output.
+-s[0~11,b]   : output layout, the sound system A~J and extensions (Upper + Middle + Bottom).
+           0 : Sound system A (0+2+0)
+           1 : Sound system B (0+5+0)
+           2 : Sound system C (2+5+0)
+           3 : Sound system D (4+5+0)
+           4 : Sound system E (4+5+1)
+           5 : Sound system F (3+7+0)
+           6 : Sound system G (4+9+0)
+           7 : Sound system H (9+10+3)
+           8 : Sound system I (0+7+0)
+           9 : Sound system J (4+7+0)
+          10 : Sound system extension 712 (2+7+0)
+          11 : Sound system extension 312 (2+3+0)
+           b : Binaural.
+-p [dB]      : Peak threshold in dB.
 
-Example:  ./mp4iacplayer -o2 -s9 simple_profile.iamf
+Example:  ./iamfplayer -o2 -s9 simple_profile.iamf
+          ./iamfplayer -i1 -o2 -s9 simple_profile.mp4
 
 ```
 
@@ -80,7 +102,7 @@ Example:  ./mp4iacplayer -o2 -s9 simple_profile.iamf
 
 1) Building this project requires [CMake](https://cmake.org/).
 
-2) Building this project requires opus or aac library, please ensure that there are library in "dep_codecs/lib",
+2) Building this project requires opus or aac or flac library, please ensure that there are library in "dep_codecs/lib",
 and there are headers in "dep_codecs/include" already. If not, please build(patch_script.sh) and install in advance.
 
 3) "src/dmpd" part building relys on 3rd part libs("dep_external/lib": libfftw3f,libflatccrt)
