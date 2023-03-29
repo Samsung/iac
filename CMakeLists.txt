@@ -8,27 +8,65 @@ SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(BUILD_SHARED_LIBS "Build shared library" ON)
 
+add_definitions(-DIAMF_PROFILE=0100)
+add_definitions(-DIAMF_VERSION=0000)
+
+set(CODEC_LIB_DIR  "${PROJECT_SOURCE_DIR}/dep_codecs/lib")
+set(CODEC_INCLUDE_DIR  "${PROJECT_SOURCE_DIR}/dep_codecs/include")
+set(EXTER_LIB_DIR  "${PROJECT_SOURCE_DIR}/dep_external/lib")
+set(DMPD_LIB_DIR  "${PROJECT_SOURCE_DIR}/src/iamf_enc/dmpd")
+
+option(CODEC_CAP "Codec capability check" ON)
+if(CODEC_CAP)
+  unset(find_opus CACHE)
+  find_library(find_opus NAMES opus PATHS ${CODEC_LIB_DIR} NO_DEFAULT_PATH)
+  if(${find_opus} STREQUAL "find_opus-NOTFOUND")
+      message(WARNING "the opus library was not found")
+  else()
+      add_definitions(-DCONFIG_OPUS_CODEC)
+  endif()
+
+  unset(find_aac CACHE)
+  find_library(find_aac NAMES fdk-aac PATHS ${CODEC_LIB_DIR} NO_DEFAULT_PATH)
+  if(${find_aac} STREQUAL "find_aac-NOTFOUND")
+      message(WARNING "the fdk-aac library was not found")
+  else()
+      add_definitions(-DCONFIG_AAC_CODEC)
+  endif()
+  
+  unset(find_flac CACHE)
+  find_library(find_flac NAMES FLAC PATHS ${CODEC_LIB_DIR} NO_DEFAULT_PATH)
+  if(${find_flac} STREQUAL "find_flac-NOTFOUND")
+      message(WARNING "the FLAC library was not found")
+  else()
+      add_definitions(-DCONFIG_FLAC_CODEC)
+  endif()
+endif()
+
 include_directories (include)
 aux_source_directory (src/common DIR_IAMF_COMMON)
 aux_source_directory (src/iamf_dec DIR_IAMF_DEC)
-aux_source_directory (src/iamf_dec/opus DIR_IAMF_DEC_OPUS)
-aux_source_directory (src/iamf_dec/aac DIR_IAMF_DEC_AAC)
+if(NOT ${find_opus} STREQUAL "find_opus-NOTFOUND")
+  aux_source_directory (src/iamf_dec/opus DIR_IAMF_DEC_OPUS)
+endif()
+if(NOT ${find_aac} STREQUAL "find_aac-NOTFOUND")
+  aux_source_directory (src/iamf_dec/aac DIR_IAMF_DEC_AAC)
+endif()
+if(NOT ${find_flac} STREQUAL "find_flac-NOTFOUND")
+  aux_source_directory (src/iamf_dec/flac DIR_IAMF_DEC_FLAC)
+endif()
 aux_source_directory (src/iamf_dec/pcm DIR_IAMF_DEC_PCM)
 aux_source_directory (src/iamf_enc DIR_IAMF_ENC)
 
-set(CODEC_LIB_DIR  "${PROJECT_SOURCE_DIR}/dep_codecs/lib")
-set(EXTER_LIB_DIR  "${PROJECT_SOURCE_DIR}/dep_external/lib")
-set(DMPD_LIB_DIR  "${PROJECT_SOURCE_DIR}/src/iamf_enc/dmpd")
-set(INCLUDE_OPUS_DIR  "${PROJECT_SOURCE_DIR}/dep_codecs/include/opus")
-set(INCLUDE_AAC_DIR  "${PROJECT_SOURCE_DIR}/dep_codecs/include/fdk-aac")
+
 
 include_directories(
-    ${INCLUDE_OPUS_DIR}
-    ${INCLUDE_AAC_DIR}
+    ${CODEC_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/src/common
     ${PROJECT_SOURCE_DIR}/src/iamf_dec
     ${PROJECT_SOURCE_DIR}/src/iamf_dec/opus
     ${PROJECT_SOURCE_DIR}/src/iamf_dec/aac
+    ${PROJECT_SOURCE_DIR}/src/iamf_dec/flac
     ${PROJECT_SOURCE_DIR}/src/iamf_enc
     ${DMPD_LIB_DIR}/asc/include
     ${DMPD_LIB_DIR}/heq/include
@@ -44,12 +82,26 @@ link_directories (
 
 if(BUILD_SHARED_LIBS)
   add_library(${PROJECT_NAME} SHARED ${DIR_IAMF_COMMON} ${DIR_IAMF_ENC}
-    ${DIR_IAMF_DEC_OPUS} ${DIR_IAMF_DEC_AAC} ${DIR_IAMF_DEC_PCM} ${DIR_IAMF_DEC})
-  target_link_libraries (${PROJECT_NAME} opus fdk-aac asc heq flatccrt decimate stft fftw3f )
+    ${DIR_IAMF_DEC_OPUS} ${DIR_IAMF_DEC_AAC} ${DIR_IAMF_DEC_FLAC} ${DIR_IAMF_DEC_PCM} ${DIR_IAMF_DEC})
+  target_link_libraries (${PROJECT_NAME} asc heq flatccrt decimate stft fftw3f )
+  
+  if(NOT ${find_opus} STREQUAL "find_opus-NOTFOUND")
+    target_link_libraries (${PROJECT_NAME} opus)
+  endif()
+  
+  if(NOT ${find_aac} STREQUAL "find_aac-NOTFOUND")
+    target_link_libraries (${PROJECT_NAME} fdk-aac)
+  endif()
+  
+  if(NOT ${find_flac} STREQUAL "find_flac-NOTFOUND")
+    target_link_libraries (${PROJECT_NAME} FLAC)
+  endif()
+  
   add_subdirectory(src/iamf_enc/dmpd)
 else()
   add_library(${PROJECT_NAME} STATIC ${DIR_IAMF_COMMON} ${DIR_IAMF_ENC}
-    ${DIR_IAMF_DEC_OPUS} ${DIR_IAMF_DEC_AAC} ${DIR_IAMF_DEC_PCM} ${DIR_IAMF_DEC})
+    ${DIR_IAMF_DEC_OPUS} ${DIR_IAMF_DEC_AAC} ${DIR_IAMF_DEC_PCM}
+    ${DIR_IAMF_DEC_FLAC} ${DIR_IAMF_DEC})
   add_subdirectory(src/iamf_enc/dmpd)
 endif()
 

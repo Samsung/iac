@@ -90,12 +90,6 @@
     <ClCompile Include="..\..\src\iamf_enc\upmixer.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\iamf_enc\wavreader2.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\src\iamf_enc\wavwriter2.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\src\iamf_dec\opus\IAMF_opus_decoder.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -109,6 +103,27 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\iamf_dec\pcm\IAMF_pcm_decoder.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\iamf_dec\IAMF_debug_sr.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\iamf_enc\pcmconvert.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\iamf_dec\resample.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\common\wavreader2.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\common\wavwriter2.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\iamf_dec\flac\flac_multistream_decoder.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\iamf_dec\flac\IAMF_flac_decoder.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -150,12 +165,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\iamf_dec\IAMF_core_decoder.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\iamf_dec\IAMF_debug.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\iamf_dec\IAMF_debug_dev.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\iamf_dec\IAMF_decoder_private.h">
@@ -209,16 +218,31 @@
     <ClInclude Include="..\..\src\iamf_enc\upmixer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\iamf_enc\wavreader2.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\iamf_enc\wavwriter2.h">
+    <ClInclude Include="..\..\src\iamf_dec\audio_effect_peak_limiter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\iamf_dec\ae_rdr.h">
-      <Filter>Source Files</Filter>
+      <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\iamf_dec\audio_effect_peak_limiter.h">
+    <ClInclude Include="..\..\src\iamf_enc\pcmconvert.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\iamf_dec\speex_resampler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\common\wavwriter2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\common\wavreader2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\common\IAMF_debug.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\common\IAMF_debug_dev.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\iamf_dec\flac\flac_multistream_decoder.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

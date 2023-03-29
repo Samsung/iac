@@ -16,3 +16,10 @@ make clean
 make
 make install
 
+#FLAC
+cd ../../flac/flac-1.4.2/
+make clean
+cmake . -DCMAKE_INSTALL_PREFIX=${BUILD_LIBS} -DWITH_OGG=OFF
+make
+sudo make install
+

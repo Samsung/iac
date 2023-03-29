@@ -1,26 +1,72 @@
+/*
+BSD 3-Clause Clear License The Clear BSD License
+
+Copyright (c) 2023, Alliance for Open Media.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+
+/**
+ * @file IAMF_encoder_private.h
+ * @brief The iamf encoding framework
+ * @version 0.1
+ * @date Created 3/3/2023
+**/
+
 #ifndef IAMF_ENCODER_PRIVATE_H
 #define IAMF_ENCODER_PRIVATE_H
 
-#include "metadata_write.h"
-#include "audio_defines.h"
-#include <stdint.h>
 #include <stdarg.h>
+#include <stdint.h>
+
+#include "IAMF_debug.h"
+#include "audio_defines.h"
 #include "audio_loud_meter.h"
 #include "downmixer.h"
-#include "upmixer.h"
 #include "gaindown.h"
-#include "scalable_factor.h"
-#include "intermediate_file_context.h"
-#include "queue_plus.h"
-
 #include "ia_asc.h"
 #include "ia_heq.h"
-
+#include "intermediate_file_context.h"
+#include "metadata_write.h"
 #include "obu_multiway_tree.h"
+#include "queue_plus.h"
+#include "scalable_factor.h"
+#include "upmixer.h"
 
 typedef struct AudioElementEncoder AudioElementEncoder;
 
-#define MKTAG(a,b,c,d) ((a) | ((b) << 8) | ((c) << 16) | ((unsigned)(d) << 24))
+#define MKTAG(a, b, c, d) \
+  (((unsigned)(a) << 24) | ((b) << 16) | ((c) << 8) | (d))
+
+enum {
+  FLAC_METADATA_TYPE_STREAMINFO = 0,
+  FLAC_METADATA_TYPE_PADDING,
+  FLAC_METADATA_TYPE_APPLICATION,
+  FLAC_METADATA_TYPE_SEEKTABLE,
+  FLAC_METADATA_TYPE_VORBIS_COMMENT,
+  FLAC_METADATA_TYPE_CUESHEET,
+  FLAC_METADATA_TYPE_PICTURE,
+  FLAC_METADATA_TYPE_INVALID = 127
+};
 
 #define MAX_AUDIO_ELEMENT_NUM 2
 
@@ -30,7 +76,7 @@ typedef struct {
   uint32_t profile_version;
 
   int obu_redundant_copy;
-}StartCode;
+} MagicCode;
 
 typedef struct {
   uint32_t codec_config_id;
@@ -42,7 +88,7 @@ typedef struct {
   int32_t roll_distance;
 
   int obu_redundant_copy;
-}CodecConfig;
+} CodecConfig;
 
 typedef struct {
   int loudspeaker_layout;
@@ -50,17 +96,17 @@ typedef struct {
   int recon_gain_is_present_flag;
   int substream_count;
   int coupled_substream_count;
-  //int loudness;
+  // int loudness;
   LoudnessInfo loudness;
   int output_gain_flags;
   int output_gain;
-}ChannelAudioLayerConfig;
+} ChannelAudioLayerConfig;
 
 typedef struct {
   uint32_t num_layers;
   uint32_t reserved;
   ChannelAudioLayerConfig channel_audio_layer_config[IA_CHANNEL_LAYOUT_COUNT];
-}ScalableChannelLayoutConfig;
+} ScalableChannelLayoutConfig;
 
 /*
 typedef struct {
@@ -74,8 +120,8 @@ typedef struct {
   uint32_t substream_count;
   uint32_t coupled_substream_count;
   uint32_t channel_mapping[12]; //todo
-  uint32_t  demixing_matrix[DEMIXING_MATRIX_SIZE_MAX]; // todo DEMIXING_MATRIX_SIZE_MAX?
-}AmbisonicsProjectionConfig;
+  uint32_t  demixing_matrix[DEMIXING_MATRIX_SIZE_MAX]; // todo
+DEMIXING_MATRIX_SIZE_MAX? }AmbisonicsProjectionConfig;
 */
 typedef struct {
   uint32_t ambisonics_mode;
@@ -83,18 +129,24 @@ typedef struct {
     AmbisonicsMonoConfig ambisonics_mono_config;
     AmbisonicsProjectionConfig ambisonics_projection_config;
   };
-}AmbisonicsConfig;
-
-
-typedef struct {
-  int parameter_id;
-  int time_base;
-}ParamDefinition;
+} AmbisonicsConfig;
 
 typedef struct {
-  uint32_t audio_element_id; //leb128()
-  uint32_t audio_element_type; // 3
-  uint32_t resevered; // 5
+  uint32_t parameter_id;
+  uint32_t parameter_rate;
+  uint32_t param_definition_mode;
+
+  uint32_t duration;
+  uint32_t num_segments;
+  uint32_t constant_segment_interval;
+
+  uint32_t *segment_interval;
+} ParamDefinition;
+
+typedef struct {
+  uint32_t audio_element_id;    // leb128()
+  uint32_t audio_element_type;  // 3
+  uint32_t resevered;           // 5
 
   uint32_t codec_config_id;
 
@@ -110,22 +162,41 @@ typedef struct {
   };
 
   int obu_redundant_copy;
-}AudioElement;
+} AudioElement;
 
+typedef struct {
+  AudioLoudMeter loudmeter;
+  int frame_size;
+  int msize25pct;
+  float loudness;
 
+  float entire_loudness;
+  float entire_peaksqr;
+  float entire_truepeaksqr;
+
+  int16_t entire_peak;
+  int16_t entire_truepeak;
+
+} LoudnessTarget;
+
+#define MAX_MEASURED_LAYOUT_NUM 10
+#define MAX_MIX_PRESENTATIONS_NUM 10
 typedef struct DescriptorConfig {
-  StartCode start_code;
+  MagicCode magic_code;
   CodecConfig codec_config;
 
   uint32_t num_mix_presentations;
-  int element_mix_gain_para[MAX_AUDIO_ELEMENT_NUM][100];
-  int output_mix_gain_para[MAX_AUDIO_ELEMENT_NUM];
-  MixPresentation mix_presentation[MAX_AUDIO_ELEMENT_NUM];
+  ParamDefinition element_mix_gain_para[MAX_MIX_PRESENTATIONS_NUM]
+                                       [MAX_AUDIO_ELEMENT_NUM];
+  ParamDefinition output_mix_gain_para[MAX_MIX_PRESENTATIONS_NUM];
+  MixPresentation mix_presentation[MAX_MIX_PRESENTATIONS_NUM];
+
+  LoudnessTarget loudness_target[MAX_MEASURED_LAYOUT_NUM];
 
   uint32_t num_audio_elements;
   AudioElement audio_element[MAX_AUDIO_ELEMENT_NUM];
 
-}DescriptorConfig;
+} DescriptorConfig;
 
 #define MAX_NUM_OBU_IDS 100
 typedef struct SyncSyntax {
@@ -138,7 +209,7 @@ typedef struct SyncSyntax {
   int32_t relative_offset[MAX_NUM_OBU_IDS];
 
   uint32_t concatenation_rule;
-}SyncSyntax;
+} SyncSyntax;
 
 /*
 typedef enum {
@@ -152,6 +223,7 @@ typedef enum {
   AUDIO_PRESKIP_SIZE_INVALID = -1,
   AUDIO_PRESKIP_SIZE_OPUS = 312,
   AUDIO_PRESKIP_SIZE_AAC = 720,
+  AUDIO_PRESKIP_SIZE_FLAC = 0,
   AUDIO_PRESKIP_SIZE_PCM = 0
 } AudioPreskipSize;
 
@@ -159,12 +231,12 @@ typedef enum {
   PARAMETER_DEFINITION_MIX_GAIN = 0,
   PARAMETER_DEFINITION_DEMIXING_INFO,
   PARAMETER_DEFINITION_RECON_GAIN_INFO
-}ParameterDefinitionType;
+} ParameterDefinitionType;
 
 typedef struct {
   AudioLoudMeter loudmeter[MAX_CHANNELS];
-  AudioTruePeakMeter peakmeter[MAX_CHANNELS]; //for loudness measure
-  AudioTruePeakMeter peakmeter2[MAX_CHANNELS]; //for gain measure.
+  AudioTruePeakMeter peakmeter[MAX_CHANNELS];   // for loudness measure
+  AudioTruePeakMeter peakmeter2[MAX_CHANNELS];  // for gain measure.
   int frame_size;
   int max_loudness_layout;
   int max_gain_layout;
@@ -185,35 +257,37 @@ typedef struct {
   int measure_end;
 
   unsigned char channel_layout_map[IA_CHANNEL_LAYOUT_COUNT];
-  unsigned char gaindown_flag[IA_CHANNEL_LAYOUT_COUNT]; // channel layout that have gain value.
-}LoudGainMeasure;
+  unsigned char gaindown_flag[IA_CHANNEL_LAYOUT_COUNT];  // channel layout that
+                                                         // have gain value.
+} LoudGainMeasure;
 
-typedef struct
-{
+typedef struct {
   int opcode;
-  int(*init)(AudioElementEncoder *st);
-  int(*control)(AudioElementEncoder *, int, va_list);
-  int(*encode)(AudioElementEncoder *, int, int, int, int16_t *, unsigned char*);
-  int(*close)(AudioElementEncoder *st);
+  int (*init)(AudioElementEncoder *st);
+  int (*control)(AudioElementEncoder *, int, va_list);
+  int (*encode)(AudioElementEncoder *, int, int, int, void *, unsigned char *);
+  int (*close)(AudioElementEncoder *st);
 } encode_creator_t;
 
-typedef struct
-{
+typedef struct {
   int opcode;
-  int(*init)(AudioElementEncoder *st);
-  int(*decode)(AudioElementEncoder *, int, int, int, unsigned char*, int, int16_t *);
-  int(*close)(AudioElementEncoder *st);
+  int (*init)(AudioElementEncoder *st);
+  int (*decode)(AudioElementEncoder *, int, int, int, unsigned char *, int,
+                int16_t *);
+  int (*close)(AudioElementEncoder *st);
 } decode_creator_t;
 
 #define ENTRY_COUNT 16
+
 typedef struct {
   void *dep_encoder[ENTRY_COUNT];
   void *dep_encoder2[ENTRY_COUNT];
+  IAPacket ia_packet[ENTRY_COUNT];
   int channel;
   int stream_count;
   int coupled_stream_count;
   unsigned char enc_stream_map[255];
-}IA_CORE_ENCODER;
+} IA_CORE_ENCODER;
 
 typedef struct {
   void *dep_decoder[ENTRY_COUNT];
@@ -223,31 +297,13 @@ typedef struct {
   unsigned char dec_stream_map[255];
   unsigned char extra_data[10];
   unsigned char extra_data_size;
-}IA_CORE_DECODER;
+} IA_CORE_DECODER;
 
-
-enum QUEUE_STEPS {
-  QUEUE_DMPD,
-  QUEUE_LD,
-  QUEUE_SF,
-  QUEUE_RG,
-  QUEUE_STEP_MAX
-};
+enum QUEUE_STEPS { QUEUE_DMPD, QUEUE_LD, QUEUE_SF, QUEUE_RG, QUEUE_STEP_MAX };
 
 #ifndef AUDIO_ELEMENT_START_ID
 #define AUDIO_ELEMENT_START_ID 10
 #endif
-
-typedef struct DemixingInfo {
-  uint32_t buffersize;
-  uint32_t entries;
-  uint8_t dmixp_mode[8];
-  uint32_t dmixp_mode_count;
-  uint32_t dmixp_mode_ponter;// last mode
-
-  uint32_t *dmixp_mode_group[2];
-  uint32_t dmixp_mode_group_size;
-}DemixingInfo;
 
 typedef struct ChannelBasedEnc {
   uint32_t input_sample_rate;
@@ -260,7 +316,7 @@ typedef struct ChannelBasedEnc {
   uint32_t scalefactor_mode;
 
   unsigned char channel_layout_map[IA_CHANNEL_LAYOUT_COUNT];
-  unsigned char gaindown_map[MAX_CHANNELS]; // channles that have gain value.
+  unsigned char gaindown_map[MAX_CHANNELS];  // channles that have gain value.
   DownMixer *downmixer_ld;
   DownMixer *downmixer_rg;
   DownMixer *downmixer_enc;
@@ -272,31 +328,28 @@ typedef struct ChannelBasedEnc {
   FileContext fc;
 
   int the_preskip_frame;
-  QueuePlus queue_dm[QUEUE_STEP_MAX]; //asc
-  QueuePlus queue_wg[QUEUE_STEP_MAX]; //heq
+  QueuePlus queue_dm[QUEUE_STEP_MAX];  // asc
+  QueuePlus queue_wg[QUEUE_STEP_MAX];  // heq
   QueuePlus queue_m[IA_CHANNEL_LAYOUT_COUNT];
   QueuePlus queue_r[IA_CHANNEL_LAYOUT_COUNT];
   QueuePlus queue_d[IA_CHANNEL_LAYOUT_COUNT];
   QueuePlus queue_rg[IA_CHANNEL_LAYOUT_COUNT];
 
-  //ASC and HEQ
+  // ASC and HEQ
   IA_ASC *asc;
   IA_HEQ *heq;
-
-  DemixingInfo demixing_info;
-}ChannelBasedEnc;
+} ChannelBasedEnc;
 
 typedef struct SceneBasedEnc {
-  //TODO
+  // TODO
   uint32_t input_sample_rate;
   int frame_size;
   AmbisonicsConfig ambisonics_config;
-}SceneBasedEnc;
+} SceneBasedEnc;
 
 typedef struct AudioElementEncoder {
   AudioElementType element_type;
   int element_id;
-
 
   uint32_t num_substreams;
   uint32_t audio_substream_id[22];
@@ -305,44 +358,48 @@ typedef struct AudioElementEncoder {
   uint32_t param_definition_type[22];
   ParamDefinition param_definition[22];
 
-
   uint32_t input_sample_rate;
+  int bits_per_sample;
+  int sample_format;
   int channels;
   int frame_size;
   int preskip_size;
   int codec_id;
 
   IA_CORE_ENCODER ia_core_encoder[IA_CHANNEL_LAYOUT_COUNT];
-  //below interfaces are defined for encoding to get encoded frame
-  uint8_t *samples;
-  int(*encode_init)(AudioElementEncoder *st);
-  int(*encode_ctl)(AudioElementEncoder *, int, va_list);
-  int(*encode_frame)(AudioElementEncoder *, int, int, int, int16_t *, unsigned char*);
-  int(*encode_close)(AudioElementEncoder *st);
+  // below interfaces are defined for encoding to get encoded frame
+  int (*encode_init)(AudioElementEncoder *st);
+  int (*encode_ctl)(AudioElementEncoder *, int, va_list);
+  int (*encode_frame)(AudioElementEncoder *, int, int, int, void *,
+                      unsigned char *);
+  int (*encode_close)(AudioElementEncoder *st);
   int initial_padding;
+  int padding;
 
-  //below interfaces are defined for encoding to get recon gain value
-  uint8_t *samples2;
-  int(*encode_init2)(AudioElementEncoder *st);
-  int(*encode_ctl2)(AudioElementEncoder *, int, va_list);
-  int(*encode_frame2)(AudioElementEncoder *, int, int, int, int16_t *, unsigned char*);
-  int(*encode_close2)(AudioElementEncoder *st);
+  // below interfaces are defined for encoding to get recon gain value
+  int (*encode_init2)(AudioElementEncoder *st);
+  int (*encode_ctl2)(AudioElementEncoder *, int, va_list);
+  int (*encode_frame2)(AudioElementEncoder *, int, int, int, void *,
+                       unsigned char *);
+  int (*encode_close2)(AudioElementEncoder *st);
 
   IA_CORE_DECODER ia_core_decoder[IA_CHANNEL_LAYOUT_COUNT];
-  int(*decode_init)(AudioElementEncoder *st);
-  int(*decode_frame)(AudioElementEncoder *, int, int, int, unsigned char*, int, int16_t *);
-  int(*decode_close)(AudioElementEncoder *st);
+  int (*decode_init)(AudioElementEncoder *st);
+  int (*decode_frame)(AudioElementEncoder *, int, int, int, unsigned char *,
+                      int, int16_t *);
+  int (*decode_close)(AudioElementEncoder *st);
 
-  int channel_groups; //1: Non-Scalable format, >1: Scalable format
-  
+  int channel_groups;  // 1: Non-Scalable format, >1: Scalable format
+
+  int samples;// 
   int size_of_audio_element_obu;
   int size_of_audio_frame_obu;
   int size_of_parameter_demixing;
   int size_of_parameter_recon_gain;
-  unsigned char* audio_element_obu;
-  unsigned char* audio_frame_obu;
-  unsigned char* parameter_demixing_obu;
-  unsigned char* parameter_recon_gain_obu;
+  unsigned char *audio_element_obu;
+  unsigned char *audio_frame_obu;
+  unsigned char *parameter_demixing_obu;
+  unsigned char *parameter_recon_gain_obu;
 
   union {
     ChannelBasedEnc channel_based_enc;
@@ -350,18 +407,18 @@ typedef struct AudioElementEncoder {
   };
   int redundant_copy;
   struct AudioElementEncoder *next;
-}AudioElementEncoder;
-
+} AudioElementEncoder;
 
 struct IAMF_Encoder {
   uint32_t input_sample_rate;
   int bits_per_sample;
+  int sample_format;
   int frame_size;
   int preskip_size;
   int codec_id;
   AudioElementEncoder *audio_element_enc;
   ObuNode *root_node;
-  //int codec_config_id;
+  // int codec_config_id;
 
   DescriptorConfig descriptor_config;
   int is_descriptor_changed;
@@ -370,11 +427,15 @@ struct IAMF_Encoder {
   int need_place_sync;
 
   int is_standalone;
-} ;
+};
 
-
-LoudGainMeasure * immersive_audio_encoder_loudgain_create(const unsigned char *channel_layout_map, int sample_rate, int frame_size);
-int immersive_audio_encoder_loudness_measure(LoudGainMeasure *lm, float * inbuffer, int channel_layout);
-int immersive_audio_encoder_gain_measure(LoudGainMeasure *lm, float * inbuffer, int channel_layout, int begin_ch, int nch);
+LoudGainMeasure *immersive_audio_encoder_loudgain_create(
+    const unsigned char *channel_layout_map, int sample_rate, int frame_size);
+int immersive_audio_encoder_loudness_measure(LoudGainMeasure *lm,
+                                             float *inbuffer,
+                                             int channel_layout);
+int immersive_audio_encoder_gain_measure(LoudGainMeasure *lm, float *inbuffer,
+                                         int channel_layout, int begin_ch,
+                                         int nch);
 int immersive_audio_encoder_loudgain_destory(LoudGainMeasure *lm);
 #endif /*IAMF_ENCODER_PRIVATE_H*/

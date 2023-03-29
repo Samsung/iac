@@ -80,7 +80,7 @@
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>..\..\..\dep_codecs\lib\;..\..\..\dep_external\lib\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>opus.lib;fdk-aac.lib;flatccrt.lib;fftw3f.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>opus.lib;fdk-aac.lib;FLAC.lib;flatccrt.lib;fftw3f.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
     </Link>
   </ItemDefinitionGroup>
@@ -133,11 +133,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\test\tools\iamfpackager\a2b_endian.h" />
-    <ClInclude Include="..\..\..\test\tools\iamfpackager\aac_header.h" />
     <ClInclude Include="..\..\..\test\tools\iamfpackager\bitstreamrw.h" />
     <ClInclude Include="..\..\..\test\tools\iamfpackager\dmemory.h" />
     <ClInclude Include="..\..\..\test\tools\iamfpackager\mp4mux.h" />
-    <ClInclude Include="..\..\..\test\tools\iamfpackager\opus_header.h" />
     <ClInclude Include="..\..\..\test\tools\iamfpackager\progressbar.h" />
     <ClInclude Include="..\..\..\test\tools\iamfpackager\wavreader.h" />
     <ClInclude Include="..\..\..\test\tools\iamfpackager\wavwriter.h" />
