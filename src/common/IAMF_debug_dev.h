@@ -32,7 +32,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @date Created 03/03/2023
  **/
 
-
 #ifndef IAMF_DEBUG_DEV_H
 #define IAMF_DEBUG_DEV_H
 
@@ -41,9 +40,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endif
 
 // #define IA_DBG_LEVEL 0
-// #define IA_DBG_LEVEL (IA_DBG_E|IA_DBG_W)
+#define IA_DBG_LEVEL (IA_DBG_E|IA_DBG_W)
 // #define IA_DBG_LEVEL (IA_DBG_E|IA_DBG_W|IA_DBG_I)
-#define IA_DBG_LEVEL (IA_DBG_E | IA_DBG_W | IA_DBG_I | IA_DBG_D)
+// #define IA_DBG_LEVEL (IA_DBG_E | IA_DBG_W | IA_DBG_I | IA_DBG_D)
 // #define IA_DBG_LEVEL (IA_DBG_E|IA_DBG_W|IA_DBG_D|IA_DBG_I|IA_DBG_T)
 
 #define DFN_SIZE 32
@@ -55,8 +54,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     snprintf(g_dump, DFN_SIZE, "/tmp/obu/obu_%06d_%02d.dat", g_obu_count, \
              type);                                                       \
     FILE *f = fopen(g_dump, "w");                                         \
-    fwrite(data, 1, size, f);                                             \
-    fclose(f);                                                            \
+    if (f) {                                                              \
+      fwrite(data, 1, size, f);                                           \
+      fclose(f);                                                          \
+    }                                                                     \
     ++g_obu_count;                                                        \
   } while (0)
 

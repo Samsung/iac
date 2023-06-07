@@ -30,7 +30,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @brief The iamf encoding framework
  * @version 0.1
  * @date Created 3/3/2023
-**/
+ **/
 
 #ifndef IAMF_ENCODER_PRIVATE_H
 #define IAMF_ENCODER_PRIVATE_H
@@ -43,8 +43,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "audio_loud_meter.h"
 #include "downmixer.h"
 #include "gaindown.h"
-#include "ia_asc.h"
-#include "ia_heq.h"
+#include "iamf_asc.h"
+#include "iamf_heq.h"
 #include "intermediate_file_context.h"
 #include "metadata_write.h"
 #include "obu_multiway_tree.h"
@@ -67,6 +67,11 @@ enum {
   FLAC_METADATA_TYPE_PICTURE,
   FLAC_METADATA_TYPE_INVALID = 127
 };
+
+typedef struct GlobalTimming {
+  uint64_t global_timestamp;
+  uint32_t time_rate;
+} GlobalTimming;
 
 #define MAX_AUDIO_ELEMENT_NUM 2
 
@@ -137,10 +142,10 @@ typedef struct {
   uint32_t param_definition_mode;
 
   uint32_t duration;
-  uint32_t num_segments;
-  uint32_t constant_segment_interval;
+  uint32_t num_subblocks;
+  uint32_t constant_subblock_duration;
 
-  uint32_t *segment_interval;
+  uint32_t *subblock_duration;
 } ParamDefinition;
 
 typedef struct {
@@ -179,26 +184,56 @@ typedef struct {
 
 } LoudnessTarget;
 
+typedef struct IamfDataObu {
+  int obu_id;
+  int obu_type;
+  int size_of_data_obu;
+  int size_of_data_obu_last;
+  unsigned char *data_obu;
+
+  uint64_t start_timestamp;
+  uint64_t data_rate;
+  uint64_t timestamp;
+  uint64_t duration;
+
+  uint64_t index;
+} IamfDataObu;
+
 #define MAX_MEASURED_LAYOUT_NUM 10
 #define MAX_MIX_PRESENTATIONS_NUM 10
+typedef struct MixPresentationPriv {
+  int mix_presentation_obu_id;
+  MixPresentation mix_presentation;
+  ParamDefinition element_mix_gain_para[MAX_AUDIO_ELEMENT_NUM];
+  ParamDefinition output_mix_gain_para;
+  IamfDataObu parameter_element_mix_gain_data_obu[MAX_AUDIO_ELEMENT_NUM];
+  IamfDataObu parameter_output_mix_gain_data_obu;
+
+  IamfDataObu mix_presentatin_obu;
+  uint8_t mix_redundant_copy;
+} MixPresentationPriv;
+
 typedef struct DescriptorConfig {
   MagicCode magic_code;
   CodecConfig codec_config;
 
-  uint32_t num_mix_presentations;
-  ParamDefinition element_mix_gain_para[MAX_MIX_PRESENTATIONS_NUM]
-                                       [MAX_AUDIO_ELEMENT_NUM];
-  ParamDefinition output_mix_gain_para[MAX_MIX_PRESENTATIONS_NUM];
-  MixPresentation mix_presentation[MAX_MIX_PRESENTATIONS_NUM];
-
-  LoudnessTarget loudness_target[MAX_MEASURED_LAYOUT_NUM];
-
   uint32_t num_audio_elements;
   AudioElement audio_element[MAX_AUDIO_ELEMENT_NUM];
 
+  uint32_t num_mix_presentations;
+  MixPresentationPriv mix_presentation_priv[MAX_MIX_PRESENTATIONS_NUM];
+
+  LoudnessTarget loudness_target[MAX_MEASURED_LAYOUT_NUM];
 } DescriptorConfig;
 
 #define MAX_NUM_OBU_IDS 100
+
+enum {
+  OBU_DATA_TYPE_INVALIDE = -1,
+  OBU_DATA_TYPE_SUBSTREAM,
+  OBU_DATA_TYPE_PARAMETER,
+};
+
 typedef struct SyncSyntax {
   uint32_t global_offset;
   uint32_t num_obu_ids;
@@ -206,7 +241,7 @@ typedef struct SyncSyntax {
   uint32_t obu_id[MAX_NUM_OBU_IDS];
   uint32_t obu_data_type[MAX_NUM_OBU_IDS];
   uint32_t reinitialize_decoder[MAX_NUM_OBU_IDS];
-  int32_t relative_offset[MAX_NUM_OBU_IDS];
+  int64_t relative_offset[MAX_NUM_OBU_IDS];
 
   uint32_t concatenation_rule;
 } SyncSyntax;
@@ -336,8 +371,8 @@ typedef struct ChannelBasedEnc {
   QueuePlus queue_rg[IA_CHANNEL_LAYOUT_COUNT];
 
   // ASC and HEQ
-  IA_ASC *asc;
-  IA_HEQ *heq;
+  IAMF_ASC *asc;
+  IAMF_HEQ *heq;
 } ChannelBasedEnc;
 
 typedef struct SceneBasedEnc {
@@ -347,16 +382,18 @@ typedef struct SceneBasedEnc {
   AmbisonicsConfig ambisonics_config;
 } SceneBasedEnc;
 
+#define MAX_SUBSTREAMS 16
+
 typedef struct AudioElementEncoder {
   AudioElementType element_type;
   int element_id;
 
   uint32_t num_substreams;
-  uint32_t audio_substream_id[22];
+  uint32_t audio_substream_id[MAX_SUBSTREAMS];
 
   uint32_t num_parameters;
-  uint32_t param_definition_type[22];
-  ParamDefinition param_definition[22];
+  uint32_t param_definition_type[MAX_SUBSTREAMS];
+  ParamDefinition param_definition[MAX_SUBSTREAMS];
 
   uint32_t input_sample_rate;
   int bits_per_sample;
@@ -391,15 +428,12 @@ typedef struct AudioElementEncoder {
 
   int channel_groups;  // 1: Non-Scalable format, >1: Scalable format
 
-  int samples;// 
-  int size_of_audio_element_obu;
-  int size_of_audio_frame_obu;
-  int size_of_parameter_demixing;
-  int size_of_parameter_recon_gain;
-  unsigned char *audio_element_obu;
-  unsigned char *audio_frame_obu;
-  unsigned char *parameter_demixing_obu;
-  unsigned char *parameter_recon_gain_obu;
+  int samples;  //
+  IamfDataObu substream_data_obu[MAX_SUBSTREAMS];
+  IamfDataObu parameter_demixing_data_obu;
+  IamfDataObu parameter_recon_gain_data_obu;
+
+  GlobalTimming *global_timming;
 
   union {
     ChannelBasedEnc channel_based_enc;
@@ -417,7 +451,7 @@ struct IAMF_Encoder {
   int preskip_size;
   int codec_id;
   AudioElementEncoder *audio_element_enc;
-  ObuNode *root_node;
+  ObuIDManager *obu_id_manager;
   // int codec_config_id;
 
   DescriptorConfig descriptor_config;
@@ -426,7 +460,10 @@ struct IAMF_Encoder {
   SyncSyntax sync_syntax;
   int need_place_sync;
 
+  GlobalTimming global_timming;
+
   int is_standalone;
+  int profile;
 };
 
 LoudGainMeasure *immersive_audio_encoder_loudgain_create(

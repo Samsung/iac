@@ -32,7 +32,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @date Created 03/03/2023
  **/
 
-
 #ifndef __DEMIXER_H_
 #define __DEMIXER_H_
 
@@ -43,9 +42,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 typedef struct Demixer Demixer;
 
-Demixer *demixer_open(uint32_t frame_size, uint32_t delay);
+Demixer *demixer_open(uint32_t frame_size);
 void demixer_close(Demixer *);
 
+int demixer_set_frame_offset(Demixer *, uint32_t offset);
 int demixer_set_channel_layout(Demixer *, IAChannelLayoutType);
 int demixer_set_channels_order(Demixer *, IAChannel *, int);
 int demixer_set_output_gain(Demixer *, IAChannel *, float *, int);

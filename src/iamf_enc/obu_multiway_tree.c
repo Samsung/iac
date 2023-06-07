@@ -30,7 +30,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @brief Generation of different OBU ID
  * @version 0.1
  * @date Created 3/3/2023
-**/
+ **/
 
 #include "obu_multiway_tree.h"
 
@@ -41,15 +41,29 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // https://blog.csdn.net/misterdo/article/details/112377757
 
-ObuNode *insert_obu_root_node() {
+ObuIDManager *obu_id_manager_create(int mode) {
+  ObuIDManager *obu_id_manager = (ObuIDManager *)malloc(sizeof(ObuIDManager));
   ObuNode *root_node = (ObuNode *)malloc(sizeof(ObuNode));
-  if (!root_node) return NULL;
+  if (!root_node || !obu_id_manager) return NULL;
   memset(root_node, 0x00, sizeof(ObuNode));
+  memset(obu_id_manager, 0x00, sizeof(ObuIDManager));
 
   root_node->obu_name = "root";
   root_node->obu_id = -1;    // root
   root_node->obu_type = -1;  // root
-  return root_node;
+
+  obu_id_manager->obu_note = root_node;
+  obu_id_manager->obu_start_id[OBU_IA_Codec_Config] = CODEC_CONFIG_START_ID;
+  obu_id_manager->obu_start_id[OBU_IA_Audio_Element] = AUDIO_ELEMENT_START_ID;
+  obu_id_manager->obu_start_id[OBU_IA_Mix_Presentation] =
+      MIX_RESENTATION_START_ID;
+  obu_id_manager->obu_start_id[OBU_IA_Audio_Frame] = SUB_STREAM_START_ID;
+  obu_id_manager->obu_start_id[OBU_IA_Parameter_Block] =
+      PARAMETER_BLOCK_START_ID;
+
+  obu_id_manager->mode =
+      mode;  // 0: deafult, 1: id is increasing, previous won't be used/
+  return obu_id_manager;
 }
 
 ObuNode *get_obu_node_pos(ObuNode *root_node, AUDIO_OBU_TYPE obu_type,
@@ -70,32 +84,6 @@ ObuNode *get_obu_node_pos(ObuNode *root_node, AUDIO_OBU_TYPE obu_type,
   return NULL;
 }
 
-int get_new_obu_id(ObuNode *pParent, int obu_start_id) {
-  ObuNode *pChild = NULL, *pTemp = NULL;
-  ObuNode *pParentParent = pParent->pParent;
-  if (pParentParent == NULL) return obu_start_id;
-  pChild = pParentParent->pChild;
-
-  int find_i = obu_start_id;
-
-  for (find_i = obu_start_id;; find_i++) {
-    while (pChild) {
-      pTemp = pChild->pChild;
-      while (pTemp) {
-        if (find_i == pTemp->obu_id) break;
-        pTemp = pTemp->pBrother;
-      }
-      if (pTemp) break;
-      pChild = pChild->pBrother;
-    }
-    if (pTemp) {
-      pChild = pParentParent->pChild;
-    }
-    if (!pChild) break;
-  }
-  return find_i;
-}
-
 int get_new_obu_id2(ObuNode *root_node, AUDIO_OBU_TYPE obu_type,
                     int obu_start_id) {
   int find_i = obu_start_id;
@@ -107,8 +95,9 @@ int get_new_obu_id2(ObuNode *root_node, AUDIO_OBU_TYPE obu_type,
   return find_i;
 }
 
-int insert_obu_node(ObuNode *root_node, AUDIO_OBU_TYPE obu_type,
-                    int parent_obu_id) {
+int insert_obu_node(ObuIDManager *obu_id_manager, AUDIO_OBU_TYPE obu_type,
+                    AUDIO_OBU_TYPE parent_obu_type, int parent_obu_id) {
+  ObuNode *root_node = obu_id_manager->obu_note;
   ObuNode *pNew = (ObuNode *)malloc(sizeof(ObuNode));
   if (!pNew) return -1;
   memset(pNew, 0x00, sizeof(ObuNode));
@@ -116,36 +105,35 @@ int insert_obu_node(ObuNode *root_node, AUDIO_OBU_TYPE obu_type,
   ObuNode *pTemp = NULL;
   ObuNode *pParent = NULL;
   ObuNode *pChild = NULL;
-  AUDIO_OBU_TYPE parent_obu_type = OBU_IA_Invalid;
 
-  int obu_start_id = 0;
+  int obu_start_id = obu_id_manager->obu_start_id[obu_type];
   char *obu_name = NULL;
   if (obu_type == OBU_IA_Codec_Config) {
-    obu_start_id = CODEC_CONFIG_START_ID;
     obu_name = "codec config";
-    parent_obu_type = OBU_IA_Invalid;
+    pParent = root_node;
   } else if (obu_type == OBU_IA_Audio_Element) {
-    obu_start_id = AUDIO_ELEMENT_START_ID;
     obu_name = "audio element";
-    parent_obu_type = OBU_IA_Codec_Config;
+    pParent = root_node;
+  } else if (obu_type == OBU_IA_Mix_Presentation) {
+    obu_name = "mix presentation";
+    pParent = root_node;
   } else if (obu_type == OBU_IA_Audio_Frame) {
-    obu_start_id = SUB_STREAM_START_ID;
     obu_name = "audio frame";
-    parent_obu_type = OBU_IA_Audio_Element;
+    pParent = get_obu_node_pos(root_node, parent_obu_type, parent_obu_id);
   } else if (obu_type == OBU_IA_Parameter_Block) {
-    obu_start_id = PARAMETER_BLOCK_START_ID;
     obu_name = "parameter block";
-    parent_obu_type = OBU_IA_Audio_Element;
+    pParent = get_obu_node_pos(root_node, parent_obu_type, parent_obu_id);
   }
-  pParent = get_obu_node_pos(root_node, parent_obu_type, parent_obu_id);
-  if (pParent == NULL) {
+  if (!pParent) {
     printf("wrong parent_obu_id inputing!\n");
     return -1;
   }
   pTemp = pParent->pChild;
   pChild = pParent->pChild;
-  if (pTemp == NULL) {
-    pNew->obu_id = get_new_obu_id2(root_node, obu_type, obu_start_id);
+  pNew->obu_id = get_new_obu_id2(root_node, obu_type, obu_start_id);
+  if (obu_id_manager->mode)
+    obu_id_manager->obu_start_id[obu_type] = pNew->obu_id + 1;
+  if (!pTemp) {
     // pNew->obu_id = obu_start_id;
     pNew->obu_name = obu_name;
     pNew->obu_type = obu_type;
@@ -153,21 +141,6 @@ int insert_obu_node(ObuNode *root_node, AUDIO_OBU_TYPE obu_type,
     pParent->pChild = pNew;
     return pNew->obu_id;
   }
-
-  if (!strncmp(pParent->obu_name, "root", 4)) {
-    pTemp = pParent->pChild;
-    int find_i = obu_start_id;
-    for (find_i = obu_start_id;; find_i++) {
-      while (pTemp) {
-        if (find_i == pTemp->obu_id) break;
-        pTemp = pTemp->pBrother;
-      }
-      if (!pTemp) break;
-    }
-    pNew->obu_id = find_i;
-  } else
-    pNew->obu_id = get_new_obu_id2(root_node, obu_type, obu_start_id);
-
   pTemp = pParent->pChild;
   while (pTemp->pBrother) {
     pTemp = pTemp->pBrother;
@@ -214,9 +187,12 @@ void free_obu_node(ObuNode *root_node) {
   }
 }
 
-void delete_obu_node(ObuNode *root_node, AUDIO_OBU_TYPE obu_type, int obu_id) {
+void delete_obu_node(ObuIDManager *obu_id_manager, AUDIO_OBU_TYPE obu_type,
+                     int obu_id) {
+  ObuNode *root_node = obu_id_manager->obu_note;
   ObuNode *pTemp = NULL, *pParent = NULL, *pChild = NULL;
   pTemp = get_obu_node_pos(root_node, obu_type, obu_id);
+  if (!pTemp) return NULL;
   free_obu_node(pTemp);
 
   if (pTemp->pParent) {
@@ -259,4 +235,11 @@ int get_obu_ids(ObuNode *root_node, AUDIO_OBU_TYPE obu_type, int *obu_ids) {
   int size = 0;
   find_obu_node_with_type(root_node, obu_type, obu_ids, &size);
   return size;
+}
+
+void obu_id_manager_destroy(ObuIDManager *obu_id_manager) {
+  if (obu_id_manager) {
+    delete_obu_node(obu_id_manager, OBU_IA_ROOT, -1);
+    free(obu_id_manager);
+  }
 }

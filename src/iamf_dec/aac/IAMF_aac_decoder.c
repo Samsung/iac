@@ -45,7 +45,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define IA_TAG "IAMF_AAC"
 
-static int iamf_aac_close(IACodecContext *ths);
+static int iamf_aac_close(IAMF_CodecContext *ths);
 
 typedef struct IAMF_AAC_Context {
   AACMSDecoder *dec;
@@ -70,7 +70,7 @@ typedef struct IAMF_AAC_Context {
  *        3) extensionFlag = 0
  * */
 
-static int iamf_aac_init(IACodecContext *ths) {
+static int iamf_aac_init(IAMF_CodecContext *ths) {
   IAMF_AAC_Context *ctx = (IAMF_AAC_Context *)ths->priv;
   uint8_t *config = ths->cspec;
   int len = ths->clen;
@@ -94,7 +94,7 @@ static int iamf_aac_init(IACodecContext *ths) {
 
   ths->cspec = &config[idx];
   ths->clen = len - idx;
-  ia_logi("aac codec spec info size %d", ths->clen);
+  ia_logd("aac codec spec info size %d", ths->clen);
 
   ctx->dec = aac_multistream_decoder_open(ths->cspec, ths->clen, ths->streams,
                                           ths->coupled_streams,
@@ -113,9 +113,9 @@ static int iamf_aac_init(IACodecContext *ths) {
   return IAMF_OK;
 }
 
-static int iamf_aac_decode_list(IACodecContext *ths, uint8_t *buffer[],
-                                uint32_t size[], uint32_t count, void *pcm,
-                                uint32_t frame_size) {
+static int iamf_aac_decode(IAMF_CodecContext *ths, uint8_t *buffer[],
+                           uint32_t size[], uint32_t count, void *pcm,
+                           uint32_t frame_size) {
   IAMF_AAC_Context *ctx = (IAMF_AAC_Context *)ths->priv;
   AACMSDecoder *dec = (AACMSDecoder *)ctx->dec;
   int ret = IAMF_OK;
@@ -124,7 +124,7 @@ static int iamf_aac_decode_list(IACodecContext *ths, uint8_t *buffer[],
     return IAMF_ERR_BAD_ARG;
   }
 
-  ret = aac_multistream_decode_list(dec, buffer, size, ctx->out, frame_size);
+  ret = aac_multistream_decode(dec, buffer, size, ctx->out, frame_size);
   if (ret > 0) {
     float *out = (float *)pcm;
     uint32_t samples = ret * (ths->streams + ths->coupled_streams);
@@ -136,7 +136,14 @@ static int iamf_aac_decode_list(IACodecContext *ths, uint8_t *buffer[],
   return ret;
 }
 
-int iamf_aac_close(IACodecContext *ths) {
+int iamf_aac_info(IAMF_CodecContext *ths) {
+  IAMF_AAC_Context *ctx = (IAMF_AAC_Context *)ths->priv;
+  AACMSDecoder *dec = (AACMSDecoder *)ctx->dec;
+  ths->delay = aac_multistream_decoder_get_delay(dec);
+  return IAMF_OK;
+}
+
+int iamf_aac_close(IAMF_CodecContext *ths) {
   IAMF_AAC_Context *ctx = (IAMF_AAC_Context *)ths->priv;
   AACMSDecoder *dec = (AACMSDecoder *)ctx->dec;
 
@@ -151,10 +158,11 @@ int iamf_aac_close(IACodecContext *ths) {
   return IAMF_OK;
 }
 
-const IACodec iamf_aac_decoder = {
+const IAMF_Codec iamf_aac_decoder = {
     .cid = IAMF_CODEC_AAC,
     .priv_size = sizeof(IAMF_AAC_Context),
     .init = iamf_aac_init,
-    .decode_list = iamf_aac_decode_list,
+    .decode = iamf_aac_decode,
+    .info = iamf_aac_info,
     .close = iamf_aac_close,
 };

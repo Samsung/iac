@@ -39,6 +39,9 @@
     <ClCompile Include="..\..\..\test\tools\iamfplayer\src\mp4iamfpar.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\test\tools\iamfplayer\src\vlogging_iamfmp4_sr.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\test\tools\iamfplayer\include\wavwriter.h">
@@ -63,6 +66,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\test\tools\iamfplayer\include\mp4iamfpar.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\test\tools\iamfplayer\include\vlogging_iamfmp4_sr.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

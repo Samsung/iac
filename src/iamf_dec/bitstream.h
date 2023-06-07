@@ -56,7 +56,7 @@ uint32_t bs_getA8b(BitStream *b);
 uint32_t bs_getA16b(BitStream *b);
 uint32_t bs_getA32b(BitStream *b);
 uint64_t bs_getAleb128(BitStream *b);
-int bs_getAsleb128i32(BitStream *b);
+int64_t bs_getAsleb128(BitStream *b);
 int32_t bs_read(BitStream *b, uint8_t *data, int n);
 int32_t bs_readString(BitStream *b, char *data, int n);
 uint32_t bs_tell(BitStream *b);
@@ -68,6 +68,8 @@ int readi24le(uint8_t *data, int offset);
 int readi32be(uint8_t *data, int offset);
 int readi32le(uint8_t *data, int offset);
 
+uint32_t readu16be(uint8_t *data, int offset);
 uint32_t readu24be(uint8_t *data, int offset);
+uint32_t readu32be(uint8_t *data, int offset);
 
 #endif /* BIT_STREAM_H */

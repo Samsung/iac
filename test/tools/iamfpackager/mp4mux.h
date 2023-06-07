@@ -30,7 +30,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @brief mp4/fmp4 mux function
  * @version 0.1
  * @date Created 3/3/2023
-**/
+ **/
 
 #ifndef MP4MUX_H
 #define MP4MUX_H
@@ -58,6 +58,10 @@ typedef struct {
 
 #ifndef MAX_CHANNELS
 #define MAX_CHANNELS 12
+#endif
+
+#ifndef MAX_DESCRIPTOR_ENTRIES
+#define MAX_DESCRIPTOR_ENTRIES (3)
 #endif
 
 typedef enum { CODEC_UNKNOWN, CODEC_OPUS, CODEC_AAC, CODEC_MAX } CODEC_TYPE;
@@ -94,6 +98,13 @@ typedef struct AVPacket {
   int samples;
 } AVPacket;
 
+typedef struct AVDescriptor {
+  uint8_t *data;
+  int size;
+
+  int is_changed;
+} AVDescriptor;
+
 typedef struct {
   uint32_t samplerate;
   uint32_t samples;  // total sound samples
@@ -113,13 +124,14 @@ typedef struct {
   // AudioSpecificConfig data:
   struct {
     uint8_t *data;
-    unsigned long size;
+    uint64_t size;
   } asc;
 
   struct {
-    uint32_t *offsets;  // (stco)
-    uint32_t *sizes;    // (stsz)
-    uint32_t *deltas;   // (stts)
+    uint32_t *offsets;      // (stco)
+    uint32_t *sizes;        // (stsz)
+    uint32_t *deltas;       // (stts)
+    uint32_t *first_chunk;  // (stsc&stco)
     uint32_t entries;
     uint32_t buffersize;
 
@@ -148,17 +160,16 @@ typedef struct {
   } iamf;
 
   struct {
-    int size_of_mix_presentations_group_entry;
-    uint8_t *mix_presentations_group_entry;
-
-    int size_of_audio_elements_group_entry;
-    uint8_t *audio_elements_group_entry;
-
     uint8_t *data;
     int size;
 
     int is_changed;
   } ia_descriptor;
+
+  int stsd_id;
+  int descriptor_entries;
+  AVDescriptor av_descriptor[MAX_DESCRIPTOR_ENTRIES];
+  int entry_select;
 
 } mov_audio_track;
 

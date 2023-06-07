@@ -44,11 +44,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "ae_rdr.h"
 #include "audio_effect_peak_limiter.h"
 #include "demixer.h"
+#include "queue_t.h"
 #include "speex_resampler.h"
 
 #define IAMF_FLAGS_MAGIC_CODE 0x01
 #define IAMF_FLAGS_CONFIG 0x02
-#define IAMF_FLAGS_RECONFIG 0x04
 
 #define DEC_BUF_CNT 3
 
@@ -61,6 +61,15 @@ typedef enum {
   IA_CH_GAIN_L,
   IA_CH_GAIN_COUNT
 } IAOutputGainChannel;
+
+typedef enum {
+  IAMF_DECODER_STATUS_UNINIT,
+  IAMF_DECODER_STATUS_INIT,
+  IAMF_DECODER_STATUS_CONFIGURE,
+  IAMF_DECODER_STATUS_RECONFIGURE,
+  IAMF_DECODER_STATUS_RECEIVE,
+  IAMF_DECODER_STATUS_RUN,
+} IAMF_DecoderStatus;
 
 /* >>>>>>>>>>>>>>>>>> DATABASE >>>>>>>>>>>>>>>>>> */
 
@@ -81,20 +90,28 @@ typedef struct MixGainUnit {
 
 typedef struct MixGain {
   float default_mix_gain;
-  int nb_seg;
-  MixGainUnit *mix_gain_uints;
+  int use_default;
 } MixGain;
+
+typedef struct ParameterValue {
+  queue_t *params;
+  union {
+    MixGain mix_gain;
+  };
+} ParameterValue;
 
 typedef struct ParameterItem {
   uint64_t id;
   uint64_t type;
   uint64_t timestamp;
-
+  uint64_t duration;
+  uint64_t elapse;
   uint64_t parent_id;
-  IAMF_Parameter *parameter;
+  int rate;
+
   ParameterBase *param_base;
 
-  MixGain *mix_gain;
+  ParameterValue value;
 } ParameterItem;
 
 typedef struct ElementItem {
@@ -108,7 +125,6 @@ typedef struct ElementItem {
   ParameterItem *reconGain;
   ParameterItem *mixGain;
 
-  uint32_t recon_gain_flags;
 } ElementItem;
 
 typedef struct SyncItem {
@@ -117,21 +133,13 @@ typedef struct SyncItem {
   int type;
 } SyncItem;
 
-typedef struct ElementViewer {
-  ElementItem *items;
-  int count;
-} ElementViewer;
+typedef void (*free_tp)(void *);
 
-typedef struct ParameterViewer {
-  ParameterItem **items;
+typedef struct Viewer {
+  void **items;
   int count;
-} ParameterViewer;
-
-typedef struct SyncViewer {
-  uint64_t start_global_time;
-  SyncItem *items;
-  int count;
-} SyncViewer;
+  free_tp freeF;
+} Viewer;
 
 typedef struct IAMF_DataBase {
   IAMF_Object *version;
@@ -140,11 +148,11 @@ typedef struct IAMF_DataBase {
   ObjectSet *codecConf;
   ObjectSet *element;
   ObjectSet *mixPresentation;
-  ObjectSet *parameters;  // composed of ParameterObject.
 
-  ElementViewer eViewer;
-  ParameterViewer pViewer;
-  SyncViewer sViewer;
+  Viewer eViewer;
+  Viewer pViewer;
+  Viewer sViewer;
+  uint64_t sync_time;
 } IAMF_DataBase;
 
 /* <<<<<<<<<<<<<<<<<< DATABASE <<<<<<<<<<<<<<<<<< */
@@ -199,7 +207,7 @@ typedef struct AmbisonicsContext {
 typedef struct IAMF_Stream {
   uint64_t element_id;
   uint64_t codecConf_id;
-  IACodecID codec_id;
+  IAMF_CodecID codec_id;
 
   int sampling_rate;
   uint8_t scheme;  // audio element type: 0, CHANNEL_BASED; 1, SCENE_BASED
@@ -215,37 +223,44 @@ typedef struct IAMF_Stream {
 
   uint64_t trimming_start;
   uint64_t trimming_end;
+
 } IAMF_Stream;
 
 typedef struct ScalableChannelDecoder {
   int nb_layers;
-  IACoreDecoder **sub_decoders;
+  IAMF_CoreDecoder **sub_decoders;
+  int frame_offset;
   Demixer *demixer;
 } ScalableChannelDecoder;
 
 typedef struct AmbisonicsDecoder {
-  IACoreDecoder *decoder;
+  IAMF_CoreDecoder *decoder;
 } AmbisonicsDecoder;
 
-#define IAMF_PACKET_EXTRA_DEMIX_MODE 0x01
-#define IAMF_PACKET_EXTRA_RECON_GAIN 0x02
-#define IAMF_PACKET_EXTRA_MIX_GAIN 0x04
+#define IAMF_FRAME_EXTRA_DEMIX_MODE 0x01
+#define IAMF_FRAME_EXTRA_RECON_GAIN 0x02
+#define IAMF_FRAME_EXTRA_MIX_GAIN 0x04
 
 typedef struct Packet {
-  uint32_t pmask;
-
   uint8_t **sub_packets;
   uint32_t *sub_packet_sizes;
   uint32_t nb_sub_packets;
   uint32_t count;
-
-  uint64_t strim;
-  uint64_t etrim;
-
-  uint32_t uflags;
-
   uint64_t dts;
 } Packet;
+
+typedef struct Frame {
+  uint64_t id;
+  uint64_t pts;
+  uint32_t samples;
+  uint64_t strim;
+  uint64_t etrim;
+  uint32_t mask;
+  uint32_t flags;
+  int channels;
+
+  float *data;
+} Frame;
 
 typedef struct IAMF_StreamDecoder {
   union {
@@ -257,20 +272,17 @@ typedef struct IAMF_StreamDecoder {
   float *buffers[DEC_BUF_CNT];
 
   Packet packet;
+  Frame frame;
+
   uint32_t frame_size;
+  int delay;
 
 } IAMF_StreamDecoder;
 
 typedef struct IAMF_Mixer {
   uint64_t *element_ids;
-  int *trimming_start;
-  int *trimming_end;
   int nb_elements;
-  int channels;
-  int samples;
-  float **frames;
-  int count;
-  int enable_mix;
+  Frame **frames;
 } IAMF_Mixer;
 
 typedef struct IAMF_Presentation {
@@ -279,29 +291,33 @@ typedef struct IAMF_Presentation {
   IAMF_Stream **streams;
   uint32_t nb_streams;
   IAMF_StreamDecoder **decoders;
-  IAMF_StreamDecoder *prepared_decoder;
   SpeexResamplerState *resampler;
-
   IAMF_Mixer mixer;
+  uint64_t output_gain_id;
+  Frame frame;
 } IAMF_Presentation;
 
 typedef struct IAMF_DecoderContext {
   IAMF_DataBase db;
   uint32_t flags;
+  IAMF_DecoderStatus status;
 
   LayoutInfo *output_layout;
-  int output_samples;
+  int sampling_rate;
 
   IAMF_Presentation *presentation;
   char *mix_presentation_label;
 
   float loudness;
-  AudioEffectPeakLimiter limiter;
+  float normalization_loudness;
+  uint32_t bit_depth;
   float threshold_db;
+
+  uint32_t need_configure;
 
   // PTS
   uint32_t duration;
-  uint32_t pts;
+  int64_t pts;
   uint32_t pts_time_base;
   uint32_t last_frame_size;
 
@@ -314,6 +330,7 @@ typedef struct IAMF_DecoderContext {
 
 struct IAMF_Decoder {
   IAMF_DecoderContext ctx;
+  AudioEffectPeakLimiter *limiter;
 };
 
 #endif /* IAMF_DECODER_PRIVATE_H */

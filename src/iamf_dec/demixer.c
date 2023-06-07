@@ -32,7 +32,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @date Created 03/03/2023
  **/
 
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -417,12 +416,14 @@ static int dmx_h4(Demixer *ths) {
 
 static int dmx_channel(Demixer *ths, IAChannel ch) {
   int ret = IAMF_ERR_INTERNAL;
-  ia_logd("demix channel %s(%d) pos %p", ia_channel_name(ch), ch,
+  ia_logt("demix channel %s(%d) pos %p", ia_channel_name(ch), ch,
           ths->ch_data[ch]);
 
   if (ths->ch_data[ch]) {
     return IAMF_OK;
   }
+
+  ia_logd("reconstruct channel %s(%d)", ia_channel_name(ch), ch);
 
   switch (ch) {
     case IA_CH_R2:
@@ -510,19 +511,14 @@ static void dmx_rms(Demixer *ths) {
   }
 }
 
-Demixer *demixer_open(uint32_t frame_size, uint32_t delay) {
+Demixer *demixer_open(uint32_t frame_size) {
   Demixer *ths = 0;
   int ec = IAMF_OK;
   ths = IAMF_MALLOCZ(Demixer, 1);
   if (ths) {
-    int preskip = delay % frame_size;
     int windowLen = frame_size / 8;
-    int overlapLen = windowLen / 2;
-
-    ia_logt("Demixer %p size %ld", ths, sizeof(Demixer));
 
     ths->frame_size = frame_size;
-    ths->skip = preskip;
     ths->layout = IA_CHANNEL_LAYOUT_INVALID;
 
     ths->hanning_filter = IAMF_MALLOC(float, windowLen);
@@ -545,27 +541,11 @@ Demixer *demixer_open(uint32_t frame_size, uint32_t delay) {
           (0.5 * (1.0 - cos(2.0 * M_PI * (double)i / (double)(windowLen - 1))));
     }
 
-    if (preskip < overlapLen) {
-      for (int i = 0; i < frame_size; i++) {
-        ths->start_window[i] = 1;
-        ths->stop_window[i] = 0;
-      }
-    } else {
-      for (int i = 0; i < preskip - overlapLen; i++) {
-        ths->start_window[i] = 0;
-        ths->stop_window[i] = 1;
-      }
-
-      for (int i = preskip - overlapLen, j = 0; i < preskip; i++, j++) {
-        ths->start_window[i] = ths->hanning_filter[j];
-        ths->stop_window[i] = ths->hanning_filter[j + overlapLen];
-      }
-
-      for (int i = preskip; i < frame_size; i++) {
-        ths->start_window[i] = 1;
-        ths->stop_window[i] = 0;
-      }
+    for (int i = 0; i < frame_size; i++) {
+      ths->start_window[i] = 1;
+      ths->stop_window[i] = 0;
     }
+
     for (int i = 0; i < IA_CH_COUNT; ++i) {
       ths->ch_last_sf[i] = 1.0;
       ths->ch_last_sfavg[i] = 1.0;
@@ -600,6 +580,34 @@ void demixer_close(Demixer *ths) {
   free(ths);
 }
 
+int demixer_set_frame_offset(Demixer *ths, uint32_t offset) {
+  int preskip = 0;
+  int windowLen = ths->frame_size / 8;
+  int overlapLen = windowLen / 2;
+
+  preskip = offset % ths->frame_size;
+  ths->skip = preskip;
+
+  ia_logd("demixer preskip %d, overlayLen %d", preskip, overlapLen);
+  if (preskip < overlapLen) return IAMF_OK;
+
+  for (int i = 0; i < preskip - overlapLen; i++) {
+    ths->start_window[i] = 0;
+    ths->stop_window[i] = 1;
+  }
+
+  for (int i = preskip - overlapLen, j = 0; i < preskip; i++, j++) {
+    ths->start_window[i] = ths->hanning_filter[j];
+    ths->stop_window[i] = ths->hanning_filter[j + overlapLen];
+  }
+
+  for (int i = preskip; i < ths->frame_size; i++) {
+    ths->start_window[i] = 1;
+    ths->stop_window[i] = 0;
+  }
+  return IAMF_OK;
+}
+
 int demixer_set_channel_layout(Demixer *ths, IAChannelLayoutType layout) {
   if (ia_channel_layout_get_channels(layout, ths->chs_out,
                                      IA_CH_LAYOUT_MAX_CHANNELS) > 0) {
@@ -620,7 +628,7 @@ int demixer_set_output_gain(Demixer *ths, IAChannel *chs, float *gain,
   for (int i = 0; i < count; ++i) {
     ths->chs_gain_list.ch_gain[i].ch = chs[i];
     ths->chs_gain_list.ch_gain[i].gain = gain[i];
-    ia_logi("channel %s(%d) gain is %f", ia_channel_name(chs[i]), chs[i],
+    ia_logd("channel %s(%d) gain is %f", ia_channel_name(chs[i]), chs[i],
             gain[i]);
   }
   ths->chs_gain_list.count = count;
@@ -629,7 +637,7 @@ int demixer_set_output_gain(Demixer *ths, IAChannel *chs, float *gain,
 
 int demixer_set_demixing_mode(Demixer *ths, int mode) {
   if ((mode >= 0 && mode < 3) || (mode > 3 && mode < 7)) {
-    ia_logd("dmixtypenum: %d -> %d", ths->last_dmixtypenum, mode);
+    ia_logd("dmixtypenum: %d -> %d", ths->demixing_mode, mode);
 
     ths->last_dmixtypenum = ths->demixing_mode;
 

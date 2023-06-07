@@ -30,7 +30,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @brief mp4/fmp4 mux function
  * @version 0.1
  * @date Created 3/3/2023
-**/
+ **/
 
 // Mp4 muxer sample code.
 #if defined(_WIN32)
@@ -168,7 +168,8 @@ static int mov_write_mvhd_tag(MOVMuxContext *movm) {  // movie information
   size += avio_wb32(movm->audio_trak[0].samplerate);
   // size += avio_wb32(MOV_TIMESCALE);
   // Mov duration
-  size += avio_wb32(movm->audio_trak[0].samples);
+  size += avio_wb32(movm->audio_trak[0].samples -
+                    movm->audio_trak[0].iamf.initial_padding);
   // size += avio_wb32(av_rescale_rnd(movm->audio_trak[0].samples,
   // MOV_TIMESCALE, movm->audio_trak[0].samplerate));
   // Mov rate
@@ -221,7 +222,7 @@ static int mov_write_tkhd_tag(MOVMuxContext *movm) {  //
   // Mov reserved
   size += avio_wb32(0);
   // Mov duration
-  size += avio_wb32(audio_t->samples);
+  size += avio_wb32(audio_t->samples - audio_t->iamf.initial_padding);
   // Mov reserved
   size += avio_wb32(0);
   size += avio_wb32(0);
@@ -268,9 +269,9 @@ static int mov_write_edts_tag(MOVMuxContext *movm) {
   size += avio_wb32(1); /* entry_count */
   // size += avio_wb32(av_rescale_rnd(audio_t->samples, MOV_TIMESCALE,
   // audio_t->samplerate));/* duration */
-  size += avio_wb32(audio_t->samples); /* duration */
+  size += avio_wb32(audio_t->samples);              /* duration */
   size += avio_wb32(audio_t->iamf.initial_padding); /* media_time */
-  size += avio_wb32(0x00010000); /* media_rate */
+  size += avio_wb32(0x00010000);                    /* media_rate */
   return size;
 }
 
@@ -288,7 +289,8 @@ static int mov_write_mdhd_tag(MOVMuxContext *movm) {
   // Mov time scale
   size += avio_wb32(movm->audio_trak[audio_trak_select].samplerate);
   // Mov duration
-  size += avio_wb32(movm->audio_trak[audio_trak_select].samples);
+  size += avio_wb32(movm->audio_trak[audio_trak_select].samples -
+                    movm->audio_trak[0].iamf.initial_padding);
   // Mov language
   size += avio_wb16(0 /*0=English */);
   // Mov pre_defined
@@ -349,14 +351,78 @@ static int mov_write_url_tag(MOVMuxContext *movm) {
   return size;
 };
 
+static int mov_write_multi_entries(MOVMuxContext *movm) {
+  int size = 0;
+  int audio_trak_select;
+  audio_trak_select = movm->audio_trak_select;
+  mov_audio_track *audio_t = &movm->audio_trak[audio_trak_select];
+  int cnt = audio_t->descriptor_entries;
+
+  for (int i = 0; i < cnt; i++) {
+    int64_t pos_iamf = ftell(movm->mp4file);
+    int size_iamf = 0;
+    size_iamf += avio_wb32(0);  // write iamf size
+    size_iamf += avio_wstring("iamf");
+    // Reserved (6 bytes)
+    size_iamf += avio_wb32(0);
+    size_iamf += avio_wb16(0);
+    // Data reference index
+    size_iamf += avio_wb16(1);
+    // Version
+    size_iamf += avio_wb16(0);
+    // Revision level
+    size_iamf += avio_wb16(0);
+    // Vendor
+    size_iamf += avio_wb32(0);
+    // Number of channels
+    size_iamf += avio_wb16(audio_t->channels);
+    // Sample size (bits)
+    size_iamf += avio_wb16(audio_t->bits);
+    // Compression ID
+    size_iamf += avio_wb16(0);
+    // Packet size
+    size_iamf += avio_wb16(0);
+    // Sample rate (16.16)
+    // rate integer part
+    size_iamf += avio_wb16(audio_t->samplerate);
+    // rate reminder part
+    size_iamf += avio_wb16(0);
+
+    int64_t pos_iamd = ftell(movm->mp4file);
+    int size_iamd = 0;
+    size_iamd += avio_wb32(0);  // write iamd size
+    size_iamd += avio_wstring("iamd");
+    size_iamd += avio_wdata(audio_t[0].av_descriptor[i].data,
+                            audio_t[0].av_descriptor[i].size);
+    fseek(movm->mp4file, pos_iamd, SEEK_SET);
+    avio_wb32(size_iamd);
+    size_iamf += size_iamd;
+    fseek(movm->mp4file, pos_iamf, SEEK_SET);
+    avio_wb32(size_iamf);
+    fseek(movm->mp4file, pos_iamf + size_iamf, SEEK_SET);
+    size += size_iamf;
+  }
+
+  return size;
+}
+
+static int mov_write_entries(MOVMuxContext *movm);
+
 static int mov_write_stsd_tag(MOVMuxContext *movm) {
   int size = 0;
+  int audio_trak_select;
+  audio_trak_select = movm->audio_trak_select;
 
   // Movversion/flags
   size += avio_wb32(0);
-  // Mov number of entries(one 'mp4a')
-  size += avio_wb32(1);
+  // Mov number of entries
+  size += avio_wb32(movm->audio_trak[audio_trak_select].descriptor_entries);
 
+  // size += mov_write_multi_entries(movm);
+  avio_context *pre_atom = movm->atom;
+
+  size += mov_write_entries(movm);
+  movm->atom = pre_atom;
   return size;
 };
 
@@ -439,10 +505,10 @@ static int mov_write_iamd_tag(MOVMuxContext *movm) {
   int audio_trak_select;
   audio_trak_select = movm->audio_trak_select;
   mov_audio_track *audio_t = &movm->audio_trak[audio_trak_select];
-
+  int entry_select = audio_t->entry_select;
   int size = 0;
-  size +=
-      avio_wdata(audio_t[0].ia_descriptor.data, audio_t[0].ia_descriptor.size);
+  size += avio_wdata(audio_t[0].av_descriptor[entry_select].data,
+                     audio_t[0].av_descriptor[entry_select].size);
   return size;
 }
 
@@ -552,11 +618,37 @@ static int mov_write_stsc_tag(MOVMuxContext *movm) {
     return size;
   }
 
-  size += avio_wb32(1);
-  size += avio_wb32(1);
-  size += avio_wb32(1);
-  size += avio_wb32(1);
+  if (!audio_t->frame.first_chunk) {
+    size += avio_wb32(0);
+    return size;
+  }
 
+  uint32_t *samples_per_chunk = (uint32_t *)_dmalloc(1, __FILE__, __LINE__);
+
+  int cnt = 0;
+  int entry_count = 1;
+  samples_per_chunk[0] = 1;
+  int sample_chunk = audio_t->frame.first_chunk[0];
+  for (cnt = 1; cnt < audio_t->frame.entries; cnt++) {
+    if (sample_chunk != audio_t->frame.first_chunk[cnt]) {
+      entry_count++;
+      sample_chunk = audio_t->frame.first_chunk[cnt];
+      samples_per_chunk = (uint32_t *)_drealloc(
+          (char *)samples_per_chunk, entry_count, __FILE__, __LINE__);
+      samples_per_chunk[entry_count - 1] = 1;
+    } else {
+      samples_per_chunk[entry_count - 1]++;
+    }
+  }
+  size += avio_wb32(entry_count);
+  for (int i = 0; i < entry_count; i++) {
+    size += avio_wb32(i + 1);
+    size += avio_wb32(samples_per_chunk[i]);
+    size += avio_wb32(i + 1);
+  }
+  if (samples_per_chunk) {
+    _dfree(samples_per_chunk, __FILE__, __LINE__);
+  }
   return size;
 }
 
@@ -581,9 +673,32 @@ static int mov_write_stco_tag(MOVMuxContext *movm) {
     return size;
   }
 
-  size += avio_wb32(audio_t->frame.entries);
-  for (cnt = 0; cnt < audio_t->frame.entries; cnt++)
-    size += avio_wb32(audio_t->frame.offsets[cnt]);
+  if (!audio_t->frame.first_chunk) {
+    size += avio_wb32(0);
+    return size;
+  }
+
+  uint32_t *chunk_offset = (uint32_t *)_dmalloc(1, __FILE__, __LINE__);
+
+  int entry_count = 1;
+  chunk_offset[0] = audio_t->frame.offsets[0];
+  int sample_chunk = audio_t->frame.first_chunk[0];
+  for (cnt = 1; cnt < audio_t->frame.entries; cnt++) {
+    if (sample_chunk != audio_t->frame.first_chunk[cnt]) {
+      entry_count++;
+      sample_chunk = audio_t->frame.first_chunk[cnt];
+      chunk_offset = (uint32_t *)_drealloc((char *)chunk_offset, entry_count,
+                                           __FILE__, __LINE__);
+      chunk_offset[entry_count - 1] = audio_t->frame.offsets[cnt];
+    }
+  }
+
+  size += avio_wb32(entry_count);
+  for (cnt = 0; cnt < entry_count; cnt++) size += avio_wb32(chunk_offset[cnt]);
+
+  if (chunk_offset) {
+    _dfree(chunk_offset, __FILE__, __LINE__);
+  }
 
   return size;
 }
@@ -688,7 +803,8 @@ static int mov_write_tfhd_tag(MOVMuxContext *movm) {
   // Track ID
   size += avio_wb32(movm->num_video_traks + movm->audio_trak_select + 1);
   // mov default sample description index
-  size += avio_wb32(1);
+  size += avio_wb32(audio_t->stsd_id + 1);
+  // size += avio_wb32(1);
   // default sample duration
   size += avio_wb32(audio_t->framesamples);
   // default sample flags
@@ -719,6 +835,7 @@ static int mov_write_trun_tag(MOVMuxContext *movm) {
 
   uint32_t flags = MOV_TRUN_DATA_OFFSET;
   flags |= MOV_TRUN_SAMPLE_SIZE;
+  flags |= MOV_TRUN_SAMPLE_DURATION;
   // version
   size += avio_w8(0);
   // version
@@ -729,6 +846,8 @@ static int mov_write_trun_tag(MOVMuxContext *movm) {
   audio_t->frame.trun_dataoffset = ftell(movm->mp4file);
   size += avio_wb32(0);  // empty offset
   for (int i = 0; i < audio_t->frame.entries; i++) {
+    if (flags & MOV_TRUN_SAMPLE_DURATION)
+      size += avio_wb32(audio_t->frame.deltas[i]);
     size += avio_wb32(audio_t->frame.sizes[i]);
   }
   return size;
@@ -767,6 +886,14 @@ static avio_context atoms_tail[] = {{MOV_ATOM_NAME, "moov"},
                                     {MOV_ATOM_DATA, mov_write_mvhd_tag},
                                     {0}};
 
+static avio_context atoms_entry[] = {{MOV_ATOM_NAME, "iamf"},
+                                     {MOV_ATOM_DATA, mov_write_iamf_tag},
+                                     {MOV_ATOM_DOWN},
+                                     {MOV_ATOM_NAME, "iamd"},
+                                     {MOV_ATOM_DATA, mov_write_iamd_tag},
+                                     {MOV_ATOM_UP},
+                                     {0}};
+
 static avio_context atoms_trak[] = {{MOV_ATOM_NAME, "trak"},
                                     {MOV_ATOM_DOWN},
                                     {MOV_ATOM_NAME, "tkhd"},
@@ -796,14 +923,14 @@ static avio_context atoms_trak[] = {{MOV_ATOM_NAME, "trak"},
                                     {MOV_ATOM_DOWN},
                                     {MOV_ATOM_NAME, "stsd"},
                                     {MOV_ATOM_DATA, mov_write_stsd_tag},
-                                    {MOV_ATOM_DOWN},
+                                    /*{MOV_ATOM_DOWN},
                                     {MOV_ATOM_NAME, "iamf"},
                                     {MOV_ATOM_DATA, mov_write_iamf_tag},
                                     {MOV_ATOM_DOWN},
                                     {MOV_ATOM_NAME, "iamd"},
                                     {MOV_ATOM_DATA, mov_write_iamd_tag},
                                     {MOV_ATOM_UP},
-                                    {MOV_ATOM_UP},
+                                    {MOV_ATOM_UP},*/
                                     {MOV_ATOM_NAME, "stts"},
                                     {MOV_ATOM_DATA, mov_write_stts_tag},
                                     {MOV_ATOM_NAME, "stsc"},
@@ -851,14 +978,14 @@ static avio_context atoms_ftrak[] = {{MOV_ATOM_NAME, "trak"},
                                      {MOV_ATOM_DOWN},
                                      {MOV_ATOM_NAME, "stsd"},
                                      {MOV_ATOM_DATA, mov_write_stsd_tag},
-                                     {MOV_ATOM_DOWN},
-                                     {MOV_ATOM_NAME, "iamf"},
-                                     {MOV_ATOM_DATA, mov_write_iamf_tag},
-                                     {MOV_ATOM_DOWN},
-                                     {MOV_ATOM_NAME, "iamd"},
-                                     {MOV_ATOM_DATA, mov_write_iamd_tag},
-                                     {MOV_ATOM_UP},
-                                     {MOV_ATOM_UP},
+                                     //{MOV_ATOM_DOWN},
+                                     //{MOV_ATOM_NAME, "iamf"},
+                                     //{MOV_ATOM_DATA, mov_write_iamf_tag},
+                                     //{MOV_ATOM_DOWN},
+                                     //{MOV_ATOM_NAME, "iamd"},
+                                     //{MOV_ATOM_DATA, mov_write_iamd_tag},
+                                     //{MOV_ATOM_UP},
+                                     //{MOV_ATOM_UP},
                                      {MOV_ATOM_NAME, "stts"},
                                      {MOV_ATOM_DATA, mov_write_stts_tag},
                                      {MOV_ATOM_NAME, "stsc"},
@@ -877,13 +1004,8 @@ static avio_context atoms_ftrak[] = {{MOV_ATOM_NAME, "trak"},
                                      {MOV_ATOM_UP},
                                      {0}};
 
-static avio_context atoms_mvex[] = {
-    {MOV_ATOM_NAME, "mvex"}, {MOV_ATOM_DOWN},
-    {MOV_ATOM_NAME, "trex"}, {MOV_ATOM_DATA, mov_write_mvex_tag},
-    {MOV_ATOM_UP},           {0}};
-
-static int write_atom_default(MOVMuxContext *movm, long *atom_pos) {
-  long apos = ftell(movm->mp4file);
+static int write_atom_default(MOVMuxContext *movm, uint64_t *atom_pos) {
+  uint64_t apos = ftell(movm->mp4file);
   int size;
 
   size = avio_wb32(8);
@@ -901,7 +1023,7 @@ static int write_atom_default(MOVMuxContext *movm, long *atom_pos) {
         movm->atom++;
         break;
       }
-      long ap;
+      uint64_t ap;
       size += write_atom_default(movm, &ap);
     }
   }
@@ -931,9 +1053,9 @@ int mp4_flush_segment(MOVMuxContext *movm) {
 
   audio_t->frame.moofoffset = ftell(movm->mp4file);  // offset of current moof
 
-  long moof_pos, moof_size = 0;
+  uint64_t moof_pos, moof_size = 0;
   movm->atom = atoms_fragment;
-  long mvex_pos, mvex_size = 0;
+  uint64_t mvex_pos, mvex_size = 0;
   while (movm->atom->atom_type != MOV_ATOM_EXIT)
     moof_size += write_atom_default(movm, &moof_pos);
 
@@ -1005,10 +1127,16 @@ int mov_write_audio(MOVMuxContext *movm, int trak, uint8_t *buf, int size,
       audio_t->frame.deltas =
           (uint32_t *)_drealloc((char *)audio_t->frame.deltas,
                                 audio_t->frame.buffersize, __FILE__, __LINE__);
+      audio_t->frame.first_chunk =
+          (uint32_t *)_drealloc((char *)audio_t->frame.first_chunk,
+                                audio_t->frame.buffersize, __FILE__, __LINE__);
     }
     audio_t->frame.offsets[audio_t->frame.entries] = movm->mdatoffset + pos;
     audio_t->frame.sizes[audio_t->frame.entries] = size;
-    audio_t->frame.deltas[audio_t->frame.entries++] = samples;
+    audio_t->frame.deltas[audio_t->frame.entries] = samples;
+    audio_t->frame.first_chunk[audio_t->frame.entries] =
+        audio_t->descriptor_entries;
+    audio_t->frame.entries++;
   } else {
     if (audio_t->frame.fmdat_offset + size > audio_t->frame.fmdat_size) {
       audio_t->frame.fmdat_size += size;
@@ -1074,10 +1202,16 @@ int mov_write_audio2(MOVMuxContext *movm, int trak, AVPacket *pkt) {
       audio_t->frame.deltas =
           (uint32_t *)_drealloc((char *)audio_t->frame.deltas,
                                 audio_t->frame.buffersize, __FILE__, __LINE__);
+      audio_t->frame.first_chunk =
+          (uint32_t *)_drealloc((char *)audio_t->frame.first_chunk,
+                                audio_t->frame.buffersize, __FILE__, __LINE__);
     }
     audio_t->frame.offsets[audio_t->frame.entries] = movm->mdatoffset + pos;
     audio_t->frame.sizes[audio_t->frame.entries] = pkt->size;
-    audio_t->frame.deltas[audio_t->frame.entries++] = pkt->samples;
+    audio_t->frame.deltas[audio_t->frame.entries] = pkt->samples;
+    audio_t->frame.first_chunk[audio_t->frame.entries] =
+        audio_t->descriptor_entries;
+    audio_t->frame.entries++;
   } else {
     if (audio_t->frame.fmdat_offset + pkt->size > audio_t->frame.fmdat_size) {
       audio_t->frame.fmdat_size += pkt->size;
@@ -1094,8 +1228,12 @@ int mov_write_audio2(MOVMuxContext *movm, int trak, AVPacket *pkt) {
       audio_t->frame.sizes =
           (uint32_t *)_drealloc((char *)audio_t->frame.sizes,
                                 audio_t->frame.buffersize, __FILE__, __LINE__);
+      audio_t->frame.deltas =
+          (uint32_t *)_drealloc((char *)audio_t->frame.deltas,
+                                audio_t->frame.buffersize, __FILE__, __LINE__);
     }
-    audio_t->frame.sizes[audio_t->frame.entries++] = pkt->size;
+    audio_t->frame.sizes[audio_t->frame.entries] = pkt->size;
+    audio_t->frame.deltas[audio_t->frame.entries++] = pkt->samples;
 
     if (f_duration(audio_t) >= movm->max_fragment_duration) {
       mp4_flush_segment(movm);
@@ -1132,16 +1270,23 @@ int mov_write_close(MOVMuxContext *movm) {
       _dfree(audio_t->frame.deltas, __FILE__, __LINE__);
       audio_t->frame.deltas = NULL;
     }
+    if (audio_t->frame.first_chunk) {
+      _dfree(audio_t->frame.first_chunk, __FILE__, __LINE__);
+      audio_t->frame.first_chunk = NULL;
+    }
     if (audio_t->frame.fmdat) {
       _dfree(audio_t->frame.fmdat, __FILE__, __LINE__);
       audio_t->frame.fmdat = NULL;
     }
-    if (audio_t->frame.fmdat) {
-      _dfree(audio_t->ia_descriptor.mix_presentations_group_entry, __FILE__,
-             __LINE__);
-      _dfree(audio_t->ia_descriptor.audio_elements_group_entry, __FILE__,
-             __LINE__);
 
+    for (int j = 0; j < MAX_DESCRIPTOR_ENTRIES; j++) {
+      if (audio_t[i].av_descriptor[j].data) {
+        _dfree(audio_t[i].av_descriptor[j].data, __FILE__, __LINE__);
+        audio_t[i].av_descriptor[j].data = NULL;
+      }
+    }
+
+    if (audio_t->ia_descriptor.data) {
       _dfree(audio_t->ia_descriptor.data, __FILE__, __LINE__);
     }
   }
@@ -1183,7 +1328,7 @@ failure:
 }
 
 int mov_write_head(MOVMuxContext *movm) {
-  long head_pos, head_size = 0;
+  uint64_t head_pos, head_size = 0;
   if (!IS_FRAGMENT_MP4)  // non - fragment mp4
   {
     movm->atom = atoms_head;
@@ -1197,13 +1342,13 @@ int mov_write_head(MOVMuxContext *movm) {
     movm->moovoffset = ftell(movm->mp4file);
 
     // write empty moov
-    long moov_pos, moov_size = 0;
+    uint64_t moov_pos, moov_size = 0;
     movm->atom = atoms_tail;
     while (movm->atom->atom_type != MOV_ATOM_EXIT)
       moov_size += write_atom_default(movm, &moov_pos);
 
     // trak
-    long trak_pos, trak_size = 0;
+    uint64_t trak_pos, trak_size = 0;
     for (int i = 0; i < movm->num_audio_traks; i++) {  // audio trak
       movm->atom = atoms_ftrak;
       movm->audio_trak_select = i;
@@ -1216,13 +1361,7 @@ int mov_write_head(MOVMuxContext *movm) {
       fseek(movm->mp4file, moov_pos + moov_size, SEEK_SET);
     }
 
-    movm->atom = atoms_mvex;
-    long mvex_pos, mvex_size = 0;
-    while (movm->atom->atom_type != MOV_ATOM_EXIT)
-      mvex_size += write_atom_default(movm, &mvex_pos);
-
     // moov size¸
-    moov_size += mvex_size;
     fseek(movm->mp4file, moov_pos, SEEK_SET);
     avio_wb32(moov_size);
     fseek(movm->mp4file, moov_pos + moov_size, SEEK_SET);
@@ -1235,13 +1374,13 @@ int mov_write_head(MOVMuxContext *movm) {
 int mov_write_moov(MOVMuxContext *movm) {
   movm->moovoffset = ftell(movm->mp4file);
   // write empty moov
-  long moov_pos, moov_size = 0;
+  uint64_t moov_pos, moov_size = 0;
   movm->atom = atoms_tail;
   while (movm->atom->atom_type != MOV_ATOM_EXIT)
     moov_size += write_atom_default(movm, &moov_pos);
 
   // trak
-  long trak_pos, trak_size = 0;
+  uint64_t trak_pos, trak_size = 0;
   for (int i = 0; i < movm->num_audio_traks; i++) {  // audio trak
     movm->atom = atoms_ftrak;
     movm->audio_trak_select = i;
@@ -1254,13 +1393,7 @@ int mov_write_moov(MOVMuxContext *movm) {
     fseek(movm->mp4file, moov_pos + moov_size, SEEK_SET);
   }
 
-  movm->atom = atoms_mvex;
-  long mvex_pos, mvex_size = 0;
-  while (movm->atom->atom_type != MOV_ATOM_EXIT)
-    mvex_size += write_atom_default(movm, &mvex_pos);
-
   // moov size¸
-  moov_size += mvex_size;
   fseek(movm->mp4file, moov_pos, SEEK_SET);
   avio_wb32(moov_size);
   fseek(movm->mp4file, moov_pos + moov_size, SEEK_SET);
@@ -1283,16 +1416,16 @@ int mov_write_trak(MOVMuxContext *movm, int num_video_traks,
           (uint32_t *)_dmalloc(audio_t[i].frame.buffersize, __FILE__, __LINE__);
       audio_t[i].frame.deltas =
           (uint32_t *)_dmalloc(audio_t[i].frame.buffersize, __FILE__, __LINE__);
+      audio_t[i].frame.first_chunk =
+          (uint32_t *)_dmalloc(audio_t[i].frame.buffersize, __FILE__, __LINE__);
       if (IS_FRAGMENT_MP4) {
         audio_t[i].frame.fmdat_size = 2 * 1024 * 1024;  // 2M Bytes
         audio_t[i].frame.fmdat = (unsigned char *)_dmalloc(
             audio_t[i].frame.fmdat_size, __FILE__, __LINE__);
       }
-
-      audio_t[i].ia_descriptor.mix_presentations_group_entry =
-          (uint8_t *)_dmalloc(1024, __FILE__, __LINE__);
-      audio_t[i].ia_descriptor.audio_elements_group_entry =
-          (uint8_t *)_dmalloc(1024, __FILE__, __LINE__);
+      for (int j = 0; j < MAX_DESCRIPTOR_ENTRIES; j++)
+        audio_t[i].av_descriptor[j].data =
+            (uint8_t *)_dmalloc(1024, __FILE__, __LINE__);
 
       audio_t[i].ia_descriptor.data =
           (uint8_t *)_dmalloc(1024, __FILE__, __LINE__);
@@ -1308,8 +1441,9 @@ int mov_write_trak(MOVMuxContext *movm, int num_video_traks,
 int mov_write_tail(MOVMuxContext *movm) {
   if (IS_FRAGMENT_MP4) {
     mp4_flush_segment(movm);
+    return 0;
     // fragment mp4, write real moov.
-    fseek(movm->mp4file, movm->moovoffset, SEEK_SET);
+    // fseek(movm->mp4file, movm->moovoffset, SEEK_SET);
   }
   mov_audio_track *audio_t;
   for (int i = 0; i < movm->num_audio_traks; i++) {  // bitstream calculation.
@@ -1321,13 +1455,13 @@ int mov_write_tail(MOVMuxContext *movm) {
   }
 
   // moov
-  long moov_pos, moov_size = 0;
+  uint64_t moov_pos, moov_size = 0;
   movm->atom = atoms_tail;
   while (movm->atom->atom_type != MOV_ATOM_EXIT)
     moov_size += write_atom_default(movm, &moov_pos);
 
   // trak
-  long trak_pos, trak_size = 0;
+  uint64_t trak_pos, trak_size = 0;
   for (int i = 0; i < movm->num_audio_traks; i++) {  // audio trak
 
     if (!IS_FRAGMENT_MP4) {
@@ -1345,16 +1479,26 @@ int mov_write_tail(MOVMuxContext *movm) {
     fseek(movm->mp4file, moov_pos + moov_size, SEEK_SET);
   }
 
-  movm->atom = atoms_mvex;
-  long mvex_pos, mvex_size = 0;
-  while (movm->atom->atom_type != MOV_ATOM_EXIT)
-    mvex_size += write_atom_default(movm, &mvex_pos);
-
   // moov size¸
-  moov_size += mvex_size;
   fseek(movm->mp4file, moov_pos, SEEK_SET);
   avio_wb32(moov_size);
   fseek(movm->mp4file, moov_pos + moov_size, SEEK_SET);
 
   return ERROR_NONE;
+}
+
+static int mov_write_entries(MOVMuxContext *movm) {
+  int size = 0;
+  int audio_trak_select;
+  audio_trak_select = movm->audio_trak_select;
+
+  for (int i = 0; i < movm->audio_trak[audio_trak_select].descriptor_entries;
+       i++) {
+    movm->atom = atoms_entry;
+    uint64_t entry_pos = 0;
+    movm->audio_trak[audio_trak_select].entry_select = i;
+    while (movm->atom->atom_type != MOV_ATOM_EXIT)
+      size += write_atom_default(movm, &entry_pos);
+  }
+  return size;
 }

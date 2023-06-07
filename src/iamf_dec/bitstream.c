@@ -144,19 +144,18 @@ uint64_t bs_getAleb128(BitStream *b) {
   return ret;
 }
 
-int bs_getAsleb128i32(BitStream *b) {
-  uint32_t ret = 0;
-  int i, val = 0;
+int64_t bs_getAsleb128(BitStream *b) {
+  int64_t ret = 0, val;
+  int i;
   uint8_t byte;
 
   bs_align(b);
 
-  for (i = 0; i < 4; i++) {
+  for (i = 0; i < 8; i++) {
     byte = b->data[b->b8sp + i];
-    ret |= (((uint32_t)byte & 0x7f) << (i * 7));
+    ret |= ((byte & 0x7f) << (i * 7));
     if (!(byte & 0x80)) {
-      val = (int)ret;
-      val = val << (32 - i * 7) >> (32 - i * 7);
+      val = ret << (57 - i * 7) >> (57 - i * 7);
       break;
     }
   }
@@ -183,8 +182,12 @@ int32_t bs_readString(BitStream *b, char *data, int n) {
 
 uint32_t bs_tell(BitStream *b) { return b->b8p ? b->b8sp + 1 : b->b8sp; }
 
+uint32_t readu16be(uint8_t *data, int offset) {
+  return data[offset] << 8 | data[offset + 1];
+}
+
 int readi16be(uint8_t *data, int offset) {
-  int ret = data[offset] << 8 | data[offset + 1];
+  int ret = readu16be(data, offset);
   return ret << 16 >> 16;
 }
 
@@ -193,13 +196,13 @@ int readi16le(uint8_t *data, int offset) {
   return ret << 16 >> 16;
 }
 
-int readi24be(uint8_t *data, int offset) {
-  int ret = data[offset] << 16 | data[offset + 1] << 8 | data[offset + 2];
-  return ret << 8 >> 8;
-}
-
 uint32_t readu24be(uint8_t *data, int offset) {
   return data[offset] << 16 | data[offset + 1] << 8 | data[offset + 2];
+}
+
+int readi24be(uint8_t *data, int offset) {
+  int ret = readi24be(data, offset);
+  return ret << 8 >> 8;
 }
 
 int readi24le(uint8_t *data, int offset) {
@@ -210,6 +213,10 @@ int readi24le(uint8_t *data, int offset) {
 int readi32be(uint8_t *data, int offset) {
   return data[offset] << 24 | data[offset + 1] << 16 | data[offset + 2] << 8 |
          data[offset + 3];
+}
+
+uint32_t readu32be(uint8_t *data, int offset) {
+  return readi32be(data, offset);
 }
 
 int readi32le(uint8_t *data, int offset) {

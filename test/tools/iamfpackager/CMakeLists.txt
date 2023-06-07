@@ -23,6 +23,7 @@ set(sources
     mp4mux.c
     bitstreamrw.c
     progressbar.c
+    cJSON.c
 )
 
 link_directories(
@@ -31,5 +32,5 @@ link_directories(
 
 add_executable (iamfpackager ${sources})
 
-target_link_libraries (iamfpackager iamf)
+target_link_libraries (iamfpackager iamf m)
 

@@ -36,6 +36,9 @@
     <ClCompile Include="..\..\..\test\tools\iamfpackager\wavwriter.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\test\tools\iamfpackager\cJSON.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\test\tools\iamfpackager\a2b_endian.h">
@@ -57,6 +60,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\test\tools\iamfpackager\wavwriter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\test\tools\iamfpackager\cJSON.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

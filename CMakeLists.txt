@@ -111,6 +111,7 @@ set(IAMF_PUBLIC_HEADER
     ${CMAKE_CURRENT_SOURCE_DIR}/include/IAMF_decoder.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/IAMF_encoder.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/IAMF_defines.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/vlogging_tool_sr.h
     )
 set_target_properties(iamf PROPERTIES PUBLIC_HEADER "${IAMF_PUBLIC_HEADER}")
 

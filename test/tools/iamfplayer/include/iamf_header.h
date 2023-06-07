@@ -32,7 +32,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @date Created 03/03/2023
  **/
 
-
 #ifndef IAMF_HEADER_H
 #define IAMF_HEADER_H
 
@@ -77,8 +76,10 @@ typedef struct {
 } AACHeader;
 
 typedef struct {
-  uint8_t *description;
   uint32_t description_length;
+  uint8_t *description;
+  int skip;
+  int timescale;
 } IAMFHeader;
 
 #ifdef __cplusplus
@@ -86,7 +87,7 @@ extern "C" {
 #endif
 int iamf_header_read_description_OBUs(IAMFHeader *h, unsigned char *dst,
                                       int size);
-void iamf_header_free(IAMFHeader *h);
+void iamf_header_free(IAMFHeader *h, int n);
 #ifdef __cplusplus
 }
 #endif

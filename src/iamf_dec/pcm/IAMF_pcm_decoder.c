@@ -32,13 +32,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @date Created 03/03/2023
  **/
 
-#include <math.h>
-
 #include "IAMF_codec.h"
 #include "IAMF_debug.h"
 #include "IAMF_types.h"
 #include "bitstream.h"
-#include "bitstreamrw.h"
 
 #ifdef IA_TAG
 #undef IA_TAG
@@ -46,32 +43,56 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define IA_TAG "IAMF_PCM"
 
-static int iamf_pcm_init(IACodecContext *ths) {
+typedef int (*readf)(uint8_t *, int);
+typedef struct IAMF_PCM_Context {
+  float scale_i2f;
+  readf func;
+} IAMF_PCM_Context;
+
+static int iamf_pcm_init(IAMF_CodecContext *ths) {
+  IAMF_PCM_Context *ctx = (IAMF_PCM_Context *)ths->priv;
   uint8_t *config = ths->cspec;
 
   if (!ths->cspec || ths->clen <= 0) {
     return IAMF_ERR_BAD_ARG;
   }
 
-  ths->flags = get_uint8(config, 0);
-  ths->sample_size = get_uint8(config, 1);
-  ths->sample_rate = get_uint32be(config, 2);
+  ths->flags = config[0];
+  ths->sample_size = config[1];
+  ths->sample_rate = readu32be(config, 2);
 
   ia_logd("sample format flags 0x%x, size %u, rate %u", ths->flags,
           ths->sample_size, ths->sample_rate);
+
+  ctx->func = readi16le;
+  ctx->scale_i2f = 1 << 15;
+  if (ths->sample_size == 16) {
+    if (!ths->flags) ctx->func = readi16be;
+  } else if (ths->sample_size == 24) {
+    ctx->scale_i2f = 1 << 23;
+    if (!ths->flags)
+      ctx->func = readi24be;
+    else
+      ctx->func = readi24le;
+  } else if (ths->sample_size == 32) {
+    ctx->scale_i2f = 1 << 31;
+    if (!ths->flags)
+      ctx->func = readi32be;
+    else
+      ctx->func = readi32le;
+  }
+
+  ia_logd("the scale of int to float: %f", ctx->scale_i2f);
   return IAMF_OK;
 }
 
-static int iamf_pcm_decode_list(IACodecContext *ths, uint8_t *buf[],
-                                uint32_t len[], uint32_t count, void *pcm,
-                                const uint32_t frame_size) {
+static int iamf_pcm_decode(IAMF_CodecContext *ths, uint8_t *buf[],
+                           uint32_t len[], uint32_t count, void *pcm,
+                           const uint32_t frame_size) {
+  IAMF_PCM_Context *ctx = (IAMF_PCM_Context *)ths->priv;
   float *fpcm = (float *)pcm;
   int c = 0, cc;
   int sample_size_bytes = ths->sample_size / 8;
-  float den = 32768.f;
-
-  typedef int (*readi)(uint8_t *, int);
-  readi rf = readi16le;
 
   if (count != ths->streams) {
     return IAMF_ERR_BAD_ARG;
@@ -80,27 +101,12 @@ static int iamf_pcm_decode_list(IACodecContext *ths, uint8_t *buf[],
   ia_logd("cs %d, s %d, frame size %d", ths->coupled_streams, ths->streams,
           frame_size);
 
-  if (ths->sample_size == 16) {
-    if (!ths->flags) rf = readi16be;
-  } else if (ths->sample_size == 24) {
-    den = 8388608.f;
-    if (!ths->flags)
-      rf = readi24be;
-    else
-      rf = readi24le;
-  } else if (ths->sample_size == 32) {
-    den = 2147483648.f;
-    if (!ths->flags)
-      rf = readi32be;
-    else
-      rf = readi32le;
-  }
-
   for (; c < ths->coupled_streams; ++c) {
     for (int s = 0; s < frame_size; ++s) {
       for (int lf = 0; lf < 2; ++lf) {
         fpcm[frame_size * (c * 2 + lf) + s] =
-            rf(buf[c], (s * 2 + lf) * sample_size_bytes) / den;
+            ctx->func(buf[c], (s * 2 + lf) * sample_size_bytes) /
+            ctx->scale_i2f;
       }
     }
   }
@@ -108,17 +114,19 @@ static int iamf_pcm_decode_list(IACodecContext *ths, uint8_t *buf[],
   cc = ths->coupled_streams;
   for (; c < ths->streams; ++c) {
     for (int s = 0; s < frame_size; ++s) {
-      fpcm[frame_size * (cc + c) + s] = rf(buf[c], s * sample_size_bytes) / den;
+      fpcm[frame_size * (cc + c) + s] =
+          ctx->func(buf[c], s * sample_size_bytes) / ctx->scale_i2f;
     }
   }
   return frame_size;
 }
 
-static int iamf_pcm_close(IACodecContext *ths) { return IAMF_OK; }
+static int iamf_pcm_close(IAMF_CodecContext *ths) { return IAMF_OK; }
 
-const IACodec iamf_pcm_decoder = {
+const IAMF_Codec iamf_pcm_decoder = {
     .cid = IAMF_CODEC_PCM,
+    .priv_size = sizeof(IAMF_PCM_Context),
     .init = iamf_pcm_init,
-    .decode_list = iamf_pcm_decode_list,
+    .decode = iamf_pcm_decode,
     .close = iamf_pcm_close,
 };

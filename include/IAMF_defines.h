@@ -30,10 +30,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @brief AMF Common defines
  * @version 0.1
  * @date Created 3/3/2023
-**/
+ **/
 
 #ifndef IAMF_DEFINES_H
 #define IAMF_DEFINES_H
+
+#include <stdint.h>
 
 /**
  * Audio Element Type
@@ -59,6 +61,7 @@ typedef enum IAMF_LayoutType {
 } IAMF_LayoutType;
 
 typedef enum IAMF_SoundSystem {
+  SOUND_SYSTEM_INVALID = -1,
   SOUND_SYSTEM_A,        // 0+2+0, 0
   SOUND_SYSTEM_B,        // 0+5+0, 1
   SOUND_SYSTEM_C,        // 2+5+0, 1
@@ -79,6 +82,12 @@ typedef enum IAMF_ParameterType {
   IAMF_PARAMETER_TYPE_RECON_GAIN,
 } IAMF_ParameterType;
 
+typedef enum IAMF_AnimationType {
+  ANIMATION_TYPE_INVALID = -1,
+  ANIMATION_TYPE_STEP,
+  ANIMATION_TYPE_LINEAR,
+  ANIMATION_TYPE_BEZIER
+} IAMF_AnimationType;
 /**
  *  Layout Syntax:
  *
@@ -157,7 +166,7 @@ typedef enum {
   IAMF_CODEC_FLAC,
   IAMF_CODEC_PCM,
   IAMF_CODEC_COUNT
-} IACodecID;
+} IAMF_CodecID;
 
 /**
  * Error codes.
@@ -215,6 +224,7 @@ typedef enum {
 #define IA_SET_OUTPUT_GAIN_FLAG_REQUEST 3001
 #define IA_SET_SCALE_FACTOR_MODE_REQUEST 3002
 #define IA_SET_STANDALONE_REPRESENTATION_REQUEST 3003
+#define IA_SET_IAMF_PROFILE_REQUEST 3004
 
 #define IA_SET_BITRATE(x) IA_SET_BITRATE_REQUEST, __ia_check_int(x)
 #define IA_SET_BANDWIDTH(x) IA_SET_BANDWIDTH_REQUEST, __ia_check_int(x)
@@ -230,5 +240,6 @@ typedef enum {
   IA_SET_SCALE_FACTOR_MODE_REQUEST, __ia_check_int(x)
 #define IA_SET_STANDALONE_REPRESENTATION(x) \
   IA_SET_STANDALONE_REPRESENTATION_REQUEST, __ia_check_int(x)
+#define IA_SET_IAMF_PROFILE(x) IA_SET_IAMF_PROFILE_REQUEST, __ia_check_int(x)
 
 #endif /* IAMF_DEFINES_H */

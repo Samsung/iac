@@ -37,7 +37,17 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "common.h"
 #include "asc_dn.h"
 #include "asc_common_bs.h"
-#include "ia_asc.h"
+#include "iamf_asc.h"
+#include "asc_resampler.h"
+
+#ifndef MAX_ASC_PROCESS_DURATIONS
+#define MAX_ASC_PROCESS_DURATIONS  60 //unit:second
+#endif
+
+#ifndef ASC_DEFAULT_SAMPLE_RATE
+#define ASC_DEFAULT_SAMPLE_RATE  48000
+#endif
+
 extern float  mel_matrix[8772];
 
 void dump_data(char* name,float* data, int num)
@@ -116,33 +126,48 @@ static void save_result3(QueuePlus *pq, int* result, int frame_num, int ori_fram
   }
 }
 
-static void save_result4(IA_ASC *asc, int* result, int frame_num, int tile_factor)
+static void save_result4(IAMF_ASC *asc, int* result, int frame_num, int tile_factor)
 {
-  int chunk_size = 960;
-  int factor = chunk_size * tile_factor;
-  for (int n = 0; n < asc->frames; n++)
+  uint32_t chunk_size = 960;
+  uint32_t factor = chunk_size * tile_factor;
+  for (uint32_t n = 0; n < asc->frames; n++)
   {
-    int index = n * asc->frame_size / factor;
+    uint32_t resample_size = asc->frame_size * asc->den / asc->num;
+    uint32_t index = n * resample_size / factor;
     if (index >= frame_num)
       index = frame_num - 1;
     uint8_t dmix_index_t = result[index];
-    QueuePush(asc->pq, &dmix_index_t);
+#ifdef USE_QUEUE_METHOD
+    if(asc->pq)
+      QueuePush(asc->pq, &dmix_index_t);
+#else
+    if (asc->fp) {
+      char temp[256] = { 0 };
+      snprintf(temp, sizeof(temp), "%d\n", dmix_index_t);
+      fwrite(temp, strlen(temp), 1, asc->fp);
+    }
+#endif
   }
 }
 
-#ifndef MAX_ASC_PROCESS_ENTS
-#define MAX_ASC_PROCESS_ENTS 3000
-#endif
+static const int gASCCLChCount[] = { 1, 2, 6, 8, 10, 8, 10, 12, 6, 2 };
 
-IA_ASC * ia_asc_start(int layout, int frame_size, QueuePlus *pq)
+static int asc_get_channels_count(ASC_CHANNEL_LAYOUT layout) {
+  return gASCCLChCount[layout];
+}
+
+IAMF_ASC * iamf_asc_start(int layout, int frame_size, int sample_rate, QueuePlus *pq, char* out_file)
 {
-  IA_ASC *ia_asc = (IA_ASC*)malloc(sizeof(IA_ASC));
-  memset(ia_asc, 0x00, sizeof(IA_ASC));
-  ia_asc->layout = layout;
-  ia_asc->shift = 0;
-  ia_asc->frame_size = frame_size;
+  IAMF_ASC *asc = (IAMF_ASC*)malloc(sizeof(IAMF_ASC));
+  memset(asc, 0x00, sizeof(IAMF_ASC));
+  asc->layout = layout;
+  asc->shift = 0;
+  asc->frame_size = frame_size;
+  asc->den = asc->num = 1;
+  asc->sample_rate = sample_rate;
+  AscResamplerState *resampler = NULL;
 
-  if (inference_asc_create(&(ia_asc->asc_estimator_feature)) < 0)
+  if (inference_asc_create(&(asc->asc_estimator_feature)) < 0)
   {
     printf("inference_asc_create is failed \n");
     goto failure;
@@ -150,36 +175,53 @@ IA_ASC * ia_asc_start(int layout, int frame_size, QueuePlus *pq)
   if (layout == ASC_CHANNEL_LAYOUT_100 || layout == ASC_CHANNEL_LAYOUT_200 || layout == ASC_CHANNEL_LAYOUT_312)
   {
     printf("ASC, by pass\n");
-    return ia_asc;
+    return asc;
   }
 #ifdef USE_QUEUE_METHOD
-  ia_asc->pq = pq;
+  asc->pq = pq;
 #else
+#if 0
   char *filename = "audio_dmix.txt";
-  ia_asc->fp = (FILE*)fopen(filename, "w+");
+  asc->fp = (FILE*)fopen(filename, "w+");
+#else
+  if(out_file)
+    asc->fp = (FILE*)fopen(out_file, "w+");
 #endif
-  uint32_t chunk_size = 960;
+#endif
 
-  uint32_t nch = 0;
-  uint32_t unitNum = 0;
+  //initial resampler
+  int err = 0;
+  int channels = asc_get_channels_count(layout);
+  resampler = asc_resampler_init(channels, sample_rate, ASC_DEFAULT_SAMPLE_RATE, ASC_RESAMPLER_QUALITY_DEFAULT, &err);
+  if (err != ASC_RESAMPLER_ERR_SUCCESS) goto failure;
+  asc_resampler_skip_zeros(resampler);
+  resampler->buffer = (int16_t*)malloc(frame_size * 4 * sizeof(int16_t)*channels);// max sample rate 192,000 Hz,4x48000
+  if (!resampler->buffer) goto failure;
+  uint32_t num = 1, den = 1;
+  asc_resampler_get_ratio(resampler, &num, &den);
+  asc->num = num;
+  asc->den = den;
+  asc->resampler = (void*)resampler;
 
-  unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
-
-  nch = channel_map714[layout];
-  unitNum = chunk_size * MAX_ASC_PROCESS_ENTS;
-  ia_asc->data_fs = (float*)malloc(unitNum*DOWN_CHANNELS*sizeof(float));
-  if(ia_asc->frame_size > 0)
-    ia_asc->max_frames = unitNum / ia_asc->frame_size;
-  return ia_asc;
+  uint32_t unitNum = MAX_ASC_PROCESS_DURATIONS * ASC_DEFAULT_SAMPLE_RATE;
+  asc->data_fs = (float*)malloc(unitNum*DOWN_CHANNELS*sizeof(float));
+  if (asc->frame_size > 0)
+    asc->max_frames = unitNum / (asc->frame_size * den / num);
+  return asc;
 failure:
-  inference_asc_destroy(ia_asc->asc_estimator_feature);
-  ia_asc->asc_estimator_feature = NULL;
-  return ia_asc;
+  inference_asc_destroy(asc->asc_estimator_feature);
+  asc->asc_estimator_feature = NULL;
+  if (resampler) {
+    if (resampler->buffer) free(resampler->buffer);
+    asc_resampler_destroy(resampler);
+  }
+  return asc;
 }
 
-int frame_based_process(IA_ASC *asc)
+int frame_based_process(IAMF_ASC *asc)
 {
   int ret = 0;
+  int err;
   void *asc_estimator_feature = asc->asc_estimator_feature;
   float * data_fs = asc->data_fs;
 
@@ -191,7 +233,7 @@ int frame_based_process(IA_ASC *asc)
 
   float*  sample_e = NULL;
   int nsamples_e = 0;
-  audio_resizing_714ch(data_fs, asc->ents*chunk_size, data_unit_size, ds_factor, &sample_e, &nsamples_e); //sample_e need to free
+  audio_resizing_714ch(data_fs, asc->shift, data_unit_size, ds_factor, &sample_e, &nsamples_e); //sample_e need to free
 
   int frame_num = ((nsamples_e - 1.0) / data_unit_size) + 1;
   int* dout_asc_result = malloc(frame_num*sizeof(int));
@@ -210,31 +252,26 @@ int frame_based_process(IA_ASC *asc)
 
   uint32_t fft_size_asc = 256;
   uint32_t hop_size_asc = 128;
-  if (!asc->start)
+  for (int i = 0; i < kernel_s; i++)
   {
-    for (int i = 0; i < kernel_s; i++)
+    float * input_e = sample_e + i*DOWN_CHANNELS*data_unit_size;
+    float * inp_prep_e = asc_preprocess(input_e, DOWN_CHANNELS*data_unit_size);
+    float * inp_asc_e = asc_log_mstft_transform(asc_estimator_feature, inp_prep_e, DOWN_CHANNELS, mel_matrix, fft_size_asc, hop_size_asc);
+
+    float fout[512] = { 0 };
+    inference_asc_feature(asc_estimator_feature, inp_asc_e, fout);
+
+    if (inp_asc_e)
     {
-      float * input_e = sample_e + i*DOWN_CHANNELS*data_unit_size;
-      float * inp_prep_e = asc_preprocess(input_e, DOWN_CHANNELS*data_unit_size);
-      float * inp_asc_e = asc_log_mstft_transform(asc_estimator_feature, inp_prep_e, DOWN_CHANNELS, mel_matrix, fft_size_asc, hop_size_asc);
-
-      float fout[512] = { 0 };
-      inference_asc_feature(asc_estimator_feature, inp_asc_e, fout);
-
-      if (inp_asc_e)
-      {
-        free(inp_asc_e);
-        inp_asc_e = NULL;
-      }
-
-      for (int j = 0; j < f_size; j++)
-      {
-        featureBuffer[f_size*(i + 1) + j] = fout[j];
-      }
-
+      free(inp_asc_e);
+      inp_asc_e = NULL;
     }
 
-    //asc->start = 1;
+    for (int j = 0; j < f_size; j++)
+    {
+      featureBuffer[f_size*(i + 1) + j] = fout[j];
+    }
+
   }
 #ifdef DEBUG
   dump_data("featureBuffer", featureBuffer, f_size*(kernel_s + 1));
@@ -298,13 +335,8 @@ int frame_based_process(IA_ASC *asc)
     printf("frame %d  result %d total %d\n", i, dout_asc_result[i - kernel_s], frame_num);
 #endif
   }
-#ifdef USE_QUEUE_METHOD
-  if(asc->pq)
-    save_result4(asc, dout_asc_result, frame_num, tile_factor);
-#else
-  if(asc->fp)
-    save_result2(asc->fp, dout_asc_result, frame_num, asc->ents, tile_factor);
-#endif
+  //save_result2(asc->fp, dout_asc_result, frame_num, asc->frames, tile_factor);
+  save_result4(asc, dout_asc_result, frame_num, tile_factor);
 FAILED:
   if (NULL != sample_e) {
     free(sample_e);
@@ -323,17 +355,24 @@ FAILED:
 }
 
 
-int ia_asc_process(IA_ASC *asc, int16_t *input, int size)
+int iamf_asc_process(IAMF_ASC *asc, int16_t *input, int size)
 {
   int ret = 0;
   if (!asc->asc_estimator_feature)
     return 0;
-  unsigned char channel_map714[] = { 1,2,6,8,10,8,10,12,6 };
+  int nch = asc_get_channels_count(asc->layout);
+  uint32_t resample_size = size;
+  int16_t *pcm_data = input;
 
-  int nch = channel_map714[asc->layout];
+  if (asc->sample_rate != ASC_DEFAULT_SAMPLE_RATE) {
+    resample_size = asc->frame_size * asc->den / asc->num;
 
-  int chunk_size = 960;
-  int step = 0;
+    AscResamplerState * resampler = (AscResamplerState*)asc->resampler;
+    asc_resampler_process_interleaved_int(
+      resampler, (const int16_t *)input, (uint32_t *)&size,
+      (int16_t *)resampler->buffer, (uint32_t *)&resample_size);
+    pcm_data = resampler->buffer;
+  }
 
   if (asc->layout == ASC_CHANNEL_LAYOUT_710 || asc->layout == ASC_CHANNEL_LAYOUT_712 || asc->layout == ASC_CHANNEL_LAYOUT_714)
   {
@@ -348,24 +387,22 @@ int ia_asc_process(IA_ASC *asc, int16_t *input, int size)
       asc->data_fs[(i + shift)*DOWN_CHANNELS + 4] = (int16_t)(input[5 + i*nch] + input[7 + i*nch] + 0.7071 * input[11 + i*nch]);
     }
 #else
-    for (int i = 0; i<size; i++) {
-      asc->data_fs[(i + shift)*DOWN_CHANNELS] = (int16_t)(input[2 + i*nch]);
-      asc->data_fs[(i + shift)*DOWN_CHANNELS + 1] = (int16_t)(input[0 + i*nch]);
-      asc->data_fs[(i + shift)*DOWN_CHANNELS + 2] = (int16_t)(input[1 + i*nch]);
-      asc->data_fs[(i + shift)*DOWN_CHANNELS + 3] = (int16_t)(input[4 + i*nch] + input[6 + i*nch]);
-      asc->data_fs[(i + shift)*DOWN_CHANNELS + 4] = (int16_t)(input[5 + i*nch] + input[7 + i*nch]);
+    for (int i = 0; i<resample_size; i++) {
+      asc->data_fs[(i + shift)*DOWN_CHANNELS] = (int16_t)(pcm_data[2 + i*nch]);
+      asc->data_fs[(i + shift)*DOWN_CHANNELS + 1] = (int16_t)(pcm_data[0 + i*nch]);
+      asc->data_fs[(i + shift)*DOWN_CHANNELS + 2] = (int16_t)(pcm_data[1 + i*nch]);
+      asc->data_fs[(i + shift)*DOWN_CHANNELS + 3] = (int16_t)(pcm_data[4 + i*nch] + pcm_data[6 + i*nch]);
+      asc->data_fs[(i + shift)*DOWN_CHANNELS + 4] = (int16_t)(pcm_data[5 + i*nch] + pcm_data[7 + i*nch]);
     }
 #endif
     asc->frames++;
-    asc->shift = shift + size;
+    asc->shift = shift + resample_size;
 
     if (asc->frames < asc->max_frames)
       return ret;
     else
     {
-      asc->ents = asc->shift / chunk_size;
       frame_based_process(asc);
-      asc->ents = 0;
       asc->frames = 0;
       asc->shift = 0;
     }
@@ -375,36 +412,32 @@ int ia_asc_process(IA_ASC *asc, int16_t *input, int size)
   {
 
     int shift = asc->shift;
-    for (int i = 0; i<size; i++) {
-      asc->data_fs[(i + shift)*DOWN_CHANNELS] = (int16_t)(input[2 + i*nch]);
-      asc->data_fs[(i + shift)*DOWN_CHANNELS + 1] = (int16_t)(input[0 + i*nch]);
-      asc->data_fs[(i + shift)*DOWN_CHANNELS + 2] = (int16_t)(input[1 + i*nch]);
-      asc->data_fs[(i + shift)*DOWN_CHANNELS + 3] = (int16_t)(input[4 + i*nch]);
-      asc->data_fs[(i + shift)*DOWN_CHANNELS + 4] = (int16_t)(input[5 + i*nch]);
+    for (int i = 0; i<resample_size; i++) {
+      asc->data_fs[(i + shift)*DOWN_CHANNELS] = (int16_t)(pcm_data[2 + i*nch]);
+      asc->data_fs[(i + shift)*DOWN_CHANNELS + 1] = (int16_t)(pcm_data[0 + i*nch]);
+      asc->data_fs[(i + shift)*DOWN_CHANNELS + 2] = (int16_t)(pcm_data[1 + i*nch]);
+      asc->data_fs[(i + shift)*DOWN_CHANNELS + 3] = (int16_t)(pcm_data[4 + i*nch]);
+      asc->data_fs[(i + shift)*DOWN_CHANNELS + 4] = (int16_t)(pcm_data[5 + i*nch]);
     }
     asc->frames++;
-    asc->shift = shift + size;
+    asc->shift = shift + resample_size;
 
     if (asc->frames < asc->max_frames)
       return ret;
     else
     {
-      asc->ents = asc->shift / chunk_size;
       frame_based_process(asc);
-      asc->ents = 0;
       asc->frames = 0;
-	  asc->shift = 0;
+      asc->shift = 0;
     }
   }
 
   return ret;
 }
 
-int ia_asc_stop(IA_ASC *asc)
+int iamf_asc_stop(IAMF_ASC *asc)
 {
-  int chunk_size = 960;
-  asc->ents = asc->shift / chunk_size;
-  if(asc->ents > 0)
+  if(asc->frames > 0)
     frame_based_process(asc);
   if (asc && asc->asc_estimator_feature)
   {
@@ -416,6 +449,13 @@ int ia_asc_stop(IA_ASC *asc)
       free(asc->data_fs);
     if (asc->fp)
       fclose(asc->fp);
+    if (asc->resampler) {
+      AscResamplerState *resampler = (AscResamplerState *)(asc->resampler);
+      if (resampler->buffer)
+        free(resampler->buffer);
+      asc_resampler_destroy(resampler);
+    }
+
     free(asc);
     return 0;
   }

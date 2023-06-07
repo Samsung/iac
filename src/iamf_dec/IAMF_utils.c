@@ -41,14 +41,14 @@ void iamf_freep(void **p) {
   }
 }
 
-int iamf_codec_check(IACodecID cid) {
+int iamf_codec_check(IAMF_CodecID cid) {
   return cid >= IAMF_CODEC_OPUS && cid < IAMF_CODEC_COUNT;
 }
 
 static const char *gIAMFCodecName[IAMF_CODEC_COUNT] = {"None", "OPUS", "AAC-LC",
                                                        "FLAC", "PCM"};
 
-const char *iamf_codec_name(IACodecID cid) {
+const char *iamf_codec_name(IAMF_CodecID cid) {
   if (iamf_codec_check(cid)) {
     return gIAMFCodecName[cid];
   }

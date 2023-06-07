@@ -53,18 +53,28 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define IA_TAG "IAMF_CORE"
 
 #ifdef CONFIG_OPUS_CODEC
-extern const IACodec ia_opus_decoder;
+extern const IAMF_Codec iamf_opus_decoder;
 #endif
 
 #ifdef CONFIG_AAC_CODEC
-extern const IACodec iamf_aac_decoder;
+extern const IAMF_Codec iamf_aac_decoder;
 #endif
 
 #ifdef CONFIG_FLAC_CODEC
-extern const IACodec iamf_flac_decoder;
+extern const IAMF_Codec iamf_flac_decoder;
 #endif
 
-extern const IACodec iamf_pcm_decoder;
+extern const IAMF_Codec iamf_pcm_decoder;
+
+struct IAMF_CoreDecoder {
+  IAMF_CodecID cid;
+  const IAMF_Codec *cdec;
+  IAMF_CodecContext *ctx;
+
+  int ambisonics;
+  void *matrix;
+  void *buffer;
+};
 
 typedef struct FloatMatrix {
   float *matrix;
@@ -72,48 +82,40 @@ typedef struct FloatMatrix {
   int column;
 } FloatMatrix;
 
-static int ia_core_decoder_codec_check(IACoreDecoder *ths, IACodecID cid) {
-  return !!ths->cdec[cid];
-}
-
-static int ia_cd_codec_register(IACoreDecoder *ths, IACodecID cid) {
-  int ec = IAMF_ERR_UNIMPLEMENTED;
-
-  switch (cid) {
-    case IAMF_CODEC_OPUS:
+static const IAMF_Codec *gCodecs[] = {0,
 #ifdef CONFIG_OPUS_CODEC
-      ths->cdec[cid] = &ia_opus_decoder;
-      ec = IAMF_OK;
+                                      &iamf_opus_decoder,
+#else
+                                      0,
 #endif
-      break;
-    case IAMF_CODEC_AAC:
 #ifdef CONFIG_AAC_CODEC
-      ths->cdec[cid] = &iamf_aac_decoder;
-      ec = IAMF_OK;
+                                      &iamf_aac_decoder,
+#else
+                                      0,
 #endif
-      break;
-    case IAMF_CODEC_FLAC:
 #ifdef CONFIG_FLAC_CODEC
-      ths->cdec[cid] = &iamf_flac_decoder;
-      ec = IAMF_OK;
+                                      &iamf_flac_decoder,
+#else
+                                      0,
 #endif
-      break;
+                                      &iamf_pcm_decoder
 
-    case IAMF_CODEC_PCM:
-      ths->cdec[cid] = &iamf_pcm_decoder;
-      ec = IAMF_OK;
-      break;
-    default:
-      ec = IAMF_ERR_BAD_ARG;
-      ia_loge("%s : Invalid codec id %d", ia_error_code_string(ec), cid);
-      break;
+};
+
+static int iamf_core_decoder_convert_mono(IAMF_CoreDecoder *ths, float *out,
+                                          float *in, uint32_t frame_size) {
+  uint8_t *map = ths->matrix;
+
+  memset(out, 0, sizeof(float) * frame_size * ths->ctx->channels);
+  for (int i = 0; i < ths->ctx->channels; ++i) {
+    memcpy(&out[frame_size * map[i]], &in[frame_size * i],
+        frame_size * sizeof(float));
   }
-
-  return ec;
+  return IAMF_OK;
 }
-
-static int iamf_core_decoder_convert(IACoreDecoder *ths, float *out, float *in,
-                                     uint32_t frame_size) {
+static int iamf_core_decoder_convert_projection(IAMF_CoreDecoder *ths,
+                                                float *out, float *in,
+                                                uint32_t frame_size) {
   FloatMatrix *matrix = ths->matrix;
   for (int s = 0; s < frame_size; ++s) {
     for (int r = 0; r < matrix->row; ++r) {
@@ -127,67 +129,58 @@ static int iamf_core_decoder_convert(IACoreDecoder *ths, float *out, float *in,
   return IAMF_OK;
 }
 
-IACoreDecoder *ia_core_decoder_open(IACodecID cid) {
-  IACoreDecoder *ths = 0;
-  IACodecContext *ctx = 0;
+IAMF_CoreDecoder *iamf_core_decoder_open(IAMF_CodecID cid) {
+  IAMF_CoreDecoder *ths = 0;
+  IAMF_CodecContext *ctx = 0;
   int ec = IAMF_OK;
 
-  ths = IAMF_MALLOCZ(IACoreDecoder, 1);
-  if (!ths) {
-    ec = IAMF_ERR_ALLOC_FAIL;
-    ia_loge("%s : IACoreDecoder handle.", ia_error_code_string(ec));
+  if (!iamf_codec_check(cid)) {
+    ia_loge("Invlid codec id %u", cid);
     return 0;
   }
-#ifdef CONFIG_OPUS_CODEC
-  ia_cd_codec_register(ths, IAMF_CODEC_OPUS);
-#endif
 
-#ifdef CONFIG_AAC_CODEC
-  ia_cd_codec_register(ths, IAMF_CODEC_AAC);
-#endif
-
-#ifdef CONFIG_FLAC_CODEC
-  ia_cd_codec_register(ths, IAMF_CODEC_FLAC);
-#endif
-
-  ia_cd_codec_register(ths, IAMF_CODEC_PCM);
-
-  if (!ia_core_decoder_codec_check(ths, cid)) {
-    ec = IAMF_ERR_UNIMPLEMENTED;
-    ia_loge("%s : Unimplment %s decoder.", ia_error_code_string(ec),
-            iamf_codec_name(cid));
-    goto termination;
+  if (!gCodecs[cid]) {
+    ia_loge("Unimplment %s decoder.", iamf_codec_name(cid));
+    return 0;
   }
 
-  ctx = IAMF_MALLOCZ(IACodecContext, 1);
+  ths = IAMF_MALLOCZ(IAMF_CoreDecoder, 1);
+  if (!ths) {
+    ia_loge("%s : IAMF_CoreDecoder handle.",
+            ia_error_code_string(IAMF_ERR_ALLOC_FAIL));
+    return 0;
+  }
+
+  ths->cid = cid;
+  ths->cdec = gCodecs[cid];
+
+  ctx = IAMF_MALLOCZ(IAMF_CodecContext, 1);
   if (!ctx) {
     ec = IAMF_ERR_ALLOC_FAIL;
-    ia_loge("%s : IACodecContext handle.", ia_error_code_string(ec));
+    ia_loge("%s : IAMF_CodecContext handle.", ia_error_code_string(ec));
     goto termination;
   }
-
   ths->ctx = ctx;
 
-  ctx->priv = IAMF_MALLOCZ(char, ths->cdec[cid]->priv_size);
+  ctx->priv = IAMF_MALLOCZ(char, ths->cdec->priv_size);
   if (!ctx->priv) {
     ec = IAMF_ERR_ALLOC_FAIL;
     ia_loge("%s : private data.", ia_error_code_string(ec));
     goto termination;
   }
 
-  ths->cid = cid;
 termination:
   if (ec != IAMF_OK) {
-    ia_core_decoder_close(ths);
+    iamf_core_decoder_close(ths);
     ths = 0;
   }
   return ths;
 }
 
-void ia_core_decoder_close(IACoreDecoder *ths) {
+void iamf_core_decoder_close(IAMF_CoreDecoder *ths) {
   if (ths) {
     if (ths->ctx) {
-      ths->cdec[ths->cid]->close(ths->ctx);
+      if (ths->cdec) ths->cdec->close(ths->ctx);
       if (ths->ctx->priv) {
         free(ths->ctx->priv);
       }
@@ -208,24 +201,25 @@ void ia_core_decoder_close(IACoreDecoder *ths) {
   }
 }
 
-int ia_core_decoder_init(IACoreDecoder *ths) {
-  IACodecContext *ctx = ths->ctx;
-  return ths->cdec[ths->cid]->init(ctx);
+int iamf_core_decoder_init(IAMF_CoreDecoder *ths) {
+  IAMF_CodecContext *ctx = ths->ctx;
+  return ths->cdec->init(ctx);
 }
 
-int ia_core_decoder_set_codec_conf(IACoreDecoder *ths, uint8_t *spec,
-                                   uint32_t len) {
-  IACodecContext *ctx = ths->ctx;
+int iamf_core_decoder_set_codec_conf(IAMF_CoreDecoder *ths, uint8_t *spec,
+                                     uint32_t len) {
+  IAMF_CodecContext *ctx = ths->ctx;
   ctx->cspec = spec;
   ctx->clen = len;
   return IAMF_OK;
 }
 
-int ia_core_decoder_set_streams_info(IACoreDecoder *ths, uint32_t mode,
-                                     uint8_t channels, uint8_t streams,
-                                     uint8_t coupled_streams, uint8_t mapping[],
-                                     uint32_t mapping_size) {
-  IACodecContext *ctx = ths->ctx;
+int iamf_core_decoder_set_streams_info(IAMF_CoreDecoder *ths, uint32_t mode,
+                                       uint8_t channels, uint8_t streams,
+                                       uint8_t coupled_streams,
+                                       uint8_t mapping[],
+                                       uint32_t mapping_size) {
+  IAMF_CodecContext *ctx = ths->ctx;
   ths->ambisonics = mode;
   ctx->channels = channels;
   ctx->streams = streams;
@@ -256,34 +250,53 @@ int ia_core_decoder_set_streams_info(IACoreDecoder *ths, uint32_t mode,
         ia_logi("factor %d : %f", i, factors[i]);
       }
       ths->matrix = matrix;
+    } else if (ths->ambisonics == STREAM_MODE_AMBISONICS_MONO) {
+      uint8_t *matrix = IAMF_MALLOCZ(uint8_t, mapping_size);
+      if (!matrix) return IAMF_ERR_ALLOC_FAIL;
+
+      if (channels != mapping_size) {
+        free(matrix);
+        ia_loge("Invalid ambisonics mono info.");
+        return IAMF_ERR_BAD_ARG;
+      }
+      memcpy(matrix, mapping, mapping_size);
+      ths->matrix = matrix;
     }
   }
   return IAMF_OK;
 }
 
-int ia_core_decoder_decode_list(IACoreDecoder *ths, uint8_t *buffer[],
-                                uint32_t size[], uint32_t count, float *out,
-                                uint32_t frame_size) {
+int iamf_core_decoder_decode(IAMF_CoreDecoder *ths, uint8_t *buffer[],
+                             uint32_t size[], uint32_t count, float *out,
+                             uint32_t frame_size) {
   int ret = IAMF_OK;
-  IACodecContext *ctx = ths->ctx;
-  if (ctx->streams != count) {
-    return IAMF_ERR_BUFFER_TOO_SMALL;
+  IAMF_CodecContext *ctx = ths->ctx;
+  if (ctx->streams != count) return IAMF_ERR_BUFFER_TOO_SMALL;
+  if (ths->ambisonics == STREAM_MODE_AMBISONICS_NONE)
+    return ths->cdec->decode(ctx, buffer, size, count, out, frame_size);
+
+  if (!ths->buffer) {
+    int c = ctx->coupled_streams + ctx->streams;
+    float *block = 0;
+
+    block = IAMF_MALLOC(float, c *frame_size);
+    if (!block) return IAMF_ERR_ALLOC_FAIL;
+    ths->buffer = block;
   }
-  if (ths->ambisonics != STREAM_MODE_AMBISONICS_PROJECTION)
-    return ths->cdec[ths->cid]->decode_list(ctx, buffer, size, count, out,
-                                            frame_size);
-  else {
-    if (!ths->buffer) {
-      float *block = IAMF_MALLOC(
-          float, (ctx->coupled_streams + ctx->streams) * frame_size);
-      if (!block) return IAMF_ERR_ALLOC_FAIL;
-      ths->buffer = block;
-    }
-    ret = ths->cdec[ths->cid]->decode_list(ctx, buffer, size, count,
-                                           ths->buffer, frame_size);
-    if (ret > 0) {
-      iamf_core_decoder_convert(ths, out, ths->buffer, ret);
-    }
-    return ret;
+  ret = ths->cdec->decode(ctx, buffer, size, count, ths->buffer, frame_size);
+  if (ret > 0) {
+    if (ths->ambisonics == STREAM_MODE_AMBISONICS_PROJECTION)
+      iamf_core_decoder_convert_projection(ths, out, ths->buffer, ret);
+    else
+      iamf_core_decoder_convert_mono(ths, out, ths->buffer, ret);
   }
+  return ret;
+}
+
+int iamf_core_decoder_get_delay(IAMF_CoreDecoder *ths) {
+  if (ths->cdec->info) ths->cdec->info(ths->ctx);
+  if (ths && ths->ctx) {
+    return ths->ctx->delay;
+  }
+  return 0;
 }

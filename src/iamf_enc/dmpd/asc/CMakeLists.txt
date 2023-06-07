@@ -54,6 +54,7 @@ set(sources
 	src/effect_stft_abs.c
 	src/sample_d_data.c
 	src/sample_e_data.c
+	resampler/asc_resample.c
 )
 
 INCLUDE_DIRECTORIES(
@@ -62,6 +63,7 @@ INCLUDE_DIRECTORIES(
   ${PROJECT_SOURCE_DIR}/include
   ${PROJECT_SOURCE_DIR}/generated
   ${PROJECT_SOURCE_DIR}/src
+  ${PROJECT_SOURCE_DIR}/resampler
 )
 
 LINK_DIRECTORIES(

@@ -32,7 +32,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @date Created 03/03/2023
  **/
 
-
 #include "atom.h"
 
 #include <memory.h>
@@ -101,17 +100,6 @@ static int atom_parse_ftyp(atom *atom) {
   return 0;
 }
 
-static int atom_parse_styp(atom *atom) {
-  char *label;
-
-  // printf("%*s", atom->depth * 2, "");
-  if (_logger) {
-    fprintf(_logger, "- labels\n");
-  }
-  hex_dump(NULL, atom->data, atom->data_end - atom->data);
-  return 0;
-}
-
 static int atom_parse_mdat(atom *atom) { return 0; }
 
 typedef struct atom_sidx atom_sidx;
@@ -130,30 +118,6 @@ struct atom_sidx {
   uint32_t sap_type : 3;
   uint32_t sap_delta_time : 28;
 };
-
-static int atom_parse_sidx(atom *atom) {
-  atom_sidx *sidx;
-
-  sidx = (atom_sidx *)(atom->data + atom->header_size);
-
-  // printf("%*s", atom->depth * 2, "");
-  if (_logger)
-    fprintf(_logger, "- %u %u %u %u %u %u %u\n", sidx->v, bswap32(sidx->id),
-            bswap32(sidx->timescale), bswap64(sidx->ept), bswap64(sidx->offset),
-            bswap16(sidx->reserved), bswap16(sidx->ref));
-  if (bswap16(sidx->ref) != 1) {
-    return -1;
-  }
-  if (_logger) {
-    fprintf(_logger, "%*s", atom->depth * 2, "");
-  }
-  if (_logger) {
-    fprintf(_logger, "- %u %u %u %u %u\n", sidx->type, sidx->size,
-            bswap32(sidx->duration), sidx->sap_type, sidx->sap_delta_time);
-  }
-
-  return 0;
-}
 
 static int atom_parse_mvhd(atom *atom) {
   atom_mvhd_v1 *v1;
@@ -179,132 +143,6 @@ static int atom_parse_mvhd(atom *atom) {
             atom_parse_fixed_point_32(bswap32(v1->speed)),
             atom_parse_fixed_point_16(bswap16(v1->volume)),
             bswap32(v1->next_track_id));
-  return 0;
-}
-
-static int atom_parse_meta(atom *atom) {
-  atom_meta *meta;
-
-  meta = (atom_meta *)(atom->data + atom->header_size);
-  // printf("%*s", atom->depth * 2, "");
-  if (_logger) {
-    fprintf(_logger, "- version %d\n", meta->version);
-  }
-  return 0;
-}
-
-typedef struct atom_opus {
-  uint8_t reserved1;
-  uint32_t data_reference_index;
-  uint8_t reserved2[9];
-  uint8_t channelcount;
-  uint16_t samplesize;
-  uint8_t predefined;
-  uint8_t reserved3;
-  uint8_t samplerate_dec[4];
-  uint8_t samplerate_dpnt[2];
-} atom_opus_t;
-
-static int atom_parse_opus(atom *atom) {
-  atom_opus_t *opus;
-  uint8_t reserved1;
-  uint32_t data_reference_index;
-  uint8_t channelcount;
-  uint8_t samplesize;
-  float samplerate;
-  uint32_t *sr_dec;
-  uint16_t *sr_dpnt;
-
-  opus = (atom_opus_t *)(atom->data + atom->header_size);
-  data_reference_index = bswap32(opus->data_reference_index);
-  channelcount = opus->channelcount;
-  samplesize = bswap16(opus->samplesize);
-  sr_dec = (uint32_t *)opus->samplerate_dec;
-  sr_dpnt = (uint16_t *)opus->samplerate_dpnt;
-  uint32_t x = bswap32(*sr_dec);
-  uint16_t y = bswap16(*sr_dpnt);
-  samplerate = (float)x + (float)y / 1000;
-  if (_logger) {
-    fprintf(_logger, "data_reference_index = %d\n", data_reference_index);
-  }
-  if (_logger) {
-    fprintf(_logger, "channelcount = %d\n", channelcount);
-  }
-  if (_logger) {
-    fprintf(_logger, "samplesize = %d\n", samplesize);
-  }
-  if (_logger) {
-    fprintf(_logger, "samplerate = %.4f\n", samplerate);
-  }
-  return 0;
-}
-
-typedef struct atom_dops {
-  uint8_t Version;
-  uint8_t OutputChannelCount;
-  uint16_t PreSkip;
-  uint32_t InputSampleRate;
-  int16_t OutputGain;
-  uint8_t ChannelMappingFamily;
-  uint8_t StreamCount;
-  uint8_t CoupleCount;
-  uint8_t ChannelMapping[255];
-} atom_dops_t;
-
-static int atom_parse_dops(atom *atom) {
-  atom_dops_t *dops;
-  uint8_t Version;
-  uint8_t OutputChannelCount;
-  uint16_t PreSkip;
-  uint32_t InputSampleRate;
-  int16_t OutputGain;
-  uint8_t ChannelMappingFamily;
-  uint8_t StreamCount = 0;
-  uint8_t CoupleCount = 0;
-
-  dops = (atom_dops_t *)(atom->data + atom->header_size);
-  Version = dops->Version;
-  OutputChannelCount = dops->OutputChannelCount;
-  PreSkip = bswap16(dops->PreSkip);
-  InputSampleRate = bswap32(dops->InputSampleRate);
-  OutputGain = bswap16(dops->OutputGain);
-  ChannelMappingFamily = dops->ChannelMappingFamily;
-  if (ChannelMappingFamily != 0) {
-    StreamCount = dops->StreamCount;
-    CoupleCount = dops->CoupleCount;
-  }
-  if (_logger) {
-    fprintf(_logger, "Version = %d\n", Version);
-  }
-  if (_logger) {
-    fprintf(_logger, "OutputChannelCount = %d\n", OutputChannelCount);
-  }
-  if (_logger) {
-    fprintf(_logger, "PreSkip = %d\n", PreSkip);
-  }
-  if (_logger) {
-    fprintf(_logger, "InputSampleRate = %d\n", InputSampleRate);
-  }
-  if (_logger) {
-    fprintf(_logger, "OutputGain = %d\n", OutputGain);
-  }
-  if (_logger) {
-    fprintf(_logger, "ChannelMappingFamily = %d\n", ChannelMappingFamily);
-  }
-  if (ChannelMappingFamily != 0) {
-    if (_logger) {
-      fprintf(_logger, "StreamCount = %d\n", StreamCount);
-    }
-    if (_logger) {
-      fprintf(_logger, "CoupleCount = %d\n", CoupleCount);
-    }
-    for (int i = 0; i < OutputChannelCount; i++) {
-      if (_logger) {
-        fprintf(_logger, "ChannelMapping[%d] = %d\n", i,
-                dops->ChannelMapping[i]);
-      }
-    }
-  }
   return 0;
 }
 
@@ -452,7 +290,7 @@ static int atom_parse_stco(atom *atom) {
   return 0;
 }
 
-int atom_dump(FILE *fp, long apos, uint32_t tmp) {
+int atom_dump(FILE *fp, uint64_t apos, uint32_t tmp) {
   atom atom;
   uint32_t cur_loc;
   int print_header = 0;
@@ -480,12 +318,6 @@ int atom_dump(FILE *fp, long apos, uint32_t tmp) {
   switch (atom.type) {
     case ATOM_TYPE_MVHD:
     case ATOM_TYPE_TKHD:
-    case ATOM_TYPE_OPUS:
-    case ATOM_TYPE_DOPS:
-    case ATOM_TYPE_AC_3:
-    case ATOM_TYPE_DAC3:
-    case ATOM_TYPE_EC_3:
-    case ATOM_TYPE_DEC3:
     case ATOM_TYPE_STTS:
     case ATOM_TYPE_STSC:
     case ATOM_TYPE_STSZ:
@@ -511,15 +343,6 @@ int atom_dump(FILE *fp, long apos, uint32_t tmp) {
     case ATOM_TYPE_MVHD:
       atom_parse_mvhd(&atom);
       break;
-    case ATOM_TYPE_META:
-      atom_parse_meta(&atom);
-      break;
-    case ATOM_TYPE_STYP:
-      atom_parse_styp(&atom);
-      break;
-    case ATOM_TYPE_SIDX:
-      atom_parse_sidx(&atom);
-      break;
     case ATOM_TYPE_MDAT:
       atom_parse_mdat(&atom);
       break;
@@ -528,12 +351,9 @@ int atom_dump(FILE *fp, long apos, uint32_t tmp) {
     case ATOM_TYPE_TKHD:
     case ATOM_TYPE_TRAF:
     case ATOM_TYPE_MDIA:
-    case ATOM_TYPE_UDTA:
     case ATOM_TYPE_MINF:
     case ATOM_TYPE_STBL:
     case ATOM_TYPE_MOOF:
-    case ATOM_TYPE_ILST:
-    case ATOM_TYPE_CALC:
       if (print_header == 0)
         if (_logger) {
           fprintf(_logger, "[%.*s %lu]\n", 4, (char *)&atom.type,
@@ -543,12 +363,6 @@ int atom_dump(FILE *fp, long apos, uint32_t tmp) {
         fprintf(_logger, "- labels\n");
       }
       hex_dump(NULL, atom.data, atom.data_end - atom.data);
-      break;
-    case ATOM_TYPE_OPUS:
-      atom_parse_opus(&atom);
-      break;
-    case ATOM_TYPE_DOPS:
-      atom_parse_dops(&atom);
       break;
     case ATOM_TYPE_STTS:
       atom_parse_stts(&atom);
@@ -563,7 +377,6 @@ int atom_dump(FILE *fp, long apos, uint32_t tmp) {
       atom_parse_stco(&atom);
       break;
     case ATOM_TYPE_TRUN:
-    case ATOM_TYPE_FREE:
     default:
       break;
   }

@@ -55,6 +55,7 @@ struct AACMSDecoder {
   uint32_t flags;
   int streams;
   int coupled_streams;
+  int delay;
 
   HANDLE_AACDECODER *handles;
   INT_PCM buffer[MAX_BUFFER_SIZE];
@@ -63,8 +64,8 @@ struct AACMSDecoder {
 typedef void (*aac_copy_channel_out_func)(void *dst, const void *src,
                                           int frame_size, int channes);
 
-void aac_copy_channel_out_plane(void *dst, const void *src, int frame_size,
-                                int channels) {
+void aac_copy_channel_out_short_plane(void *dst, const void *src,
+                                      int frame_size, int channels) {
   if (channels == 1) {
     memcpy(dst, src, sizeof(INT_PCM) * frame_size);
   } else if (channels == 2) {
@@ -99,25 +100,28 @@ static int aac_config_set_channels(uint8_t *conf, uint32_t size, int channels) {
   return IAMF_OK;
 }
 
-static int aac_ms_decode_list_native(
+static int aac_multistream_decode_native(
     AACMSDecoder *st, uint8_t *buffer[], uint32_t size[], void *pcm,
     int frame_size, aac_copy_channel_out_func copy_channel_out) {
   UINT valid;
   AAC_DECODER_ERROR err;
   INT_PCM *out = (INT_PCM *)pcm;
   int fs = 0;
-  CStreamInfo *info;
+  UINT flags = 0;
+  CStreamInfo *info = 0;
 
   for (int i = 0; i < st->streams; ++i) {
     ia_logt("stream %d", i);
     valid = size[i];
-    err = aacDecoder_Fill(st->handles[i], &buffer[i], &size[i], &valid);
-    if (err != AAC_DEC_OK) {
-      return IAMF_ERR_INVALID_PACKET;
+    flags = buffer[i] ? 0 : AACDEC_FLUSH;
+    if (!flags) {
+      err = aacDecoder_Fill(st->handles[i], &buffer[i], &size[i], &valid);
+      if (err != AAC_DEC_OK) {
+        return IAMF_ERR_INVALID_PACKET;
+      }
     }
-
-    err =
-        aacDecoder_DecodeFrame(st->handles[i], st->buffer, MAX_BUFFER_SIZE, 0);
+    err = aacDecoder_DecodeFrame(st->handles[i], st->buffer, MAX_BUFFER_SIZE,
+                                 flags);
     if (err == AAC_DEC_NOT_ENOUGH_BITS) {
       return IAMF_ERR_NEED_MORE_DATA;
     }
@@ -155,6 +159,8 @@ static int aac_ms_decode_list_native(
       out += fs;
     }
   }
+
+  if (info && st->delay < 0) st->delay = info->outputDelay;
 
   return fs;
 }
@@ -202,6 +208,7 @@ AACMSDecoder *aac_multistream_decoder_open(uint8_t *config, uint32_t size,
   st->flags = flags;
   st->streams = streams;
   st->coupled_streams = coupled_streams;
+  st->delay = -1;
   st->handles = handles;
   memcpy(conf[1], conf[0], clen);
   aac_config_set_channels(conf[1], clen, 1);
@@ -245,16 +252,13 @@ AACMSDecoder *aac_multistream_decoder_open(uint8_t *config, uint32_t size,
   return st;
 }
 
-int aac_multistream_decode_list(AACMSDecoder *st, uint8_t *buffer[],
-                                uint32_t size[], void *pcm,
-                                uint32_t frame_size) {
+int aac_multistream_decode(AACMSDecoder *st, uint8_t *buffer[], uint32_t size[],
+                           void *pcm, uint32_t frame_size) {
   if (st->flags & AUDIO_FRAME_PLANE)
-    return aac_ms_decode_list_native(st, buffer, size, pcm, frame_size,
-                                     aac_copy_channel_out_plane);
-  else {
-    ia_loge("flags is 0x%x, is not implmeneted.", st->flags);
-    return IAMF_ERR_UNIMPLEMENTED;
-  }
+    return aac_multistream_decode_native(st, buffer, size, pcm, frame_size,
+                                         aac_copy_channel_out_short_plane);
+  ia_loge("flags is 0x%x, is not implmeneted.", st->flags);
+  return IAMF_ERR_UNIMPLEMENTED;
 }
 
 void aac_multistream_decoder_close(AACMSDecoder *st) {
@@ -269,4 +273,8 @@ void aac_multistream_decoder_close(AACMSDecoder *st) {
     }
     free(st);
   }
+}
+
+int aac_multistream_decoder_get_delay(AACMSDecoder *st) {
+  return st->delay < 0 ? 0 : st->delay;
 }

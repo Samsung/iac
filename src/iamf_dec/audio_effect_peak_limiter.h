@@ -32,7 +32,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @date Created 03/03/2023
  **/
 
-
 #ifndef __AUDIO_PEAK_LIMITER_H_
 #define __AUDIO_PEAK_LIMITER_H_
 
@@ -47,6 +46,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "audio_defines.h"
 
 typedef struct AudioEffectPeakLimiter {
+  int init;
+  int padsize;
   float currentGain;
   float targetStartGain;
   float targetEndGain;

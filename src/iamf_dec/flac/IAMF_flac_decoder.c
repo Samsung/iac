@@ -32,7 +32,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @date Created 03/03/2023
  **/
 
-#include <math.h>
 #include <stdlib.h>
 
 #include "IAMF_codec.h"
@@ -48,16 +47,18 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define IA_TAG "IAMF_FLAC"
 
-static int iamf_flac_close(IACodecContext *ths);
+static int iamf_flac_close(IAMF_CodecContext *ths);
 
 typedef struct IAMF_FLAC_Context {
   FLACMSDecoder *dec;
   int *out;
+  float scale_i2f;
 } IAMF_FLAC_Context;
 
-static int iamf_flac_init(IACodecContext *ths) {
+static int iamf_flac_init(IAMF_CodecContext *ths) {
   IAMF_FLAC_Context *ctx = (IAMF_FLAC_Context *)ths->priv;
-  int ret = 0;
+  int ret = IAMF_OK;
+  int bits = 0;
 
   if (!ths->cspec || ths->clen <= 0) {
     return IAMF_ERR_BAD_ARG;
@@ -67,8 +68,18 @@ static int iamf_flac_init(IACodecContext *ths) {
                                            ths->coupled_streams,
                                            AUDIO_FRAME_PLANE, &ret);
   if (!ctx->dec) {
-    return IAMF_ERR_INVALID_STATE;
+    return ret;
   }
+
+  bits = flac_multistream_decoder_get_sample_bits(ctx->dec);
+  if (bits < 1) {
+    ia_loge("metadata : Invalid sample bits.");
+    iamf_flac_close(ths);
+    return IAMF_ERR_INTERNAL;
+  }
+
+  ctx->scale_i2f = 1 << (bits - 1);
+  ia_logd("the scale of i%d to float : %f", bits, ctx->scale_i2f);
 
   ctx->out = IAMF_MALLOC(
       int, MAX_FLAC_FRAME_SIZE *(ths->streams + ths->coupled_streams));
@@ -80,9 +91,9 @@ static int iamf_flac_init(IACodecContext *ths) {
   return IAMF_OK;
 }
 
-static int iamf_flac_decode_list(IACodecContext *ths, uint8_t *buffer[],
-                                 uint32_t size[], uint32_t count, void *pcm,
-                                 uint32_t frame_size) {
+static int iamf_flac_decode(IAMF_CodecContext *ths, uint8_t *buffer[],
+                            uint32_t size[], uint32_t count, void *pcm,
+                            uint32_t frame_size) {
   IAMF_FLAC_Context *ctx = (IAMF_FLAC_Context *)ths->priv;
   FLACMSDecoder *dec = (FLACMSDecoder *)ctx->dec;
   int ret = IAMF_OK;
@@ -91,22 +102,19 @@ static int iamf_flac_decode_list(IACodecContext *ths, uint8_t *buffer[],
     return IAMF_ERR_BAD_ARG;
   }
 
-  ret = flac_multistream_decode_list(dec, buffer, size, ctx->out, frame_size);
+  ret = flac_multistream_decode(dec, buffer, size, ctx->out, frame_size);
   if (ret > 0) {
     float *out = (float *)pcm;
     uint32_t samples = ret * (ths->streams + ths->coupled_streams);
-    int bits = flac_multistream_decoder_get_sample_bits(dec);
-    float den = powf(2.f, bits - 1);
-    ia_logt("samples %u, bits per sample %d, den %f", samples, bits, den);
     for (int i = 0; i < samples; ++i) {
-      out[i] = ctx->out[i] / den;
+      out[i] = ctx->out[i] / ctx->scale_i2f;
     }
   }
 
   return ret;
 }
 
-int iamf_flac_close(IACodecContext *ths) {
+int iamf_flac_close(IAMF_CodecContext *ths) {
   IAMF_FLAC_Context *ctx = (IAMF_FLAC_Context *)ths->priv;
   FLACMSDecoder *dec = (FLACMSDecoder *)ctx->dec;
 
@@ -121,10 +129,10 @@ int iamf_flac_close(IACodecContext *ths) {
   return IAMF_OK;
 }
 
-const IACodec iamf_flac_decoder = {
+const IAMF_Codec iamf_flac_decoder = {
     .cid = IAMF_CODEC_FLAC,
     .priv_size = sizeof(IAMF_FLAC_Context),
     .init = iamf_flac_init,
-    .decode_list = iamf_flac_decode_list,
+    .decode = iamf_flac_decode,
     .close = iamf_flac_close,
 };
