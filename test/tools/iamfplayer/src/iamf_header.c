@@ -112,7 +112,7 @@ static int read_chars(ROPacket *p, unsigned char *str, int nb_chars) {
 }
 
 static uint32_t read_tag_size(ROPacket *p) {
-  uint8_t ch;
+  uint8_t ch = 0;
   uint32_t size = 0;
 
   for (int cnt = 0; cnt < 4; cnt++) {
@@ -146,9 +146,11 @@ int iamf_header_read_description_OBUs(IAMFHeader *h, unsigned char *dst,
     _dfree(x, __FILE__, __LINE__); \
     x = 0;                         \
   }
-void iamf_header_free(IAMFHeader *h) {
+void iamf_header_free(IAMFHeader *h, int n) {
   if (h) {
-    FREE(h->description);
+    for (int i = 0; i < n; ++i) {
+      FREE(h[i].description);
+    }
   }
   FREE(h);
 }

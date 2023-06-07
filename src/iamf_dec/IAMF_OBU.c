@@ -33,10 +33,17 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  **/
 
 #include "IAMF_OBU.h"
+
 #include "IAMF_debug.h"
 #include "IAMF_defines.h"
 #include "IAMF_utils.h"
 #include "bitstream.h"
+#include "fixedp11_5.h"
+
+#define SR 0
+#if SR
+#include "vlogging_tool_sr.h"
+#endif
 
 #define IAMF_OBU_MIN_SIZE 2
 
@@ -65,6 +72,8 @@ static IAMF_Frame *iamf_frame_new(IAMF_OBU *obu);
 
 static IAMF_Sync *iamf_sync_new(IAMF_OBU *obu);
 static void iamf_sync_free(IAMF_Sync *obj);
+
+static void iamf_parameter_recon_gain_segment_free(ReconGainSegment *seg);
 
 uint32_t IAMF_OBU_split(const uint8_t *data, uint32_t size, IAMF_OBU *obu) {
   BitStream b;
@@ -96,7 +105,7 @@ uint32_t IAMF_OBU_split(const uint8_t *data, uint32_t size, IAMF_OBU *obu) {
       obu->extension, ret, bs_tell(&b) + ret, size);
 
   if (obu->redundant) {
-    ia_logw("%s OBU redundant.", IAMF_OBU_type_string(obu->type));
+    ia_logd("%s OBU redundant.", IAMF_OBU_type_string(obu->type));
   }
 
   obu->data = (uint8_t *)data;
@@ -119,6 +128,12 @@ uint32_t IAMF_OBU_split(const uint8_t *data, uint32_t size, IAMF_OBU *obu) {
 
   ia_logt("obu payload start at %u", bs_tell(&b));
   obu->payload = (uint8_t *)data + bs_tell(&b);
+
+#if SR
+  if (obu->type == IAMF_OBU_TEMPORAL_DELIMITER)
+    vlog_obu(IAMF_OBU_TEMPORAL_DELIMITER, obu, 0, 0);
+#endif
+
   return obu->size;
 }
 
@@ -159,13 +174,6 @@ const char *IAMF_OBU_type_string(IAMF_OBU_Type type) {
     return "Invalid OBU type.";
   }
   return obu_type_string[type];
-}
-
-uint32_t IAMF_frame_get_obu_type(uint32_t substream_id) {
-  uint32_t type = substream_id + IAMF_OBU_AUDIO_FRAME_ID0;
-  if (type >= IAMF_OBU_AUDIO_FRAME_ID0 && type <= IAMF_OBU_AUDIO_FRAME_ID21)
-    return type;
-  return IAMF_OBU_AUDIO_FRAME;
 }
 
 IAMF_Object *IAMF_object_new(IAMF_OBU *obu, IAMF_ObjectParameter *param) {
@@ -237,6 +245,15 @@ void IAMF_object_free(IAMF_Object *obj) {
   }
 }
 
+void IAMF_parameter_segment_free(ParameterSegment *seg) {
+  if (seg) {
+    if (seg->type == IAMF_PARAMETER_TYPE_RECON_GAIN) {
+      iamf_parameter_recon_gain_segment_free((ReconGainSegment *)seg);
+    } else
+      free(seg);
+  }
+}
+
 uint32_t iamf_obu_get_payload_size(IAMF_OBU *obu) {
   return obu->size - (uint32_t)(obu->payload - obu->data);
 }
@@ -264,6 +281,10 @@ IAMF_Version *iamf_version_new(IAMF_OBU *obu) {
       (char *)&ver->iamf_code, ver->version, ver->version_major,
       ver->version_minor, ver->profile_version, ver->profile_major,
       ver->profile_minor);
+
+#if SR
+  vlog_obu(IAMF_OBU_MAGIC_CODE, ver, 0, 0);
+#endif
 
   return ver;
 }
@@ -301,6 +322,9 @@ IAMF_CodecConf *iamf_codec_conf_new(IAMF_OBU *obu) {
       conf->codec_conf_id, (char *)&conf->codec_id, conf->decoder_conf_size,
       conf->nb_samples_per_frame, conf->roll_distance);
 
+#if SR
+  vlog_obu(IAMF_OBU_CODEC_CONFIG, conf, 0, 0);
+#endif
   return conf;
 
 codec_conf_fail:
@@ -386,7 +410,8 @@ IAMF_Element *iamf_element_new(IAMF_OBU *obu) {
   if (val) {
     elem->parameters = IAMF_MALLOCZ(ParameterBase *, val);
     if (!elem->parameters) {
-      ia_loge("fail to allocate memory for parameters of Audio Element Object.");
+      ia_loge(
+          "fail to allocate memory for parameters of Audio Element Object.");
       goto element_fail;
     }
   }
@@ -411,8 +436,8 @@ IAMF_Element *iamf_element_new(IAMF_OBU *obu) {
           "Object.");
       goto element_fail;
     }
-    if (iamf_parameter_base_init(p, type, &b) != IAMF_OK) goto element_fail;
     elem->parameters[i] = p;
+    if (iamf_parameter_base_init(p, type, &b) != IAMF_OK) goto element_fail;
   }
 
   if (elem->element_type == AUDIO_ELEMENT_TYPE_CHANNEL_BASED) {
@@ -448,8 +473,8 @@ IAMF_Element *iamf_element_new(IAMF_OBU *obu) {
         layer_conf_s[i].nb_coupled_substreams = bs_getA8b(&b);
         ia_logd(
             "\tlayer[%d] info: layout %d, output gain %d, recon gain %d, "
-            "sub-streams count %d, coupled sub-streams %d", i,
-            layer_conf_s[i].loudspeaker_layout,
+            "sub-streams count %d, coupled sub-streams %d",
+            i, layer_conf_s[i].loudspeaker_layout,
             layer_conf_s[i].output_gain_flag, layer_conf_s[i].recon_gain_flag,
             layer_conf_s[i].nb_substreams,
             layer_conf_s[i].nb_coupled_substreams);
@@ -484,7 +509,7 @@ IAMF_Element *iamf_element_new(IAMF_OBU *obu) {
     if (conf->ambisonics_mode == AMBISONICS_MODE_MONO) {
       conf->output_channel_count = bs_getA8b(&b);
       conf->substream_count = bs_getA8b(&b);
-      conf->mapping_size = conf->substream_count;
+      conf->mapping_size = conf->output_channel_count;
       conf->mapping = IAMF_MALLOCZ(uint8_t, conf->mapping_size);
       if (!conf->mapping) {
         ia_loge(
@@ -522,6 +547,9 @@ IAMF_Element *iamf_element_new(IAMF_OBU *obu) {
     }
   }
 
+#if SR
+  vlog_obu(IAMF_OBU_AUDIO_ELEMENT, elem, 0, 0);
+#endif
   return elem;
 
 element_fail:
@@ -645,12 +673,12 @@ IAMF_MixPresentation *iamf_mix_presentation_new(IAMF_OBU *obu) {
 
         // element_mix_config
         if (iamf_parameter_base_init(&conf_s[i].conf_m.gain.base,
-                                     IAMF_PARAMETER_TYPE_MIX_GAIN, &b) != IAMF_OK)
+                                     IAMF_PARAMETER_TYPE_MIX_GAIN,
+                                     &b) != IAMF_OK)
           goto mix_presentation_fail;
         conf_s[i].conf_m.gain.mix_gain = bs_getA16b(&b);
-        ia_logd(
-            "element mix info : element mix gain 0x%x",
-            conf_s[i].conf_m.gain.mix_gain & U16_MASK);
+        ia_logd("element mix info : element mix gain 0x%x",
+                conf_s[i].conf_m.gain.mix_gain & U16_MASK);
       }
     }
 
@@ -755,6 +783,9 @@ IAMF_MixPresentation *iamf_mix_presentation_new(IAMF_OBU *obu) {
     }
   }
 
+#if SR
+  vlog_obu(IAMF_OBU_MIX_PRESENTATION, mixp, 0, 0);
+#endif
   return mixp;
 
 mix_presentation_fail:
@@ -782,8 +813,8 @@ void iamf_mix_presentation_free(IAMF_MixPresentation *obj) {
 
       if (sub->layouts) {
         for (int i = 0; i < sub->num_layouts; ++i) {
-          if (sub->layouts[i] && sub->layouts[i]->type ==
-                                     IAMF_LAYOUT_TYPE_LOUDSPEAKERS_SP_LABEL) {
+          if (sub->layouts[i] &&
+              sub->layouts[i]->type == IAMF_LAYOUT_TYPE_LOUDSPEAKERS_SP_LABEL) {
             SP_Label_Layout *sl = SP_LABEL_LAYOUT(sub->layouts[i]);
             free(sl->sp_labels);
           }
@@ -804,9 +835,7 @@ void iamf_mix_presentation_free(IAMF_MixPresentation *obj) {
 static uint64_t iamf_parameter_get_segment_interval(uint64_t duration,
                                                     uint64_t const_interval,
                                                     uint64_t interval) {
-  if (interval) {
-    return interval;
-  }
+  if (interval) return interval;
   return const_interval < duration ? const_interval : duration;
 }
 
@@ -824,11 +853,8 @@ IAMF_Parameter *iamf_parameter_new(IAMF_OBU *obu,
     goto parameter_fail;
   }
 
-  ia_logd(
-      "parameter obu arguments: parameter type %lu, layer count %d, recon gain "
-      "flags 0x%x",
-      objParam->param_base->type, objParam->nb_layers,
-      objParam->recon_gain_flags);
+  ia_logd("parameter obu arguments: parameter type %lu",
+          objParam->param_base->type);
 
   para = IAMF_MALLOCZ(IAMF_Parameter, 1);
   if (!para) {
@@ -885,38 +911,57 @@ IAMF_Parameter *iamf_parameter_new(IAMF_OBU *obu,
     switch (para->type) {
       case IAMF_PARAMETER_TYPE_MIX_GAIN: {
         MixGainSegment *mg = IAMF_MALLOCZ(MixGainSegment, 1);
+        float gain_db, gain1_db, gain2_db;
         if (!mg) {
           ia_loge("fail to allocate mix gain segment for Parameter Object.");
           goto parameter_fail;
         }
 
+        mg->seg.type = IAMF_PARAMETER_TYPE_MIX_GAIN;
         seg = (ParameterSegment *)mg;
         para->segments[i] = seg;
         seg->segment_interval = segment_interval;
-        mg->mix_gain.animated_type = bs_getAleb128(&b);
+        mg->mix_gain_f.animated_type = mg->mix_gain.animated_type =
+            bs_getAleb128(&b);
         mg->mix_gain.start = bs_getA16b(&b);
-        if (mg->mix_gain.animated_type == PARAMETER_ANIMATED_TYPE_BEZIER) {
-          mg->mix_gain.end = bs_getA16b(&b);
-          mg->mix_gain.control = bs_getA16b(&b);
-          mg->mix_gain.control_relative_time = bs_getA8b(&b);
+        gain_db = q_to_float(mg->mix_gain.start, 8);
+        mg->mix_gain_f.start = db2lin(gain_db);
+        if (mg->mix_gain.animated_type == PARAMETER_ANIMATED_TYPE_STEP) {
           ia_logd(
-              "\t mix gain seg %d: interval %lu, animated_type %lu, start %d, "
-              "end %d, control %d, control relative time 0x%x",
-              i, seg->segment_interval, mg->mix_gain.animated_type,
-              mg->mix_gain.start, mg->mix_gain.end, mg->mix_gain.control,
-              mg->mix_gain.control_relative_time & U8_MASK);
-        } else if (mg->mix_gain.animated_type == PARAMETER_ANIMATED_TYPE_LINEAR) {
-          mg->mix_gain.end = bs_getA16b(&b);
-          ia_logd(
-              "\t mix gain seg %d: interval %lu, animated_type %lu, start %d, "
-              "end %d",
-              i, seg->segment_interval, mg->mix_gain.animated_type,
-              mg->mix_gain.start, mg->mix_gain.end);
+              "\t mix gain seg %d: interval %lu, step, start %f(%fdb, "
+              "<0x%02x>)",
+              i, seg->segment_interval, mg->mix_gain_f.start, gain_db,
+              mg->mix_gain.start & U16_MASK);
         } else {
-          ia_logd(
-              "\t mix gain seg %d: interval %lu, animated_type %lu, start %d",
-              i, seg->segment_interval, mg->mix_gain.animated_type,
-              mg->mix_gain.start);
+          mg->mix_gain.end = bs_getA16b(&b);
+          gain2_db = q_to_float(mg->mix_gain.end, 8);
+          mg->mix_gain_f.end = db2lin(gain2_db);
+          if (mg->mix_gain.animated_type == PARAMETER_ANIMATED_TYPE_LINEAR) {
+            ia_logd(
+                "\t mix gain seg %d: interval %lu, linear, start %f(%fdb, "
+                "<0x%02x>), end %f(%fdb, <0x%02x>)",
+                i, seg->segment_interval, mg->mix_gain_f.start, gain_db,
+                mg->mix_gain.start & U16_MASK, mg->mix_gain_f.end, gain2_db,
+                mg->mix_gain.end & U16_MASK);
+          } else if (mg->mix_gain.animated_type ==
+                     PARAMETER_ANIMATED_TYPE_BEZIER) {
+            mg->mix_gain.control = bs_getA16b(&b);
+            gain1_db = q_to_float(mg->mix_gain.control, 8);
+            mg->mix_gain_f.control = db2lin(gain1_db);
+            mg->mix_gain.control_relative_time = bs_getA8b(&b);
+            mg->mix_gain_f.control_relative_time =
+                qf_to_float(mg->mix_gain.control_relative_time, 8);
+            ia_logd(
+                "\t mix gain seg %d: interval %lu, bezier, start %f (%fdb "
+                "<0x%02x>), end %f (%fdb <0x%02x>), control %f (%fdb "
+                "<0x%02x>), control relative time %f (0x%x)",
+                i, seg->segment_interval, mg->mix_gain_f.start, gain_db,
+                mg->mix_gain.start & U16_MASK, mg->mix_gain_f.end, gain2_db,
+                mg->mix_gain.end & U16_MASK, mg->mix_gain_f.control, gain1_db,
+                mg->mix_gain.control & U16_MASK,
+                mg->mix_gain_f.control_relative_time,
+                mg->mix_gain.control_relative_time & U8_MASK);
+          }
         }
       } break;
       case IAMF_PARAMETER_TYPE_DEMIXING: {
@@ -925,6 +970,7 @@ IAMF_Parameter *iamf_parameter_new(IAMF_OBU *obu,
           ia_loge("fail to allocate demixing segment for Parameter Object.");
           goto parameter_fail;
         }
+        mode->seg.type = IAMF_PARAMETER_TYPE_DEMIXING;
         seg = (ParameterSegment *)mode;
         para->segments[i] = seg;
         seg->segment_interval = segment_interval;
@@ -933,13 +979,10 @@ IAMF_Parameter *iamf_parameter_new(IAMF_OBU *obu,
                 seg->segment_interval, mode->demixing_mode);
       } break;
       case IAMF_PARAMETER_TYPE_RECON_GAIN: {
-        int count = 0;
+        ia_logd("recon gain, layer count %d", objParam->nb_layers);
 
         if (objParam->nb_layers > 0) {
-          count = bit1_count(objParam->recon_gain_flags);
-        }
-
-        if (count > 0) {
+          int count = objParam->nb_layers;
           ReconGainList *list;
           ReconGain *recon;
           ReconGainSegment *recon_gain;
@@ -951,11 +994,13 @@ IAMF_Parameter *iamf_parameter_new(IAMF_OBU *obu,
                 "fail to allocate Recon gain segment for Parameter Object.");
             goto parameter_fail;
           }
+
+          recon_gain->seg.type = IAMF_PARAMETER_TYPE_RECON_GAIN;
+          list = &recon_gain->list;
+
           seg = (ParameterSegment *)recon_gain;
           para->segments[i] = seg;
           seg->segment_interval = segment_interval;
-
-          list = &recon_gain->list;
           ia_logd("there are %d recon gain info, list is %p", count, list);
           list->count = count;
           recon = IAMF_MALLOCZ(ReconGain, list->count);
@@ -967,18 +1012,23 @@ IAMF_Parameter *iamf_parameter_new(IAMF_OBU *obu,
           for (int k = 0; k < list->count; ++k) {
             recon[k].flags = bs_getAleb128(&b);
             channels = bit1_count(recon[k].flags);
-            recon[k].channels = channels;
-            recon[k].recon_gain = IAMF_MALLOCZ(uint8_t, channels);
-            if (!recon) {
-              ia_loge(
-                  "fail to allocate recon gain value for Parameter Object.");
-              goto parameter_fail;
-            }
-            bs_read(&b, recon[k].recon_gain, channels);
-            ia_logd("recon gain info %d : flags 0x%x, channels %d", k,
-                    recon[k].flags, channels);
-            for (int t = 0; t < channels; ++t) {
-              ia_logd("\tch %d gain 0x%x", t, recon[k].recon_gain[t] & U8_MASK);
+            if (channels > 0) {
+              recon[k].recon_gain = IAMF_MALLOCZ(uint8_t, channels);
+              recon[k].recon_gain_f = IAMF_MALLOCZ(float, channels);
+              if (!recon[k].recon_gain || !recon[k].recon_gain_f) {
+                ia_loge(
+                    "fail to allocate recon gain value for Parameter Object.");
+                goto parameter_fail;
+              }
+              bs_read(&b, recon[k].recon_gain, channels);
+              ia_logd("recon gain info %d : flags 0x%x, channels %d", k,
+                      recon[k].flags, channels);
+              for (int t = 0; t < channels; ++t) {
+                recon[k].recon_gain_f[t] =
+                    qf_to_float(recon[k].recon_gain[t], 8);
+                ia_logd("\tch %d gain %f(0x%x)", t, recon[k].recon_gain_f[t],
+                        recon[k].recon_gain[t] & U8_MASK);
+              }
             }
           }
         }
@@ -988,6 +1038,10 @@ IAMF_Parameter *iamf_parameter_new(IAMF_OBU *obu,
         break;
     }
   }
+
+#if SR
+  vlog_obu(IAMF_OBU_PARAMETER_BLOCK, para, 0, 0);
+#endif
 
   return para;
 
@@ -1001,28 +1055,8 @@ parameter_fail:
 
 void iamf_parameter_free(IAMF_Parameter *obj) {
   if (obj->segments) {
-    ParameterSegment *seg;
     for (int i = 0; i < obj->nb_segments; ++i) {
-      seg = obj->segments[i];
-      switch (obj->type) {
-        case IAMF_PARAMETER_TYPE_MIX_GAIN:
-        case IAMF_PARAMETER_TYPE_DEMIXING:
-          IAMF_FREE(seg);
-          break;
-        case IAMF_PARAMETER_TYPE_RECON_GAIN: {
-          ReconGainSegment *recon_gain = (ReconGainSegment *)seg;
-          if (recon_gain) {
-            if (recon_gain->list.recon) {
-              for (int k = 0; k < recon_gain->list.count; ++k)
-                IAMF_FREE(recon_gain->list.recon[k].recon_gain);
-              free(recon_gain->list.recon);
-            }
-            free(seg);
-          }
-        } break;
-        default:
-          break;
-      }
+      IAMF_parameter_segment_free(obj->segments[i]);
     }
     free(obj->segments);
   }
@@ -1052,6 +1086,9 @@ IAMF_Frame *iamf_frame_new(IAMF_OBU *obu) {
   pkt->data = obu->payload + bs_tell(&b);
   pkt->size = iamf_obu_get_payload_size(obu) - bs_tell(&b);
 
+#if SR
+  vlog_obu(IAMF_OBU_AUDIO_FRAME, pkt, obu->trim_start, obu->trim_end);
+#endif
   return pkt;
 }
 
@@ -1083,14 +1120,18 @@ IAMF_Sync *iamf_sync_new(IAMF_OBU *obu) {
       sync->objs[i].obu_id = bs_getAleb128(&b);
       sync->objs[i].obu_data_type = bs_get32b(&b, 1);
       sync->objs[i].reinitialize_decoder = bs_get32b(&b, 1);
-      sync->objs[i].relative_offset = bs_getAsleb128i32(&b);
+      sync->objs[i].relative_offset = bs_getAsleb128(&b);
       ia_logd(
           "\t > %d : obu id %lu, data type %u, reset decoder %u, relative "
-          "offset %d",
+          "offset %ld",
           i, sync->objs[i].obu_id, sync->objs[i].obu_data_type,
           sync->objs[i].reinitialize_decoder, sync->objs[i].relative_offset);
     }
   }
+
+#if SR
+  vlog_obu(IAMF_OBU_SYNC, sync, 0, 0);
+#endif
   return sync;
 
 sync_fail:
@@ -1104,4 +1145,15 @@ sync_fail:
 void iamf_sync_free(IAMF_Sync *obj) {
   IAMF_FREE(obj->objs);
   free(obj);
+}
+
+void iamf_parameter_recon_gain_segment_free(ReconGainSegment *seg) {
+  if (seg->list.recon) {
+    for (int i = 0; i < seg->list.count; ++i) {
+      IAMF_FREE(seg->list.recon[i].recon_gain);
+      IAMF_FREE(seg->list.recon[i].recon_gain_f);
+    }
+    free(seg->list.recon);
+  }
+  free(seg);
 }

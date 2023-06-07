@@ -36,12 +36,16 @@ This tool aims to encode PCM data to IA bitstream and encapsulate to Mp4/Fmp4
 
 ```sh
 -profile : <0/1(simpe/base)>
--codec   : <codec name/frame size(opus,aac,flac,pcm/1024)>
--mode    : <audio element type(0:channle-based,1:scene-based)/input channel layout/channel layout combinations>
--gain    : <default mix gain(dB) (Not Necessary)>
--target  : <target layout for measuring loudness(sound system) (Not Necessary)>
--i       : <input wav file>
--o       : <0/1/2(bitstream/mp4/fmp4)> <output file>
+-codec     : <codec name/frame size(opus,aac,flac,pcm/1024)>
+-mode      : <audio element type(0:channle-based,1:scene-based(Mono),2:scene-based(Projection))/input channel layout/channel layout combinations>
+-i         : <input wav file>
+-o         : <0/1/2(bitstream/mp4/fmp4)> <output file>
+Example:
+iamfpackager -profile 0 -codec opus -mode 0/7.1.4/2.0.0+3.1.2+5.1.2 -i input.wav -o 0 simple_profile.iamf
+or
+iamfpackager -profile 1 -codec opus -mode 0/7.1.4/3.1.2+5.1.2 -i input1.wav -mode 1 -i input2.wav -o 0 base_profile.iamf
+
+Before exacuting, please modify mix_config.json to set mix presentation.
 ```
 
 1. encode scalable channel layout input format for simple profile.
@@ -65,7 +69,7 @@ Example:
 4. encode for base profile.
 ```sh
 Example:
-./iamfpackager -profile 1 -codec opus -mode 0/7.1.4/2.0.0+3.1.2+5.1.2 -gain 0.0 -i input1.wav -mode 1 -gain 0.0 -i input2.wav -target s0+s2+s9 -o 0 base_profile.iamf
+./iamfpackager -profile 1 -codec opus -mode 0/7.1.4/3.1.2+5.1.2 -i input1.wav -mode 1 -i input2.wav -o 0 base_profile.iamf
 ```
 
 ### Tools(iamfplayer)
@@ -76,6 +80,8 @@ options:
 -i[0-1]    0 : IAMF bitstream input.(default)
            1 : mp4 input.
 -o2        2 : pcm output.
+-r [rate]    : audio signal sampling rate, 48000 is the default.
+-ts pos      : seek to a given position in seconds, which is valid when mp4 file is used as input.
 -s[0~11,b]   : output layout, the sound system A~J and extensions (Upper + Middle + Bottom).
            0 : Sound system A (0+2+0)
            1 : Sound system B (0+5+0)
@@ -91,6 +97,9 @@ options:
           11 : Sound system extension 312 (2+3+0)
            b : Binaural.
 -p [dB]      : Peak threshold in dB.
+-l [LKFS]    : Normalization loudness in LKFS.
+-d [bit]     : Bit depth of pcm output.
+-m           : Generate a metadata file with the suffix .met.
 
 Example:  ./iamfplayer -o2 -s9 simple_profile.iamf
           ./iamfplayer -i1 -o2 -s9 simple_profile.mp4

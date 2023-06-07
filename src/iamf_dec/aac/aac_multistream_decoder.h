@@ -32,7 +32,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @date Created 03/03/2023
  **/
 
-
 #ifndef _AAC_MULTISTREAM2_DECODER_H_
 #define _AAC_MULTISTREAM2_DECODER_H_
 
@@ -44,9 +43,11 @@ AACMSDecoder *aac_multistream_decoder_open(uint8_t *config, uint32_t size,
                                            int streams, int coupled_streams,
                                            uint32_t flags, int *error);
 
-int aac_multistream_decode_list(AACMSDecoder *st, uint8_t *buffer[],
-                                uint32_t len[], void *pcm, uint32_t frame_size);
+int aac_multistream_decode(AACMSDecoder *st, uint8_t *buffer[], uint32_t len[],
+                           void *pcm, uint32_t frame_size);
 
 void aac_multistream_decoder_close(AACMSDecoder *st);
+
+int aac_multistream_decoder_get_delay(AACMSDecoder *st);
 
 #endif /* _AAC_MULTISTREAM2_DECODER_H_ */

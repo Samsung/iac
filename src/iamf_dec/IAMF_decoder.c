@@ -51,10 +51,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "speex_resampler.h"
 
 #define RSHIFT(a) (1 << (a))
-#define INAVLID_INDEX -1
+#define INVALID_INDEX -1
 #define INVALID_ID (uint64_t)(-1)
+#define INVALID_TIMESTAMP 0xFFFFFFFF
 #define OUTPUT_SAMPLERATE 48000
 #define SPEEX_RESAMPLER_QUALITY 4
+
+#define IAMF_DECODER_CONFIG_MIX_PRESENTATION 0x1
 
 #ifdef IA_TAG
 #undef IA_TAG
@@ -79,32 +82,75 @@ static void swap(void **p1, void **p2) {
   *p1 = p;
 }
 
-/* ----------------------------- Internal methods ------------------ */
-
-static int16_t FLOAT2INT16(float x) {
-#define MIN32(a, b) ((a) < (b) ? (a) : (b)) /**< Minimum 32-bit value.   */
-#define MAX32(a, b) ((a) > (b) ? (a) : (b)) /**< Maximum 32-bit value.   */
-#define float2int(x) lrintf(x)
-
-  x = x * 32768.f;
-  x = MAX32(x, -32768);
-  x = MIN32(x, 32767);
-  return (int16_t)float2int(x);
+static int64_t time_transform(int64_t t1, int s1, int s2) {
+  double r = t1 * s2;
+  return r / s1 + 0.5f;
 }
 
-static void iamf_decoder_plane2stride_out_short(void *dst, const float *src,
-                                                int frame_size, int channels) {
-  int16_t *short_dst = (int16_t *)dst;
+/* ----------------------------- Internal methods ------------------ */
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+static int16_t FLOAT2INT16(float x) {
+  x = x * 32768.f;
+  x = MAX(x, -32768.f);
+  x = MIN(x, 32767.f);
+  return (int16_t)lrintf(x);
+}
 
-  ia_logd("channels %d", channels);
-  for (int c = 0; c < channels; ++c) {
-    if (src) {
+static int32_t FLOAT2INT24(float x) {
+  x = x * 8388608.f;
+  x = MAX(x, -8388608.f);
+  x = MIN(x, 8388607.f);
+  return (int32_t)lrintf(x);
+}
+
+static int32_t FLOAT2INT32(float x) {
+  x = x * 2147483648.f;
+  x = MAX(x, -2147483648.f);
+  x = MIN(x, 2147483647.f);
+  return (int32_t)lrintf(x);
+}
+
+static void iamf_decoder_plane2stride_out(void *dst, const float *src,
+                                          int frame_size, int channels,
+                                          uint32_t bit_depth) {
+  if (bit_depth == 16) {
+    int16_t *int16_dst = (int16_t *)dst;
+    for (int c = 0; c < channels; ++c) {
       for (int i = 0; i < frame_size; i++) {
-        short_dst[i * channels + c] = FLOAT2INT16(src[frame_size * c + i]);
+        if (src) {
+          int16_dst[i * channels + c] = FLOAT2INT16(src[frame_size * c + i]);
+        } else {
+          int16_dst[i * channels + c] = 0;
+        }
       }
-    } else {
+    }
+  } else if (bit_depth == 24) {
+    uint8_t *int24_dst = (uint8_t *)dst;
+    for (int c = 0; c < channels; ++c) {
       for (int i = 0; i < frame_size; i++) {
-        short_dst[i * channels + c] = 0;
+        if (src) {
+          int32_t tmp = FLOAT2INT24(src[frame_size * c + i]);
+          int24_dst[(i * channels + c) * 3] = tmp & 0xff;
+          int24_dst[(i * channels + c) * 3 + 1] = (tmp >> 8) & 0xff;
+          int24_dst[(i * channels + c) * 3 + 2] =
+              ((tmp >> 16) & 0x7f) | ((tmp >> 24) & 0x80);
+        } else {
+          int24_dst[(i * channels + c) * 3] = 0;
+          int24_dst[(i * channels + c) * 3 + 1] = 0;
+          int24_dst[(i * channels + c) * 3 + 2] = 0;
+        }
+      }
+    }
+  } else if (bit_depth == 32) {
+    int32_t *int32_dst = (int32_t *)dst;
+    for (int c = 0; c < channels; ++c) {
+      for (int i = 0; i < frame_size; i++) {
+        if (src) {
+          int32_dst[i * channels + c] = FLOAT2INT32(src[frame_size * c + i]);
+        } else {
+          int32_dst[i * channels + c] = 0;
+        }
       }
     }
   }
@@ -197,17 +243,12 @@ static int iamf_layer_layout_lfe1(int layer_layout) {
 }
 
 static IAMF_SoundSystem iamf_layer_layout_convert_sound_system(int layout) {
-  static IAMF_SoundSystem layout2ss[] = {-1,
-                                         SOUND_SYSTEM_A,
-                                         SOUND_SYSTEM_B,
-                                         SOUND_SYSTEM_C,
-                                         SOUND_SYSTEM_D,
-                                         SOUND_SYSTEM_I,
-                                         SOUND_SYSTEM_EXT_712,
-                                         SOUND_SYSTEM_J,
-                                         SOUND_SYSTEM_EXT_712};
+  static IAMF_SoundSystem layout2ss[] = {
+      SOUND_SYSTEM_INVALID, SOUND_SYSTEM_A, SOUND_SYSTEM_B,
+      SOUND_SYSTEM_C,       SOUND_SYSTEM_D, SOUND_SYSTEM_I,
+      SOUND_SYSTEM_EXT_712, SOUND_SYSTEM_J, SOUND_SYSTEM_EXT_312};
   if (ia_channel_layout_type_check(layout)) return layout2ss[layout];
-  return -1;
+  return SOUND_SYSTEM_INVALID;
 }
 
 static int iamf_layout_lfe1(IAMF_Layout *layout) {
@@ -517,7 +558,7 @@ static IAChannel iamf_output_gain_channel_map(IAChannelLayoutType type,
   return ch;
 }
 
-static IACodecID iamf_codec_4cc_get_codecID(uint32_t id) {
+static IAMF_CodecID iamf_codec_4cc_get_codecID(uint32_t id) {
 #define TAG(a, b, c, d) ((a) | (b) << 8 | (c) << 16 | (d) << 24)
 
   switch (id) {
@@ -538,14 +579,6 @@ static IACodecID iamf_codec_4cc_get_codecID(uint32_t id) {
     default:
       return IAMF_CODEC_UNKNOWN;
   }
-}
-
-static int iamf_codec_get_delay(IACodecID cid) {
-  if (cid == IAMF_CODEC_AAC)
-    return AAC_DELAY;
-  else if (cid == IAMF_CODEC_OPUS)
-    return OPUS_DELAY;
-  return 0;
 }
 
 /* ----------------------------- Internal Interfaces--------------- */
@@ -574,6 +607,51 @@ static IAMF_CodecConf *iamf_database_get_codec_conf(IAMF_DataBase *db,
                                                     uint64_t cid);
 static ElementItem *iamf_database_element_get_item(IAMF_DataBase *db,
                                                    uint64_t eid);
+
+static void mix_gain_unit_free(MixGainUnit *u) {
+  if (u) {
+    IAMF_FREE(u->gains);
+    free(u);
+  }
+}
+
+static int mix_gain_bezier_linear(float s, float e, int d, int o, uint32_t l,
+                                  float *g) {
+  //  float n = d;
+  //  float a, go;
+  int oe = o + l;
+
+  for (int i = o, k = 0; i < oe; ++i, ++k) {
+    //    a = i / n;
+    //    go = (1.0f - a) * s + a * e;
+    g[k] = s + (e - s) * i / d;
+  }
+
+  return IAMF_OK;
+}
+
+static int mix_gain_bezier_quad(float s, float e, int d, float c, int ct, int o,
+                                uint32_t l, float *g) {
+  int oe = o + l;
+  int64_t alpha, beta, beta_s;
+  float a;
+  //  float go, ao;
+  //  int64_t gamma;
+
+  alpha = d - 2 * ct;
+  beta = 2 * ct;
+  beta_s = 4 * pow(ct, 2);
+
+  for (int i = o, k = 0; i < oe; ++i, ++k) {
+    //    gamma = - i;
+    //    ao = (sqrt(pow(beta, 2) - 4 * alpha * gamma) - beta) / (2 * alpha);
+    //    go = pow(1 - a, 2) * s + 2 * (1 - a) * a * c + pow(a, 2) * e;
+    a = (sqrt(beta_s + 4 * alpha * i) - beta) / (2 * alpha);
+    g[k] = (s + e - 2 * c) * pow(a, 2) + 2 * a * (c - s) + s;
+  }
+
+  return IAMF_OK;
+}
 
 static void iamf_object_free(void *obj) { IAMF_object_free(IAMF_OBJ(obj)); }
 
@@ -616,12 +694,8 @@ static int iamf_object_set_add(ObjectSet *s, void *item) {
   return IAMF_OK;
 }
 
-static int iamf_object_codec_conf_get_sampling_rate(IAMF_CodecConf *c) {
-  uint32_t cid;
-  if (!c || !c->decoder_conf || !c->decoder_conf_size ||
-      iamf_codec_4cc_get_codecID(c->codec_id) == IAMF_CODEC_UNKNOWN)
-    return IAMF_ERR_BAD_ARG;
-  cid = iamf_codec_4cc_get_codecID(c->codec_id);
+static int iamf_codec_conf_get_sampling_rate(IAMF_CodecConf *c) {
+  uint32_t cid = iamf_codec_4cc_get_codecID(c->codec_id);
   if (cid == IAMF_CODEC_PCM) {
     if (c->decoder_conf_size < 6) return IAMF_ERR_BAD_ARG;
     return get_int32be(c->decoder_conf, 2);
@@ -663,76 +737,55 @@ static int iamf_object_codec_conf_get_sampling_rate(IAMF_CodecConf *c) {
       if (last) break;
     }
   }
-  return -1;
+  return IAMF_ERR_BAD_ARG;
 }
 
-static uint32_t iamf_object_element_get_recon_gain_flags(IAMF_Element *e) {
-  uint32_t ret = 0;
+static int iamf_codec_conf_get_frame_offset(IAMF_CodecConf *c) {
+  if (iamf_codec_4cc_get_codecID(c->codec_id) == IAMF_CODEC_OPUS &&
+      c->decoder_conf && c->decoder_conf_size >= 4)
+    return get_int16be(c->decoder_conf, 2);
+  return 0;
+}
 
-  if (e->element_type == AUDIO_ELEMENT_TYPE_CHANNEL_BASED && e->channels_conf) {
-    for (int i = 0; i < e->channels_conf->nb_layers; ++i) {
-      if (e->channels_conf->layer_conf_s &&
-          e->channels_conf->layer_conf_s->recon_gain_flag)
-        ret |= RSHIFT(i);
+static void iamf_parameter_item_clear(ParameterItem *pi) {
+  if (pi) {
+    if (pi->value.params) {
+      queue_t *q = pi->value.params;
+      while (queue_length(q) > 0) {
+        ParameterSegment *seg = queue_pop(q);
+        IAMF_parameter_segment_free(seg);
+      }
+      queue_free(pi->value.params);
     }
   }
-  return ret;
 }
 
-static ParameterSegment *iamf_object_parameter_get_segment(IAMF_Parameter *obj,
-                                                           uint64_t timestamp) {
-  ParameterSegment *seg;
-  uint64_t ts = 0;
-
-  if (!obj || timestamp >= obj->duration) return 0;
-
-  seg = obj->segments[0];
-  for (int i = 1; i < obj->nb_segments; ++i) {
-    ts += seg->segment_interval;
-    if (ts > timestamp) break;
-    seg = obj->segments[i];
-  }
-  return seg;
+static void iamf_parameter_item_free(void *e) {
+  ParameterItem *pi = (ParameterItem *)e;
+  iamf_parameter_item_clear(pi);
+  IAMF_FREE(pi);
 }
 
-static int iamf_object_parameter_mix_gain_linear(int t, float s, float e,
-                                                 float *g) {
-  int n = t - 1;
-  float a;
-
-  for (int i = 0; i < t; ++i) {
-    a = i / n;
-    g[i] = (1.0f - a) * s + a * e;
+static void iamf_database_viewer_reset(Viewer *v) {
+  if (v->items) {
+    free_tp ff = v->freeF;
+    if (!v->freeF) ff = free;
+    for (int i = 0; i < v->count; ++i) ff(v->items[i]);
+    free(v->items);
   }
-
-  return IAMF_OK;
-}
-
-static int iamf_object_parameter_mix_gain_quad(int t, int ct, float s, float c,
-                                               float e, float *g) {
-  int n = t - 1;
-  float a, alpha, beta, gamma;
-
-  alpha = n - 2 * ct;
-  beta = 2 * ct;
-
-  for (int i = 0; i < t; ++i) {
-    gamma = 0 - i;
-    a = (sqrt(pow(beta, 2) - 4 * alpha * gamma) - beta) / (2 * alpha);
-    g[i] = pow(1 - a, 2) * s + 2 * (1 - a) * a * c + pow(a, 2) * e;
-  }
-
-  return IAMF_OK;
+  v->count = 0;
+  v->items = 0;
 }
 
 static uint64_t iamf_database_object_get_timestamp(IAMF_DataBase *db,
                                                    uint64_t id) {
-  SyncItem *si = db->sViewer.items;
+  SyncItem *si;
   uint64_t ts = 0;
 
   for (int i = 0; i < db->sViewer.count; ++i) {
-    if (si[i].id == id) {
-      ts = si[i].start;
+    si = (SyncItem *)db->sViewer.items[i];
+    if (si && si->id == id) {
+      ts = si->start;
       break;
     }
   }
@@ -740,22 +793,213 @@ static uint64_t iamf_database_object_get_timestamp(IAMF_DataBase *db,
   return ts;
 }
 
-static ParameterItem *iamf_database_parameter_viewer_get_item(
-    ParameterViewer *viewer, uint64_t pid) {
-  ParameterItem *pi = 0;
+static int iamf_database_set_global_time(IAMF_DataBase *db, uint64_t t) {
+  if (db->sync_time > t) return IAMF_ERR_BAD_ARG;
+  db->sync_time = t;
+  return IAMF_OK;
+}
+
+static ParameterItem *iamf_database_parameter_viewer_get_item(Viewer *viewer,
+                                                              uint64_t pid) {
+  ParameterItem *pi = 0, *vpi;
   for (int i = 0; i < viewer->count; ++i) {
-    if (viewer->items[i]->id == pid) {
-      pi = viewer->items[i];
+    vpi = (ParameterItem *)viewer->items[i];
+    if (vpi->id == pid) {
+      pi = vpi;
       break;
     }
   }
   return pi;
 }
 
-static int iamf_database_parameter_viewer_add_item(IAMF_DataBase *db,
-                                                   ParameterBase *base,
-                                                   uint64_t parent_id) {
-  ParameterViewer *pv = &db->pViewer;
+static ParameterItem *iamf_database_parameter_get_item(IAMF_DataBase *db,
+                                                       uint64_t pid) {
+  return iamf_database_parameter_viewer_get_item(&db->pViewer, pid);
+}
+
+static int iamf_database_parameter_check_timestamp(IAMF_DataBase *db,
+                                                   uint64_t pid, uint64_t pts) {
+  ParameterItem *pi =
+      iamf_database_parameter_viewer_get_item(&db->pViewer, pid);
+  if (!pi) return 0;
+  if (pts > pi->timestamp && pts <= pi->timestamp + pi->duration) return 1;
+  ia_logw("pid %lu: request pts %lu vs parameter pts %lu, duration %lu", pid,
+          pts, pi->timestamp, pi->duration);
+  return 0;
+}
+
+static ParameterSegment *iamf_database_parameter_get_segment(IAMF_DataBase *db,
+                                                             uint64_t pid,
+                                                             uint64_t pts) {
+  ParameterItem *pi =
+      iamf_database_parameter_viewer_get_item(&db->pViewer, pid);
+  ParameterSegment *seg = 0, *s = 0;
+  uint64_t start = 0;
+  int count = 0;
+
+  if (!pi) return 0;
+  if (!iamf_database_parameter_check_timestamp(db, pi->id, pts)) {
+    ia_logw("Don't receive parameter %lu at %lu, current parameter at %lu",
+            pi->id, pts, pi->timestamp);
+    return 0;
+  } else
+    start = pts - pi->timestamp;
+
+  count = pi->value.params ? queue_length(pi->value.params) : 0;
+  for (int i = 0; i < count; ++i) {
+    s = queue_take(pi->value.params, i);
+    if (!s) break;
+    if (start < s->segment_interval) {
+      seg = s;
+      break;
+    } else {
+      start -= s->segment_interval;
+    }
+  }
+  return seg;
+}
+
+static int iamf_database_parameter_get_demix_mode(IAMF_DataBase *db,
+                                                  uint64_t pid, uint64_t pts) {
+  DemixingSegment *dseg =
+      (DemixingSegment *)iamf_database_parameter_get_segment(db, pid, pts);
+  return dseg ? dseg->demixing_mode : IAMF_ERR_INTERNAL;
+}
+
+static ReconGainList *iamf_database_parameter_get_recon_gain_list(
+    IAMF_DataBase *db, uint64_t pid, uint64_t pts) {
+  ReconGainSegment *rg =
+      (ReconGainSegment *)iamf_database_parameter_get_segment(db, pid, pts);
+  return rg ? &rg->list : 0;
+}
+
+static MixGainUnit *iamf_database_parameter_get_mix_gain_unit(
+    IAMF_DataBase *db, uint64_t pid, uint64_t pt, int duration, int rate) {
+  ParameterItem *pi = 0;
+  MixGainUnit *mgu = 0;
+  uint64_t start = 0;
+  float ratio = 1.f;
+
+  pi = iamf_database_parameter_viewer_get_item(&db->pViewer, pid);
+  if (!pi) return 0;
+
+  ia_logd("pts %lu, parameter pts %lu, duration %ld", pt, pi->timestamp,
+          pi->duration);
+  if (pt < pi->timestamp) {
+    ia_logw(
+        "Don't receive mix gain parameter %lu at %lu, current parameter at "
+        "%lu",
+        pi->id, pt, pi->timestamp);
+    return 0;
+  } else
+    start = pt - pi->timestamp;
+
+  mgu = IAMF_MALLOCZ(MixGainUnit, 1);
+  if (!mgu) return 0;
+
+  if (pi->value.mix_gain.use_default) {
+    ia_logd("use default mix gain %f", pi->value.mix_gain.default_mix_gain);
+    mgu->constant_gain = pi->value.mix_gain.default_mix_gain;
+  } else {
+    int64_t sgd = 0;
+    int64_t minterval = 0;
+    int left = duration;
+    MixGainSegment *seg = 0;
+
+    if (!pi->param_base || !pi->value.params) {
+      mix_gain_unit_free(mgu);
+      return 0;
+    }
+
+    if (rate != pi->param_base->rate)
+      ratio = (rate + 0.1f) / pi->param_base->rate;
+
+    for (int i = 0; i < queue_length(pi->value.params); ++i) {
+      seg = (MixGainSegment *)queue_take(pi->value.params, i);
+      if (!seg) {
+        ia_loge("Can't find %d-th segment", i);
+        break;
+      }
+      minterval = seg->seg.segment_interval * ratio;
+      sgd += minterval;
+      if (start < sgd) {
+        ia_logd("find segment %d, s(%lu) ~ e(%lu)", i, sgd - minterval, sgd);
+        if (seg->mix_gain.animated_type == PARAMETER_ANIMATED_TYPE_STEP) {
+          if (!mgu->count && start + duration <= sgd) {
+            mgu->constant_gain = seg->mix_gain_f.start;
+            mgu->count = duration;
+            ia_logd("use default mix gain %f", seg->mix_gain_f.start);
+          } else if (!mgu->count) {
+            mgu->gains = IAMF_MALLOC(float, duration);
+            if (!mgu->gains) {
+              ia_loge("Fail to allocate gains of mix gain unit.");
+              mix_gain_unit_free(mgu);
+              return 0;
+            }
+            mgu->count = sgd - start;
+            for (int i = 0; i < mgu->count; ++i)
+              mgu->gains[i] = seg->mix_gain_f.start;
+            start = sgd;
+            ia_logd("step-1: get %d gains", mgu->count);
+          } else {
+            int e = mgu->count + minterval;
+            if (e >= duration)
+              e = duration;
+            else {
+              start = sgd;
+              e = mgu->count + minterval;
+            }
+            for (int i = mgu->count; i < e; ++i)
+              mgu->gains[i] = seg->mix_gain_f.start;
+            ia_logd("step-2: get %d gains", e - mgu->count);
+            mgu->count = e;
+          }
+        } else {
+          int off = 0;
+          int ss = sgd - minterval;
+          int d = 0;
+          off = start - ss;
+          if (!mgu->gains) {
+            mgu->gains = IAMF_MALLOC(float, duration);
+            if (!mgu->gains) {
+              ia_loge("Fail to allocate gains of mix gain unit.");
+              mix_gain_unit_free(mgu);
+              return 0;
+            }
+          }
+
+          if (start + left <= sgd) {
+            d = left;
+          } else {
+            d = sgd - start;
+            start = sgd;
+            left -= d;
+          }
+          if (seg->mix_gain.animated_type == PARAMETER_ANIMATED_TYPE_LINEAR)
+            mix_gain_bezier_linear(seg->mix_gain_f.start, seg->mix_gain_f.end,
+                                   minterval, off, d, mgu->gains + mgu->count);
+          else
+            mix_gain_bezier_quad(
+                seg->mix_gain_f.start, seg->mix_gain_f.end, minterval,
+                seg->mix_gain_f.control,
+                seg->mix_gain_f.control_relative_time * (minterval + .1f), off,
+                d, mgu->gains + mgu->count);
+          mgu->count += d;
+          ia_logd("not step: get %d gains", d);
+        }
+      }
+
+      if (mgu->count == duration) break;
+    }
+  }
+
+  return mgu;
+}
+
+static int iamf_database_parameter_add_item(IAMF_DataBase *db,
+                                            ParameterBase *base,
+                                            uint64_t parent_id, int rate) {
+  Viewer *pv = &db->pViewer;
   ParameterItem *pi = 0;
   ParameterItem **pis = 0;
   ElementItem *ei = 0;
@@ -767,26 +1011,28 @@ static int iamf_database_parameter_viewer_add_item(IAMF_DataBase *db,
   type = base->type;
   pi = iamf_database_parameter_viewer_get_item(pv, pid);
 
-  if (pi) return IAMF_OK;
+  if (pi) {
+    ia_logd("parameter %lu is already in database.", pid);
+    return IAMF_OK;
+  }
 
   pis = IAMF_REALLOC(ParameterItem *, pv->items, pv->count + 1);
-  if (!pis) {
-    return IAMF_ERR_ALLOC_FAIL;
-  }
-  pv->items = pis;
+  if (!pis) return IAMF_ERR_ALLOC_FAIL;
+  pv->items = (void **)pis;
   pis[pv->count] = 0;
 
   pi = IAMF_MALLOCZ(ParameterItem, 1);
-  if (!pi) {
+  if (!pi) return IAMF_ERR_ALLOC_FAIL;
+
+  pi->value.params = queue_new();
+  if (!pi->value.params) {
+    free(pi);
     return IAMF_ERR_ALLOC_FAIL;
   }
 
   if (type == IAMF_PARAMETER_TYPE_MIX_GAIN) {
-    pi->mix_gain = IAMF_MALLOCZ(MixGain, 1);
-    if (!pi->mix_gain) {
-      free(pi);
-      return IAMF_ERR_ALLOC_FAIL;
-    }
+    // use default mix gain.
+    pi->value.mix_gain.use_default = 1;
   }
 
   pis[pv->count++] = pi;
@@ -797,136 +1043,43 @@ static int iamf_database_parameter_viewer_add_item(IAMF_DataBase *db,
   pi->type = base->type;
   pi->parent_id = parent_id;
   pi->param_base = base;
-  if (type == IAMF_PARAMETER_TYPE_DEMIXING) {
-    ei = iamf_database_element_get_item(db, parent_id);
-    ei->demixing = pi;
-  } else if (type == IAMF_PARAMETER_TYPE_RECON_GAIN) {
-    ei = iamf_database_element_get_item(db, parent_id);
-    ei->reconGain = pi;
+  pi->rate = rate;
+
+  ei = iamf_database_element_get_item(db, parent_id);
+  if (ei) {
+    if (type == IAMF_PARAMETER_TYPE_DEMIXING) {
+      ei->demixing = pi;
+    } else if (type == IAMF_PARAMETER_TYPE_RECON_GAIN) {
+      ei->reconGain = pi;
+    }
   }
   return IAMF_OK;
 }
 
-static int iamf_database_parameter_viewer_add(IAMF_DataBase *db,
-                                              IAMF_Object *obj) {
-  ParameterViewer *pv = &db->pViewer;
+static int iamf_database_parameter_add(IAMF_DataBase *db, IAMF_Object *obj) {
+  Viewer *pv = &db->pViewer;
   IAMF_Parameter *p = (IAMF_Parameter *)obj;
   ParameterItem *pi = 0;
 
   pi = iamf_database_parameter_viewer_get_item(pv, p->id);
   if (pi) {
-    ElementItem *ei = iamf_database_element_get_item(db, pi->parent_id);
-    if (pi->parameter) {
-      if (ei)
-        ia_logt("p(%lu)ts(s:%lu, e: %lu) vs e(%lu)ts(%lu).", pi->id,
-                pi->timestamp, pi->timestamp + pi->parameter->duration, ei->id,
-                ei->timestamp);
-      if (ei && pi->timestamp + pi->parameter->duration > ei->timestamp)
-        ia_loge(
-            "Parameter (%lu) arrives early. (%lu vs %lu). element item %p,  id "
-            "%lu",
-            p->id, pi->timestamp + pi->parameter->duration, ei->timestamp, ei,
-            ei->id);
-      for (int i = 0; i < db->parameters->count; ++i) {
-        if (pi->parameter == db->parameters->items[i]) {
-          iamf_object_free(db->parameters->items[i]);
-          db->parameters->items[i] = obj;
-        }
-      }
-    } else {
-      iamf_object_set_add(db->parameters, obj);
+    if (obj->flags & IAMF_OBU_FLAG_REDUNDANT && pi->duration > 0) {
+      ia_logd("Ignore redundant parameter obu with id %lu.", p->id);
+      return IAMF_OK;
     }
-    pi->parameter = p;
-    if (ei) pi->timestamp = ei->timestamp;
-    ia_logd("parameter id %lu, timestamp update %lu", pi->id, pi->timestamp);
 
-    if (pi->type == IAMF_PARAMETER_TYPE_MIX_GAIN) {
-      int m;
-      MixGainSegment *seg;
-      float gain_db, gain1_db, gain2_db;
-      float gain_l, gain1_l, gain2_l;
-      if (pi->mix_gain->mix_gain_uints) {
-        for (int i = 0; i < pi->mix_gain->nb_seg; ++i) {
-          if (pi->mix_gain->mix_gain_uints[i].gains)
-            free(pi->mix_gain->mix_gain_uints[i].gains);
-        }
-        free(pi->mix_gain->mix_gain_uints);
-      }
-      pi->mix_gain->nb_seg = p->nb_segments;
-      pi->mix_gain->mix_gain_uints = IAMF_MALLOCZ(MixGainUnit, p->nb_segments);
-      if (!pi->mix_gain->mix_gain_uints) {
-        ia_loge("Fail to allocate memory for segment mix gains.");
-        return IAMF_ERR_ALLOC_FAIL;
-      }
-
-      for (int i = 0; i < p->nb_segments; ++i) {
-        seg = (MixGainSegment *)p->segments[i];
-        pi->mix_gain->mix_gain_uints[i].count = seg->seg.segment_interval;
-        pi->mix_gain->mix_gain_uints[i].constant_gain = 1.0f;
-        gain_db = q_to_float(seg->mix_gain.start, 8);
-        if (seg->mix_gain.animated_type == PARAMETER_ANIMATED_TYPE_STEP) {
-          pi->mix_gain->mix_gain_uints[i].constant_gain = db2lin(gain_db);
-          ia_logd("mix gain %f(%f db <%x>)",
-                  pi->mix_gain->mix_gain_uints[i].constant_gain, gain_db,
-                  seg->mix_gain.control & U16_MASK);
-        } else if (seg->mix_gain.animated_type ==
-                   PARAMETER_ANIMATED_TYPE_LINEAR) {
-          gain_l = db2lin(gain_db);
-          gain1_db = q_to_float(seg->mix_gain.end, 8);
-          gain1_l = db2lin(gain1_db);
-          pi->mix_gain->mix_gain_uints[i].gains =
-              IAMF_MALLOCZ(float, seg->seg.segment_interval);
-          if (pi->mix_gain->mix_gain_uints[i].gains) {
-            iamf_object_parameter_mix_gain_linear(
-                seg->seg.segment_interval, gain_l, gain1_l,
-                pi->mix_gain->mix_gain_uints[i].gains);
-          }
-        } else if (seg->mix_gain.animated_type ==
-                   PARAMETER_ANIMATED_TYPE_BEZIER) {
-          gain_l = db2lin(gain_db);
-          gain1_db = q_to_float(seg->mix_gain.end, 8);
-          gain1_l = db2lin(gain1_db);
-          gain2_db = q_to_float(seg->mix_gain.control, 8);
-          gain2_l = db2lin(gain2_db);
-          m = round(qf_to_float(seg->mix_gain.control_relative_time, 8) *
-                    seg->seg.segment_interval) -
-              1;
-          pi->mix_gain->mix_gain_uints[i].gains =
-              IAMF_MALLOCZ(float, seg->seg.segment_interval);
-          if (pi->mix_gain->mix_gain_uints[i].gains) {
-            iamf_object_parameter_mix_gain_quad(
-                seg->seg.segment_interval, m, gain_l, gain2_l, gain1_l,
-                pi->mix_gain->mix_gain_uints[i].gains);
-          }
-        }
-      }
+    for (int i = 0; i < p->nb_segments; ++i) {
+      queue_push(pi->value.params, p->segments[i]);
+      pi->duration += p->segments[i]->segment_interval;
+      p->segments[i] = 0;
     }
+    ia_logd("New p(%lu)ts(s:%lu, e: %lu).", pi->id, pi->timestamp,
+            pi->timestamp + pi->duration);
   } else {
-    iamf_object_set_add(db->parameters, obj);
     ia_logw("Can not find parameter item for paramter (%lu)", p->id);
   }
 
   return IAMF_OK;
-}
-
-static void iamf_database_parameter_viewer_free(ParameterViewer *v) {
-  if (v) {
-    if (v->items) {
-      for (int i = 0; i < v->count; ++i) {
-        if (v->items[i]->mix_gain) {
-          if (v->items[i]->mix_gain->mix_gain_uints) {
-            for (int s = 0; s < v->items[i]->mix_gain->nb_seg; ++s)
-              free(v->items[i]->mix_gain->mix_gain_uints[s].gains);
-            free(v->items[i]->mix_gain->mix_gain_uints);
-          }
-          free(v->items[i]->mix_gain);
-        }
-        free(v->items[i]);
-      }
-      free(v->items);
-    }
-    memset(v, 0, sizeof(ParameterViewer));
-  }
 }
 
 static ParameterBase *iamf_database_parameter_viewer_get_parmeter_base(
@@ -936,128 +1089,184 @@ static ParameterBase *iamf_database_parameter_viewer_get_parmeter_base(
   return pi ? pi->param_base : 0;
 }
 
-static int iamf_database_element_viewer_add(IAMF_DataBase *db,
-                                            IAMF_Object *obj) {
+static int iamf_database_parameters_clear_segments(IAMF_DataBase *db) {
+  ParameterItem *pi = 0;
+  for (int i = 0; i < db->pViewer.count; ++i) {
+    pi = (ParameterItem *)db->pViewer.items[i];
+    iamf_parameter_item_clear(pi);
+  }
+  return IAMF_OK;
+}
+
+static int iamf_database_parameters_time_elapse(IAMF_DataBase *db,
+                                                uint64_t duration) {
+  Viewer *pv = &db->pViewer;
+  ParameterItem *pi;
+  ParameterSegment *seg;
+
+  for (int i = 0; i < pv->count; ++i) {
+    pi = (ParameterItem *)pv->items[i];
+    ia_logd("S: pid %lu pts %lu, duration %lu, elapsed %lu, elapse %lu", pi->id,
+            pi->timestamp, pi->duration, pi->elapse, duration);
+
+    if (pi->value.params) {
+      pi->elapse += duration;
+      while (1) {
+        ia_logd("length %d", queue_length(pi->value.params));
+        seg = (ParameterSegment *)queue_take(pi->value.params, 0);
+        if (seg && seg->segment_interval <= pi->elapse) {
+          pi->timestamp += seg->segment_interval;
+          pi->duration -= seg->segment_interval;
+          pi->elapse -= seg->segment_interval;
+          ia_logd("pi %p, pid %lu, pop segment %p", pi, pi->id, seg);
+          queue_pop(pi->value.params);
+          IAMF_parameter_segment_free(seg);
+        } else {
+          ia_logd("E: pid %lu pts %lu, duration %lu, elapsed %lu", pi->id,
+                  pi->timestamp, pi->duration, pi->elapse);
+          break;
+        }
+      }
+    }
+  }
+  return IAMF_OK;
+}
+
+static int iamf_database_element_add(IAMF_DataBase *db, IAMF_Object *obj) {
   int ret = IAMF_OK;
-  ElementItem *eItem = 0;
-  ElementViewer *v = &db->eViewer;
+  int rate = 0;
+  ElementItem *ei = 0;
+  ElementItem **eItem = 0;
+  Viewer *v = &db->eViewer;
   IAMF_Element *e = (IAMF_Element *)obj;
 
-  eItem = IAMF_REALLOC(ElementItem, v->items, v->count + 1);
-  if (!eItem) return IAMF_ERR_ALLOC_FAIL;
-
-  v->items = eItem;
-  ret = iamf_object_set_add(db->element, (void *)obj);
-  if (ret != IAMF_OK) {
-    return ret;
+  ei = iamf_database_element_get_item(db, e->element_id);
+  if (ei) {
+    ia_logd("element %lu is already in database.", e->element_id);
+    return IAMF_OK;
   }
 
-  eItem = &v->items[v->count++];
-  memset(eItem, 0, sizeof(ElementItem));
+  eItem = IAMF_REALLOC(ElementItem *, v->items, v->count + 1);
+  if (!eItem) return IAMF_ERR_ALLOC_FAIL;
+  eItem[v->count] = 0;
 
-  eItem->id = e->element_id;
-  eItem->element = IAMF_ELEMENT(obj);
-  eItem->codecConf = iamf_database_get_codec_conf(db, e->codec_config_id);
-  eItem->recon_gain_flags = iamf_object_element_get_recon_gain_flags(e);
+  v->items = (void **)eItem;
+  ret = iamf_object_set_add(db->element, (void *)obj);
+  if (ret != IAMF_OK) return ret;
+
+  ei = IAMF_MALLOCZ(ElementItem, 1);
+  if (!ei) return IAMF_ERR_ALLOC_FAIL;
+
+  v->items[v->count++] = ei;
+  ei->id = e->element_id;
+  ei->element = IAMF_ELEMENT(obj);
+  ei->codecConf = iamf_database_get_codec_conf(db, e->codec_config_id);
+  rate = iamf_codec_conf_get_sampling_rate(ei->codecConf);
 
   for (int i = 0; i < e->nb_parameters; ++i) {
-    iamf_database_parameter_viewer_add_item(db, e->parameters[i], eItem->id);
+    iamf_database_parameter_add_item(db, e->parameters[i], ei->id, rate);
   }
 
   return ret;
 }
 
-static void iamf_database_element_viewer_reset(ElementViewer *v) {
-  if (v) {
-    if (v->items) free(v->items);
-    memset(v, 0, sizeof(ElementViewer));
-  }
-}
-
 static int iamf_database_sync_time_update(IAMF_DataBase *db) {
-  ElementViewer *ev = &db->eViewer;
-  ElementItem *ei = (ElementItem *)ev->items;
+  Viewer *ev = &db->eViewer;
+  ElementItem *ei;
 
-  ParameterViewer *pv = &db->pViewer;
+  Viewer *pv = &db->pViewer;
   ParameterItem *pi;
 
   for (int i = 0; i < ev->count; ++i) {
-    ei->timestamp = iamf_database_object_get_timestamp(
-        db, IAMF_frame_get_obu_type(ei->element->substream_ids[0]));
+    ei = (ElementItem *)ev->items[i];
+    ei->timestamp =
+        iamf_database_object_get_timestamp(db, ei->element->substream_ids[0]);
   }
 
   for (int i = 0; i < pv->count; ++i) {
-    pi = pv->items[i];
+    pi = (ParameterItem *)pv->items[i];
     pi->timestamp = iamf_database_object_get_timestamp(db, pi->id);
   }
 
   return IAMF_OK;
 }
 
-static uint64_t iamf_database_sync_viewer_max_start_timestamp(SyncViewer *v) {
+static uint64_t iamf_database_sync_viewer_max_start_timestamp(Viewer *v) {
   uint64_t ret = 0;
   SyncItem *si;
   if (!v) return 0;
-  si = v->items;
   ret = 0;
-  for (int i = 0; i < v->count; ++i)
-    if (!si[i].type && ret < si[i].start) ret = si[i].start;
+  for (int i = 0; i < v->count; ++i) {
+    si = (SyncItem *)v->items[i];
+    if (!si->type && ret < si->start) ret = si->start;
+  }
   return ret;
 }
 
-static void iamf_database_sync_viewer_reset(SyncViewer *v) {
-  if (v) {
-    if (v->items) free(v->items);
-    memset(v, 0, sizeof(SyncViewer));
-  }
-}
-
-static int iamf_database_sync_viewer_update(IAMF_DataBase *db,
-                                            IAMF_Object *obj) {
+static int iamf_database_sync_update(IAMF_DataBase *db, IAMF_Object *obj) {
   IAMF_Sync *s = (IAMF_Sync *)obj;
   SyncItem *si;
+  SyncItem **vsi;
   uint64_t start = 0;
+  int ret = IAMF_OK;
 
-  si = IAMF_MALLOCZ(SyncItem, s->nb_obu_ids);
-  if (!si) {
+  vsi = IAMF_MALLOCZ(SyncItem *, s->nb_obu_ids);
+  if (!vsi) {
     ia_loge("Fail to allocate memory for Sync Items.");
     return IAMF_ERR_ALLOC_FAIL;
   }
+  for (int i = 0; i < s->nb_obu_ids; ++i) {
+    si = IAMF_MALLOCZ(SyncItem, 1);
+    if (!si) {
+      ia_loge("Fail to allocate memory for Sync Items.");
+      ret = IAMF_ERR_ALLOC_FAIL;
+      break;
+    }
+    vsi[i] = si;
+  }
+
+  if (ret != IAMF_OK) {
+    for (int i = 0; i < s->nb_obu_ids; ++i) IAMF_FREE(vsi[i]);
+    free(vsi);
+    return ret;
+  }
 
   start = iamf_database_sync_viewer_max_start_timestamp(&db->sViewer);
-  ia_logi("max end timestamp is %lu", start);
+  ia_logd("max end timestamp is %lu", start);
+  if (start < db->sync_time) start = db->sync_time;
   for (int i = 0; i < s->nb_obu_ids; ++i) {
-    si[i].id = s->objs[i].obu_id;
-    si[i].type = s->objs[i].obu_data_type;
-    si[i].start = start + s->objs[i].relative_offset + s->global_offset;
-    ia_logi("Item id %lu: type %d, start time %lu", si[i].id,
-            s->objs[i].obu_data_type & U8_MASK, si[i].start);
+    si = vsi[i];
+    si->id = s->objs[i].obu_id;
+    si->type = s->objs[i].obu_data_type;
+    si->start = start + s->objs[i].relative_offset + s->global_offset;
+    ia_logd("Item id %lu: type %d, start time %ld", si->id,
+            s->objs[i].obu_data_type & U8_MASK, si->start);
   }
 
   if (db->sync) iamf_object_free(db->sync);
   db->sync = obj;
 
-  iamf_database_sync_viewer_reset(&db->sViewer);
-  db->sViewer.start_global_time =
-      si[0].start - s->objs[0].relative_offset - s->global_offset;
-  db->sViewer.items = si;
+  iamf_database_viewer_reset(&db->sViewer);
+  db->sViewer.items = (void **)vsi;
   db->sViewer.count = s->nb_obu_ids;
 
   iamf_database_sync_time_update(db);
 
-  return IAMF_OK;
+  return ret;
 }
 
-static int iamf_database_sync_viewer_check_id(IAMF_DataBase *db, uint64_t id) {
+static int iamf_database_sync_check_id(IAMF_DataBase *db, uint64_t id) {
+  SyncItem *si;
   for (int i = 0; i < db->sViewer.count; ++i) {
-    if (db->sViewer.items[i].id == id) return 1;
+    si = (SyncItem *)db->sViewer.items[i];
+    if (si && si->id == id) return 1;
   }
   return 0;
 }
 
 static int iamf_database_mix_presentation_get_label_index(IAMF_DataBase *db,
                                                           const char *label) {
-  int idx = INAVLID_INDEX;
+  int idx = INVALID_INDEX;
   IAMF_MixPresentation *mp;
   for (int i = 0; i < db->mixPresentation->count; ++i) {
     mp = IAMF_MIX_PRESENTATION(db->mixPresentation->items[i]);
@@ -1075,10 +1284,11 @@ int iamf_database_init(IAMF_DataBase *db) {
   db->codecConf = iamf_object_set_new(iamf_object_free);
   db->element = iamf_object_set_new(iamf_object_free);
   db->mixPresentation = iamf_object_set_new(iamf_object_free);
-  db->parameters = iamf_object_set_new(iamf_object_free);
+  db->eViewer.freeF = free;
+  db->sViewer.freeF = free;
+  db->pViewer.freeF = iamf_parameter_item_free;
 
-  if (!db->codecConf || !db->element || !db->mixPresentation ||
-      !db->parameters) {
+  if (!db->codecConf || !db->element || !db->mixPresentation) {
     iamf_database_reset(db);
     return IAMF_ERR_ALLOC_FAIL;
   }
@@ -1088,22 +1298,14 @@ int iamf_database_init(IAMF_DataBase *db) {
 void iamf_database_reset(IAMF_DataBase *db) {
   if (db) {
     if (db->version) iamf_object_free(db->version);
-
     if (db->sync) iamf_object_free(db->sync);
-
     if (db->codecConf) iamf_object_set_free(db->codecConf);
-
     if (db->element) iamf_object_set_free(db->element);
-
     if (db->mixPresentation) iamf_object_set_free(db->mixPresentation);
 
-    if (db->parameters) iamf_object_set_free(db->parameters);
-
-    if (db->eViewer.items) iamf_database_element_viewer_reset(&db->eViewer);
-
-    if (db->pViewer.items) iamf_database_parameter_viewer_free(&db->pViewer);
-
-    if (db->sViewer.items) iamf_database_sync_viewer_reset(&db->sViewer);
+    iamf_database_viewer_reset(&db->eViewer);
+    iamf_database_viewer_reset(&db->pViewer);
+    iamf_database_viewer_reset(&db->sViewer);
 
     memset(db, 0, sizeof(IAMF_DataBase));
   }
@@ -1111,6 +1313,8 @@ void iamf_database_reset(IAMF_DataBase *db) {
 
 static int iamf_database_add_object(IAMF_DataBase *db, IAMF_Object *obj) {
   int ret = IAMF_OK;
+  if (!obj) return IAMF_ERR_BAD_ARG;
+
   switch (obj->type) {
     case IAMF_OBU_MAGIC_CODE:
       if (db->version) {
@@ -1123,16 +1327,17 @@ static int iamf_database_add_object(IAMF_DataBase *db, IAMF_Object *obj) {
       ret = iamf_object_set_add(db->codecConf, (void *)obj);
       break;
     case IAMF_OBU_AUDIO_ELEMENT:
-      ret = iamf_database_element_viewer_add(db, obj);
+      ret = iamf_database_element_add(db, obj);
       break;
     case IAMF_OBU_MIX_PRESENTATION:
       ret = iamf_object_set_add(db->mixPresentation, (void *)obj);
       break;
     case IAMF_OBU_PARAMETER_BLOCK:
-      ret = iamf_database_parameter_viewer_add(db, obj);
+      ret = iamf_database_parameter_add(db, obj);
+      IAMF_object_free(obj);
       break;
     case IAMF_OBU_SYNC:
-      ret = iamf_database_sync_viewer_update(db, obj);
+      ret = iamf_database_sync_update(db, obj);
       break;
     default:
       ia_logd("IAMF Object %s (%d) is not needed in database.",
@@ -1168,10 +1373,19 @@ static IAMF_Element *iamf_database_get_element_by_parameterID(IAMF_DataBase *db,
                                                               uint64_t pid) {
   IAMF_Element *elem = 0;
   IAMF_Element *e = 0;
+  ElementItem *ei = 0, *vei;
   for (int i = 0; i < db->eViewer.count; ++i) {
-    e = IAMF_ELEMENT(db->eViewer.items[i].element);
+    vei = (ElementItem *)db->eViewer.items[i];
+    e = IAMF_ELEMENT(vei->element);
     for (int p = 0; p < e->nb_parameters; ++p) {
       if (pid == e->parameters[p]->id) {
+        elem = e;
+        break;
+      }
+    }
+    if (!elem) {
+      ei = iamf_database_element_get_item(db, e->element_id);
+      if (ei && ei->mixGain && ei->mixGain->id == pid) {
         elem = e;
         break;
       }
@@ -1180,21 +1394,23 @@ static IAMF_Element *iamf_database_get_element_by_parameterID(IAMF_DataBase *db,
   return elem;
 }
 
+static IAMF_MixPresentation *iamf_database_get_mix_presentation_by_index(
+    IAMF_DataBase *db, uint32_t idx) {
+  if (db && db->mixPresentation && db->mixPresentation->count > idx)
+    return IAMF_MIX_PRESENTATION(db->mixPresentation->items[idx]);
+  return 0;
+}
+
 ElementItem *iamf_database_element_get_item(IAMF_DataBase *db, uint64_t eid) {
-  ElementItem *ei = 0;
+  ElementItem *ei = 0, *vei;
   for (int i = 0; i < db->eViewer.count; ++i) {
-    if (db->eViewer.items[i].id == eid) {
-      ei = &db->eViewer.items[i];
+    vei = (ElementItem *)db->eViewer.items[i];
+    if (vei->id == eid) {
+      ei = vei;
       break;
     }
   }
   return ei;
-}
-
-static IAMF_CodecConf *iamf_database_element_get_codec_conf(IAMF_DataBase *db,
-                                                            uint64_t eid) {
-  ElementItem *ei = iamf_database_element_get_item(db, eid);
-  return ei ? ei->codecConf : 0;
 }
 
 static int iamf_database_element_get_substream_index(IAMF_DataBase *db,
@@ -1220,25 +1436,26 @@ static uint64_t iamf_database_element_get_timestamp(IAMF_DataBase *db,
   return ei ? ei->timestamp : INVALID_ID;
 }
 
-static uint32_t iamf_database_element_get_recon_gain_flags(IAMF_DataBase *db,
-                                                           uint32_t eid) {
+static IAMF_CodecConf *iamf_database_element_get_codec_conf(IAMF_DataBase *db,
+                                                            uint64_t eid) {
   ElementItem *ei = iamf_database_element_get_item(db, eid);
-  return ei ? ei->recon_gain_flags : 0;
+  return ei ? ei->codecConf : 0;
 }
 
 static int iamf_database_element_time_elapse(IAMF_DataBase *db, uint64_t eid,
                                              uint64_t duration) {
   ElementItem *ei = iamf_database_element_get_item(db, eid);
-  SyncItem *si = db->sViewer.items;
+  SyncItem *si;
 
   if (!ei) return IAMF_ERR_BAD_ARG;
   ei->timestamp += duration;
-  ia_logt("element item %p, id %lu time to %lu", ei, eid, ei->timestamp);
+  ia_logd("element item %p, id %lu time to %lu", ei, eid, ei->timestamp);
 
   for (int i = 0; i < ei->element->nb_substreams; ++i) {
     for (int a = 0; a < db->sViewer.count; ++a) {
-      if (ei->element->substream_ids[i] == si[a].id) {
-        si[a].start = ei->timestamp;
+      si = (SyncItem *)db->sViewer.items[a];
+      if (ei->element->substream_ids[i] == si->id) {
+        si->start = ei->timestamp;
         break;
       }
     }
@@ -1247,72 +1464,14 @@ static int iamf_database_element_time_elapse(IAMF_DataBase *db, uint64_t eid,
   return IAMF_OK;
 }
 
-static int iamf_database_element_get_demix_mode(IAMF_DataBase *db,
-                                                uint64_t eid) {
-  ElementItem *ei = iamf_database_element_get_item(db, eid);
-  ParameterItem *pi = 0;
-  DemixingSegment *seg = 0;
-  uint64_t start = 0;
-  if (!ei) return IAMF_ERR_BAD_ARG;
-
-  pi = ei->demixing;
-  if (!pi) return IAMF_ERR_BAD_ARG;
-
-  if (ei->timestamp > pi->timestamp) start = ei->timestamp - pi->timestamp;
-  seg = (DemixingSegment *)iamf_object_parameter_get_segment(pi->parameter,
-                                                             start);
-
-  if (seg) return seg->demixing_mode;
-  return IAMF_ERR_INTERNAL;
-}
-
-static ReconGainList *iamf_database_element_get_recon_gain_list(
-    IAMF_DataBase *db, uint64_t eid) {
-  ElementItem *ei = iamf_database_element_get_item(db, eid);
-  ParameterItem *pi = 0;
-  ReconGainSegment *seg = 0;
-  uint64_t start = 0;
-  if (!ei) return 0;
-
-  pi = ei->reconGain;
-  if (!pi) return 0;
-
-  if (ei->timestamp > pi->timestamp) start = ei->timestamp - pi->timestamp;
-  seg = (ReconGainSegment *)iamf_object_parameter_get_segment(pi->parameter,
-                                                              start);
-
-  if (seg) return &seg->list;
-
-  return 0;
-}
-
 static int iamf_database_element_set_mix_gain_parameter(IAMF_DataBase *db,
                                                         uint64_t eid,
                                                         uint64_t pid) {
   ElementItem *ei = iamf_database_element_get_item(db, eid);
   ParameterItem *pi =
       iamf_database_parameter_viewer_get_item(&db->pViewer, pid);
-
-  if (ei) {
-    ei->mixGain = pi;
-  }
-
+  if (ei) ei->mixGain = pi;
   return IAMF_OK;
-}
-
-static MixGain *iamf_database_element_get_mix_gain(IAMF_DataBase *db,
-                                                   uint64_t eid, uint64_t ts,
-                                                   int duration) {
-  ElementItem *ei = iamf_database_element_get_item(db, eid);
-
-  if (ei && ei->mixGain && ei->mixGain->mix_gain) {
-    if (ei->mixGain->timestamp == ts ||
-        (!ei->mixGain->mix_gain->nb_seg &&
-         ei->mixGain->mix_gain->default_mix_gain != .0f))
-      return ei->mixGain->mix_gain;
-  }
-
-  return 0;
 }
 
 /* <<<<<<<<<<<<<<<<<< DATABASE <<<<<<<<<<<<<<<<<< */
@@ -1332,20 +1491,71 @@ static SpeexResamplerState *iamf_stream_resampler_open(IAMF_Stream *stream,
                                                        int quality);
 static void iamf_stream_resampler_close(SpeexResamplerState *r);
 
+static int iamf_packet_check_count(Packet *pkt) {
+  return pkt->count == pkt->nb_sub_packets;
+}
+
+static int iamf_frame_check_mask(Frame *f) {
+  return !f->mask || f->mask == f->flags;
+}
+
+static int iamf_frame_trim(Frame *f, int start, int end, int start_extension) {
+  int s, ret;
+  s = start + start_extension;
+  ret = f->samples - s - end;
+  if (start < 0 || end < 0 || start_extension < 0 || ret < 0) {
+    ia_logw(
+        "clip start %d, end %d, start extension %d, and the left samples %d",
+        start, end, start_extension, ret);
+    return IAMF_ERR_BAD_ARG;
+  }
+
+  if (ret > 0 && ret != f->samples) {
+    for (int c = 0; c < f->channels; ++c) {
+      memcpy(&f->data[c * ret], &f->data[c * f->samples + s],
+             ret * sizeof(float));
+    }
+  }
+  f->samples = ret;
+  f->pts += start;
+  return ret;
+}
+
+static int iamf_frame_gain(Frame *f, MixGainUnit *gain) {
+  int soff;
+  if (!gain) return IAMF_ERR_BAD_ARG;
+  if (f->samples > gain->count) {
+    ia_logd("frame samples should be not greater than gain count %d vs %d",
+            f->samples, gain->count);
+    return IAMF_ERR_INTERNAL;
+  }
+
+  if (!gain->gains) {
+    ia_logd("use default gain %f.", gain->constant_gain);
+    if (gain->constant_gain != 1.f && gain->constant_gain > 0.f) {
+      int count = f->samples * f->channels;
+      for (int i = 0; i < count; ++i) f->data[i] *= gain->constant_gain;
+    }
+    return IAMF_OK;
+  }
+
+  ia_logd("use gains");
+  for (int c = 0; c < f->channels; ++c) {
+    soff = c * f->samples;
+    for (int i = 0; i < f->samples; ++i) f->data[soff + i] *= gain->gains[i];
+  }
+
+  return IAMF_OK;
+}
+
 static void iamf_presentation_free(IAMF_Presentation *pst) {
   if (pst) {
     for (int i = 0; i < pst->nb_streams; ++i) {
-      if (pst->decoders[i]) {
-        iamf_stream_decoder_close(pst->decoders[i]);
-      }
+      if (pst->decoders[i]) iamf_stream_decoder_close(pst->decoders[i]);
+      if (pst->streams[i]) iamf_stream_free(pst->streams[i]);
+    }
+    if (pst->resampler) iamf_stream_resampler_close(pst->resampler);
 
-      if (pst->streams[i]) {
-        iamf_stream_free(pst->streams[i]);
-      }
-    }
-    if (pst->resampler) {
-      iamf_stream_resampler_close(pst->resampler);
-    }
     free(pst->decoders);
     free(pst->streams);
     iamf_mixer_reset(&pst->mixer);
@@ -1514,7 +1724,7 @@ static IAMF_Stream *iamf_stream_new(IAMF_Element *elem, IAMF_CodecConf *conf,
   stream->scheme = elem->element_type;
   stream->codecConf_id = conf->codec_conf_id;
   stream->codec_id = iamf_codec_4cc_get_codecID(conf->codec_id);
-  stream->sampling_rate = iamf_object_codec_conf_get_sampling_rate(conf);
+  stream->sampling_rate = iamf_codec_conf_get_sampling_rate(conf);
   stream->nb_substreams = elem->nb_substreams;
 
   ia_logd("codec conf id %lu, codec id 0x%x (%s), sampling rate is %u",
@@ -1583,7 +1793,6 @@ static IAMF_Stream *iamf_stream_new(IAMF_Element *elem, IAMF_CodecConf *conf,
             ia_loge("Fail to allocate memory for recon gain of sub config.");
             goto stream_fail;
           }
-          ctx->recon_gain_flags |= RSHIFT(i);
           ia_logi(" > wait recon gain info.");
         } else {
           ia_logi(" > no recon gain info.");
@@ -1703,7 +1912,7 @@ static int iamf_stream_enable(IAMF_DecoderHandle handle, IAMF_Element *elem) {
   IAMF_CodecConf *conf;
   IAMF_StreamDecoder *decoder = 0;
   IAMF_StreamDecoder **decoders;
-  Packet *pkt = 0;
+  Frame *f = 0;
   ElementItem *ei;
 
   ia_logd("enable element id %lu", elem->element_id);
@@ -1730,12 +1939,12 @@ static int iamf_stream_enable(IAMF_DecoderHandle handle, IAMF_Element *elem) {
   pst->decoders[pst->nb_streams] = decoder;
   ++pst->nb_streams;
 
-  pkt = &decoder->packet;
+  f = &decoder->frame;
   ei = iamf_database_element_get_item(db, stream->element_id);
 
   if (ei) {
-    if (ei->demixing) pkt->pmask |= IAMF_PACKET_EXTRA_DEMIX_MODE;
-    if (ei->reconGain) pkt->pmask |= IAMF_PACKET_EXTRA_RECON_GAIN;
+    if (ei->demixing) f->mask |= IAMF_FRAME_EXTRA_DEMIX_MODE;
+    if (ei->reconGain) f->mask |= IAMF_FRAME_EXTRA_RECON_GAIN;
   }
 
   return 0;
@@ -1774,30 +1983,31 @@ void iamf_stream_resampler_close(SpeexResamplerState *r) {
   }
 }
 
-static IACoreDecoder *iamf_stream_sub_decoder_open(
+static IAMF_CoreDecoder *iamf_stream_sub_decoder_open(
     int mode, int channels, int nb_streams, int nb_coupled_streams,
     uint8_t *mapping, int mapping_size, IAMF_CodecConf *conf) {
-  IACodecID cid;
-  IACoreDecoder *cDecoder;
+  IAMF_CodecID cid;
+  IAMF_CoreDecoder *cDecoder;
   int ret = 0;
 
   cid = iamf_codec_4cc_get_codecID(conf->codec_id);
-  cDecoder = ia_core_decoder_open(cid);
+  cDecoder = iamf_core_decoder_open(cid);
 
   if (cDecoder) {
-    ia_core_decoder_set_codec_conf(cDecoder, conf->decoder_conf,
-                                   conf->decoder_conf_size);
+    iamf_core_decoder_set_codec_conf(cDecoder, conf->decoder_conf,
+                                     conf->decoder_conf_size);
     ia_logd(
         "codec %s, mode %d, channels %d, streams %d, coupled streams %d, "
         "mapping size  %d",
         iamf_codec_name(cid), mode, channels, nb_streams, nb_coupled_streams,
         mapping_size);
-    ia_core_decoder_set_streams_info(cDecoder, mode, channels, nb_streams,
-                                     nb_coupled_streams, mapping, mapping_size);
-    ret = ia_core_decoder_init(cDecoder);
+    iamf_core_decoder_set_streams_info(cDecoder, mode, channels, nb_streams,
+                                       nb_coupled_streams, mapping,
+                                       mapping_size);
+    ret = iamf_core_decoder_init(cDecoder);
     if (ret != IAMF_OK) {
       ia_loge("Fail to initalize core decoder.");
-      ia_core_decoder_close(cDecoder);
+      iamf_core_decoder_close(cDecoder);
       cDecoder = 0;
     }
   }
@@ -1811,6 +2021,8 @@ void iamf_stream_decoder_close(IAMF_StreamDecoder *d) {
   if (d) {
     IAMF_Stream *s = d->stream;
 
+    for (int i = 0; i < d->packet.nb_sub_packets; ++i)
+      IAMF_FREE(d->packet.sub_packets[i]);
     IAMF_FREE(d->packet.sub_packets);
     IAMF_FREE(d->packet.sub_packet_sizes);
 
@@ -1822,7 +2034,7 @@ void iamf_stream_decoder_close(IAMF_StreamDecoder *d) {
       if (d->scale) {
         if (d->scale->sub_decoders) {
           for (int i = 0; i < d->scale->nb_layers; ++i)
-            ia_core_decoder_close(d->scale->sub_decoders[i]);
+            iamf_core_decoder_close(d->scale->sub_decoders[i]);
           free(d->scale->sub_decoders);
         }
         if (d->scale->demixer) demixer_close(d->scale->demixer);
@@ -1831,7 +2043,7 @@ void iamf_stream_decoder_close(IAMF_StreamDecoder *d) {
     } else if (s->scheme == AUDIO_ELEMENT_TYPE_SCENE_BASED) {
       if (d->ambisonics) {
         if (d->ambisonics->decoder)
-          ia_core_decoder_close(d->ambisonics->decoder);
+          iamf_core_decoder_close(d->ambisonics->decoder);
         free(d->ambisonics);
       }
     }
@@ -1850,6 +2062,7 @@ IAMF_StreamDecoder *iamf_stream_decoder_open(IAMF_Stream *stream,
 
   decoder->stream = stream;
   decoder->frame_size = conf->nb_samples_per_frame;
+  decoder->delay = -1;
   decoder->packet.nb_sub_packets = stream->nb_substreams;
   decoder->packet.sub_packets = IAMF_MALLOCZ(uint8_t *, stream->nb_substreams);
   decoder->packet.sub_packet_sizes =
@@ -1869,20 +2082,24 @@ IAMF_StreamDecoder *iamf_stream_decoder_open(IAMF_Stream *stream,
     decoder->buffers[i] = IAMF_MALLOC(float, MAX_FRAME_SIZE *channels);
     if (!decoder->buffers[i]) goto open_fail;
   }
+  decoder->frame.id = stream->element_id;
+  decoder->frame.channels = stream->nb_channels;
 
   if (stream->scheme == AUDIO_ELEMENT_TYPE_CHANNEL_BASED) {
     ScalableChannelDecoder *scale = IAMF_MALLOCZ(ScalableChannelDecoder, 1);
     ChannelLayerContext *ctx = (ChannelLayerContext *)stream->priv;
-    IACoreDecoder **sub_decoders;
-    IACoreDecoder *sub;
+    IAMF_CoreDecoder **sub_decoders;
+    IAMF_CoreDecoder *sub;
 
     if (!scale) goto open_fail;
 
     decoder->scale = scale;
     scale->nb_layers = ctx->layer + 1;
-    sub_decoders = IAMF_MALLOCZ(IACoreDecoder *, scale->nb_layers);
+    sub_decoders = IAMF_MALLOCZ(IAMF_CoreDecoder *, scale->nb_layers);
     if (!sub_decoders) goto open_fail;
     scale->sub_decoders = sub_decoders;
+    scale->frame_offset = iamf_codec_conf_get_frame_offset(conf);
+    ia_logd("frame offset %d", scale->frame_offset);
     ia_logi("open sub decdoers for channel-based.");
     for (int i = 0; i < scale->nb_layers; ++i) {
       sub = iamf_stream_sub_decoder_open(
@@ -1894,8 +2111,7 @@ IAMF_StreamDecoder *iamf_stream_decoder_open(IAMF_Stream *stream,
     }
 
     ia_logi("open demixer.");
-    scale->demixer = demixer_open(conf->nb_samples_per_frame,
-                                  iamf_codec_get_delay(stream->codec_id));
+    scale->demixer = demixer_open(conf->nb_samples_per_frame);
     if (!scale->demixer) goto open_fail;
     iamf_stream_scale_demixer_configure(decoder);
   } else if (stream->scheme == AUDIO_ELEMENT_TYPE_SCENE_BASED) {
@@ -1904,7 +2120,7 @@ IAMF_StreamDecoder *iamf_stream_decoder_open(IAMF_Stream *stream,
     if (!a) goto open_fail;
     decoder->ambisonics = a;
 
-    ia_logi("open sub decdoers for ambisonics.");
+    ia_logd("open sub decdoers for ambisonics.");
     a->decoder = iamf_stream_sub_decoder_open(
         ctx->mode, stream->nb_channels, stream->nb_substreams,
         stream->nb_coupled_substreams, ctx->mapping, ctx->mapping_size, conf);
@@ -1920,19 +2136,18 @@ open_fail:
 }
 
 static int iamf_stream_decoder_check_prepared(IAMF_StreamDecoder *decoder) {
-  Packet *pkt = &decoder->packet;
-  return pkt->pmask == pkt->uflags && pkt->count == pkt->nb_sub_packets;
+  return iamf_packet_check_count(&decoder->packet) &&
+         iamf_frame_check_mask(&decoder->frame);
 }
 
 static int iamf_stream_decoder_receive_packet(IAMF_StreamDecoder *decoder,
                                               int substream_index,
                                               IAMF_Frame *packet) {
-  ia_logd("stream decoder %lu , recevie sub stream %d",
-          decoder->stream->element_id, substream_index);
-
-  if (substream_index > INAVLID_INDEX &&
+  if (substream_index > INVALID_INDEX &&
       substream_index < decoder->packet.nb_sub_packets) {
-    if (!decoder->packet.sub_packets[substream_index]) ++decoder->packet.count;
+    if (!decoder->packet.sub_packets[substream_index]) {
+      ++decoder->packet.count;
+    }
     IAMF_FREE(decoder->packet.sub_packets[substream_index]);
     decoder->packet.sub_packets[substream_index] =
         IAMF_MALLOC(uint8_t, packet->size);
@@ -1942,8 +2157,8 @@ static int iamf_stream_decoder_receive_packet(IAMF_StreamDecoder *decoder,
            packet->size);
     decoder->packet.sub_packet_sizes[substream_index] = packet->size;
     if (!substream_index) {
-      decoder->packet.strim = packet->trim_start;
-      decoder->packet.etrim = packet->trim_end;
+      decoder->frame.strim = packet->trim_start;
+      decoder->frame.etrim = packet->trim_end;
     }
   }
   return 0;
@@ -1952,44 +2167,85 @@ static int iamf_stream_decoder_receive_packet(IAMF_StreamDecoder *decoder,
 static int iamf_stream_decoder_update_parameter(IAMF_StreamDecoder *dec,
                                                 IAMF_DataBase *db,
                                                 uint64_t pid) {
-  ParameterItem *pi =
-      iamf_database_parameter_viewer_get_item(&db->pViewer, pid);
+  ParameterItem *pi = iamf_database_parameter_get_item(db, pid);
   IAMF_Stream *s = dec->stream;
-  Packet *pkt = &dec->packet;
+  Frame *f = &dec->frame;
 
+  //  ia_logd("stream %lu pts %lu", s->element_id, s->timestamp);
   if (pi) {
+    //    ia_logd("parameter %lu pts %lu", pi->id, pi->timestamp);
     if (pi->type == IAMF_PARAMETER_TYPE_DEMIXING &&
-        pkt->pmask & IAMF_PACKET_EXTRA_DEMIX_MODE) {
+        f->mask & IAMF_FRAME_EXTRA_DEMIX_MODE &&
+        ~f->flags & IAMF_FRAME_EXTRA_DEMIX_MODE) {
       ChannelLayerContext *ctx = (ChannelLayerContext *)s->priv;
-      ctx->dmx_mode = iamf_database_element_get_demix_mode(db, s->element_id);
-      ia_logt("update demix mode %d", ctx->dmx_mode);
-      if (ctx->dmx_mode >= 0) pkt->uflags |= IAMF_PACKET_EXTRA_DEMIX_MODE;
+      ctx->dmx_mode = iamf_database_parameter_get_demix_mode(
+          db, pid, s->timestamp + dec->frame_size);
+      ia_logd("update demix mode %d", ctx->dmx_mode);
+      if (ctx->dmx_mode >= 0 || s->trimming_start == dec->frame_size)
+        f->flags |= IAMF_FRAME_EXTRA_DEMIX_MODE;
     } else if (pi->type == IAMF_PARAMETER_TYPE_RECON_GAIN &&
-               pkt->pmask & IAMF_PACKET_EXTRA_RECON_GAIN) {
-      ReconGainList *recon =
-          iamf_database_element_get_recon_gain_list(db, s->element_id);
-      ia_logt("update recon %p", recon);
-      if (recon) {
-        pkt->uflags |= IAMF_PACKET_EXTRA_RECON_GAIN;
+               f->mask & IAMF_FRAME_EXTRA_RECON_GAIN &&
+               ~f->flags & IAMF_FRAME_EXTRA_RECON_GAIN) {
+      ReconGainList *recon = iamf_database_parameter_get_recon_gain_list(
+          db, pid, s->timestamp + dec->frame_size);
+      ia_logd("update recon %p", recon);
+      if (recon || s->trimming_start == dec->frame_size) {
+        f->flags |= IAMF_FRAME_EXTRA_RECON_GAIN;
         iamf_stream_scale_decoder_update_recon_gain(dec, recon);
       }
     } else if (pi->type == IAMF_PARAMETER_TYPE_MIX_GAIN &&
-               pkt->pmask & IAMF_PACKET_EXTRA_MIX_GAIN) {
-      pkt->uflags |= IAMF_PACKET_EXTRA_MIX_GAIN;
+               f->mask & IAMF_FRAME_EXTRA_MIX_GAIN &&
+               ~f->flags & IAMF_FRAME_EXTRA_MIX_GAIN) {
+      if (iamf_database_parameter_check_timestamp(
+              db, pid, s->timestamp + dec->frame_size) ||
+          s->trimming_start == dec->frame_size)
+        f->flags |= IAMF_FRAME_EXTRA_MIX_GAIN;
     }
   }
   return IAMF_OK;
 }
 
+static int iamf_stream_decoder_update_delay(IAMF_StreamDecoder *dec) {
+  IAMF_CoreDecoder *cder = 0;
+  int delay = 0;
+  if (dec->stream->scheme == AUDIO_ELEMENT_TYPE_CHANNEL_BASED) {
+    if (dec->scale->sub_decoders) cder = dec->scale->sub_decoders[0];
+  } else
+    cder = dec->ambisonics->decoder;
+
+  if (cder) delay = dec->delay = iamf_core_decoder_get_delay(cder);
+
+  if (dec->stream->scheme == AUDIO_ELEMENT_TYPE_CHANNEL_BASED)
+    dec->scale->frame_offset += dec->delay;
+
+  return delay;
+}
+
 static int iamf_stream_decoder_decode(IAMF_StreamDecoder *decoder, float *pcm) {
   int ret = 0;
   IAMF_Stream *stream = decoder->stream;
+  float *buffer = decoder->buffers[2];
   if (stream->scheme == AUDIO_ELEMENT_TYPE_CHANNEL_BASED) {
-    float *buffer = decoder->buffers[2];
     ret = iamf_stream_scale_decoder_decode(decoder, buffer);
-    iamf_stream_scale_decoder_demix(decoder, buffer, pcm, ret);
   } else if (stream->scheme == AUDIO_ELEMENT_TYPE_SCENE_BASED)
     ret = iamf_stream_ambisonics_decoder_decode(decoder, pcm);
+
+  if (stream->trimming_start != decoder->frame_size && decoder->delay < 0) {
+    iamf_stream_decoder_update_delay(decoder);
+    stream->trimming_start += decoder->delay;
+    ia_logi("decoder delay is %d, trimming start is %lu", decoder->delay,
+            stream->trimming_start);
+
+    if (stream->scheme == AUDIO_ELEMENT_TYPE_CHANNEL_BASED) {
+      ia_logi("demixing frame offset is %d", decoder->scale->frame_offset);
+      demixer_set_frame_offset(decoder->scale->demixer,
+                               decoder->scale->frame_offset);
+    }
+  }
+
+  if (stream->scheme == AUDIO_ELEMENT_TYPE_CHANNEL_BASED)
+    iamf_stream_scale_decoder_demix(decoder, buffer, pcm, ret);
+
   return ret;
 }
 
@@ -2001,7 +2257,7 @@ int iamf_stream_decoder_decode_finish(IAMF_StreamDecoder *decoder) {
          sizeof(uint32_t) * decoder->packet.nb_sub_packets);
   decoder->packet.count = 0;
   decoder->packet.dts += decoder->frame_size;
-  decoder->packet.uflags = 0;
+  decoder->frame.flags = 0;
   return 0;
 }
 
@@ -2027,14 +2283,14 @@ static int iamf_stream_scale_decoder_update_recon_gain(
         continue;
       }
       ia_logd("audio layer %d :", i);
-      ia_logd("dst %p, src %p ", dst, src);
+      ia_logt("dst %p, src %p ", dst, src);
       if (dst->flags ^ src->flags) {
         dst->flags = src->flags;
-        dst->nb_channels = src->channels;
+        dst->nb_channels = bit1_count(src->flags);
         iamf_recon_channels_order_update(ctx->conf_s[i].layout, dst);
       }
       for (int c = 0; c < dst->nb_channels; ++c) {
-        dst->recon_gain[c] = qf_to_float(src->recon_gain[c], 8);
+        dst->recon_gain[c] = src->recon_gain_f[c];
       }
       ia_logd(" > recon gain flags 0x%04x", dst->flags);
       ia_logd(" > channel count %d", dst->nb_channels);
@@ -2062,43 +2318,39 @@ static int iamf_stream_scale_decoder_decode(IAMF_StreamDecoder *decoder,
   IAMF_Stream *stream = decoder->stream;
   ChannelLayerContext *ctx = (ChannelLayerContext *)stream->priv;
   ScalableChannelDecoder *scale = decoder->scale;
-  int ret = 0;
+  int ret = IAMF_OK;
   float *out = pcm;
-  IACoreDecoder *dec;
+  IAMF_CoreDecoder *dec;
+  uint32_t substream_offset = 0;
 
-  ia_logt("decode sub-packets.");
-  if (scale->nb_layers) {
-    ia_logt("audio layer only mode.");
-    uint32_t substream_offset = 0;
+  if (!scale->nb_layers) return ret;
 
-    for (int i = 0; i <= ctx->layer; ++i) {
-      ia_logt("audio layer %d.", i);
-      dec = scale->sub_decoders[i];
-      ia_logd(
-          "CG#%d: channels %d, streams %d, decoder %p, out %p, offset %lX, "
-          "size %lu",
-          i, ctx->conf_s[i].nb_channels, ctx->conf_s[i].nb_substreams, dec, out,
-          (float *)out - (float *)pcm,
-          sizeof(float) * decoder->frame_size * ctx->conf_s[i].nb_channels);
-      for (int k = 0; k < ctx->conf_s[i].nb_substreams; ++k) {
-        ia_logd(" > sub-packet %d (%p) size %d", k,
-                decoder->packet.sub_packets[substream_offset + k],
-                decoder->packet.sub_packet_sizes[substream_offset + k]);
-      }
-      ret = ia_core_decoder_decode_list(
-          dec, &decoder->packet.sub_packets[substream_offset],
-          &decoder->packet.sub_packet_sizes[substream_offset],
-          ctx->conf_s[i].nb_substreams, out, decoder->frame_size);
-      if (ret < 0) {
-        ia_loge("sub packet %d decode fail.", i);
-        break;
-      } else if (ret != decoder->frame_size) {
-        ia_loge("decoded frame size is not %d (%d).", decoder->frame_size, ret);
-        break;
-      }
-      out += (ret * ctx->conf_s[i].nb_channels);
-      substream_offset += ctx->conf_s[i].nb_substreams;
+  for (int i = 0; i <= ctx->layer; ++i) {
+    dec = scale->sub_decoders[i];
+    ia_logd(
+        "CG#%d: channels %d, streams %d, decoder %p, out %p, offset %lX, "
+        "size %lu",
+        i, ctx->conf_s[i].nb_channels, ctx->conf_s[i].nb_substreams, dec, out,
+        (float *)out - (float *)pcm,
+        sizeof(float) * decoder->frame_size * ctx->conf_s[i].nb_channels);
+    for (int k = 0; k < ctx->conf_s[i].nb_substreams; ++k) {
+      ia_logd(" > sub-packet %d (%p) size %d", k,
+              decoder->packet.sub_packets[substream_offset + k],
+              decoder->packet.sub_packet_sizes[substream_offset + k]);
     }
+    ret = iamf_core_decoder_decode(
+        dec, &decoder->packet.sub_packets[substream_offset],
+        &decoder->packet.sub_packet_sizes[substream_offset],
+        ctx->conf_s[i].nb_substreams, out, decoder->frame_size);
+    if (ret < 0) {
+      ia_loge("sub packet %d decode fail.", i);
+      break;
+    } else if (ret != decoder->frame_size) {
+      ia_loge("decoded frame size is not %d (%d).", decoder->frame_size, ret);
+      break;
+    }
+    out += (ret * ctx->conf_s[i].nb_channels);
+    substream_offset += ctx->conf_s[i].nb_substreams;
   }
 
   return ret;
@@ -2162,18 +2414,18 @@ int iamf_stream_scale_demixer_configure(IAMF_StreamDecoder *decoder) {
 
   demixer_set_output_gain(demixer, chs, gains, count);
 
-  ia_logi("demixer info :");
-  ia_logi("layout %s(%d)", ia_channel_layout_name(ctx->layout), ctx->layout);
-  ia_logi("input channels order :");
+  ia_logd("demixer info :");
+  ia_logd("layout %s(%d)", ia_channel_layout_name(ctx->layout), ctx->layout);
+  ia_logd("input channels order :");
 
   for (int c = 0; c < ctx->channels; ++c) {
-    ia_logi("channel %s(%d)", ia_channel_name(ctx->channels_order[c]),
+    ia_logd("channel %s(%d)", ia_channel_name(ctx->channels_order[c]),
             ctx->channels_order[c]);
   }
 
-  ia_logi("output gain info : ");
+  ia_logd("output gain info : ");
   for (int c = 0; c < count; ++c) {
-    ia_logi("channel %s(%d) gain %f", ia_channel_name(chs[c]), chs[c],
+    ia_logd("channel %s(%d) gain %f", ia_channel_name(chs[c]), chs[c],
             gains[c]);
   }
 
@@ -2194,14 +2446,14 @@ int iamf_stream_ambisonics_decoder_decode(IAMF_StreamDecoder *decoder,
                                           float *pcm) {
   AmbisonicsDecoder *amb = decoder->ambisonics;
   int ret = 0;
-  IACoreDecoder *dec;
+  IAMF_CoreDecoder *dec;
 
   dec = amb->decoder;
   for (int k = 0; k < decoder->packet.nb_sub_packets; ++k) {
     ia_logd(" > sub-packet %d (%p) size %d", k, decoder->packet.sub_packets[k],
             decoder->packet.sub_packet_sizes[k]);
   }
-  ret = ia_core_decoder_decode_list(
+  ret = iamf_core_decoder_decode(
       dec, decoder->packet.sub_packets, decoder->packet.sub_packet_sizes,
       decoder->packet.nb_sub_packets, pcm, decoder->frame_size);
   if (ret < 0) {
@@ -2222,7 +2474,6 @@ static int iamf_stream_render(IAMF_Stream *stream, float *in, float *out,
   float **sin = 0;
   lfe_filter_t *plfe = 0;
 
-  ia_logd("output channels %d", outchs);
   if (!sout) {
     ret = IAMF_ERR_ALLOC_FAIL;
     goto render_end;
@@ -2240,6 +2491,10 @@ static int iamf_stream_render(IAMF_Stream *stream, float *in, float *out,
 
     inchs = ia_channel_layout_get_channels_count(ctx->layout);
     sin = IAMF_MALLOC(float *, inchs);
+    if (!sin) {
+      ret = IAMF_ERR_ALLOC_FAIL;
+      goto render_end;
+    }
 
     for (int i = 0; i < inchs; ++i) {
       sin[i] = &in[frame_size * i];
@@ -2297,11 +2552,8 @@ render_end:
 }
 
 void iamf_mixer_reset(IAMF_Mixer *m) {
-  if (m->element_ids) free(m->element_ids);
-  if (m->trimming_start) free(m->trimming_start);
-  if (m->trimming_end) free(m->trimming_end);
-  if (m->frames) free(m->frames);
-
+  IAMF_FREE(m->element_ids);
+  IAMF_FREE(m->frames);
   memset(m, 0, sizeof(IAMF_Mixer));
 }
 
@@ -2319,95 +2571,65 @@ static int iamf_mixer_init(IAMF_DecoderHandle handle) {
   memset(mixer, 0, sizeof(IAMF_Mixer));
   mixer->nb_elements = cnt;
   mixer->element_ids = IAMF_MALLOCZ(uint64_t, cnt);
-  mixer->trimming_start = IAMF_MALLOCZ(int, cnt);
-  mixer->trimming_end = IAMF_MALLOCZ(int, cnt);
-  mixer->frames = IAMF_MALLOCZ(float *, cnt);
-  if (!mixer->element_ids || !mixer->trimming_start || !mixer->trimming_end ||
-      !mixer->frames) {
+  mixer->frames = IAMF_MALLOCZ(Frame *, cnt);
+  if (!mixer->element_ids || !mixer->frames) {
     iamf_mixer_reset(mixer);
     return IAMF_ERR_ALLOC_FAIL;
   }
   for (int i = 0; i < cnt; ++i) {
     mixer->element_ids[i] = pst->streams[i]->element_id;
   }
-  mixer->count = 0;
-  mixer->channels = iamf_layout_channels_count(&ctx->output_layout->layout);
 
   cc = iamf_database_element_get_codec_conf(&ctx->db,
                                             pst->streams[0]->element_id);
   if (!cc) {
     iamf_mixer_reset(mixer);
     return IAMF_ERR_INTERNAL;
-  } else {
-    mixer->samples = cc->nb_samples_per_frame;
   }
 
-  ia_logd("mixer samples %d", mixer->samples);
   return 0;
 }
 
-static int iamf_mixer_add_frame(IAMF_Mixer *mixer, uint64_t element_id,
-                                float *in, int samples, int trim_start,
-                                int trim_end) {
-  if (samples != mixer->samples) {
-    return IAMF_ERR_BAD_ARG;
-  }
-
-  ia_logd("element id %lu frame, trimming start %d, end %d", element_id,
-          trim_start, trim_end);
+static int iamf_mixer_add_frame(IAMF_Mixer *mixer, Frame *f) {
   for (int i = 0; i < mixer->nb_elements; ++i) {
-    if (mixer->element_ids[i] == element_id) {
-      if (!mixer->frames[i]) {
-        ++mixer->count;
-      }
-      mixer->frames[i] = in;
-      mixer->trimming_start[i] = trim_start;
-      mixer->trimming_end[i] = trim_end;
+    if (mixer->element_ids[i] == f->id) {
+      mixer->frames[i] = f;
       break;
     }
   }
-  ia_logd("frame count %d vs element count %d", mixer->count,
-          mixer->nb_elements);
-
-  if (mixer->count == mixer->nb_elements) {
-    mixer->enable_mix = 1;
-  }
-  return 0;
+  return IAMF_OK;
 }
 
-static int iamf_mixer_mix(IAMF_Mixer *mixer, float *out) {
-  uint32_t offset, o_offset;
-  int s, e, n;
-  ia_logd("samples %d, channels %d", mixer->samples, mixer->channels);
-  memset(out, 0, sizeof(float) * mixer->samples * mixer->channels);
+static int iamf_mixer_mix(IAMF_Mixer *mixer, Frame *f) {
+  int s = mixer->frames[0]->samples;
+  int64_t pts = mixer->frames[0]->pts;
+  int chs = mixer->frames[0]->channels;
+  int soff;
 
-  s = mixer->trimming_start[0];
-  e = mixer->trimming_end[0];
-  for (int i = 1; i < mixer->count; ++i) {
-    if (s > mixer->trimming_start[i]) s = mixer->trimming_start[i];
-    if (e > mixer->trimming_end[i]) e = mixer->trimming_end[i];
+  for (int i = 1; i < mixer->nb_elements; ++i) {
+    if (s != mixer->frames[i]->samples || pts != mixer->frames[i]->pts) {
+      ia_loge("Frame ( 0, %d) has different samples (%d, %d) or pts (%ld, %ld)",
+              i, s, mixer->frames[i]->samples, pts, mixer->frames[i]->pts);
+      return 0;
+    }
   }
 
-  n = mixer->samples - s - e;
+  f->pts = pts;
+  f->samples = s;
+  f->strim = mixer->frames[0]->strim;
+  ia_logd("mixed frame pts %ld, samples %d", f->pts, s);
+  memset(f->data, 0, sizeof(float) * s * chs);
 
-  ia_logd("trim start %d, end %d, output samples %d", s, e, n);
   for (int e = 0; e < mixer->nb_elements; ++e) {
-    for (int c = 0; c < mixer->channels; ++c) {
-      offset = (c * mixer->samples);
-      o_offset = c * n;
-      for (int i = 0; i < mixer->samples; ++i) {
-        if (i < mixer->trimming_start[e] ||
-            mixer->samples - i <= mixer->trimming_end[e])
-          continue;
-        out[o_offset + i - s] += mixer->frames[e][offset + i];
+    for (int c = 0; c < chs; ++c) {
+      soff = c * f->samples;
+      for (int i = 0; i < f->samples; ++i) {
+        f->data[soff + i] += mixer->frames[e]->data[soff + i];
       }
     }
   }
 
-  mixer->count = 0;
-  memset(mixer->frames, 0, sizeof(uint8_t *) * mixer->nb_elements);
-  mixer->enable_mix = 0;
-  return n;
+  return s;
 }
 
 /* >>>>>>>>>>>>>>>>>> STREAM DECODER MIXER >>>>>>>>>>>>>>>>>> */
@@ -2420,9 +2642,9 @@ static int32_t iamf_decoder_internal_reset(IAMF_DecoderHandle handle) {
   iamf_database_reset(&ctx->db);
   iamf_extra_data_reset(&ctx->metadata);
   if (ctx->presentation) iamf_presentation_free(ctx->presentation);
-  if (ctx->mix_presentation_label) free(ctx->mix_presentation_label);
+  IAMF_FREE(ctx->mix_presentation_label);
   if (ctx->output_layout) iamf_layout_info_free(ctx->output_layout);
-  audio_effect_peak_limiter_uninit(&ctx->limiter);
+  if (handle->limiter) audio_effect_peak_limiter_destroy(handle->limiter);
   memset(handle, 0, sizeof(struct IAMF_Decoder));
 
   return 0;
@@ -2434,27 +2656,18 @@ static int32_t iamf_decoder_internal_init(IAMF_DecoderHandle handle,
   int32_t ret = 0;
   uint32_t pos = 0, consume = 0;
   IAMF_DecoderContext *ctx = &handle->ctx;
-  IAMF_OBU obj;
 
   if (~ctx->flags & IAMF_FLAGS_MAGIC_CODE) {
     // search magic code obu
-    ia_logi("without magic code flag.");
+    IAMF_OBU obj;
+    ia_logi("Without magic code flag.");
     while (pos < size) {
       consume = IAMF_OBU_split(data, size, &obj);
       if (!consume || obj.type == IAMF_OBU_MAGIC_CODE) {
-        if (!consume) {
-          ia_loge("consume size 0.");
-        } else {
-          ia_logt("consume size %d, obu type (%d) %s", consume, obj.type,
-                  IAMF_OBU_type_string(obj.type));
-          if (obj.type == IAMF_OBU_MAGIC_CODE) {
-            ia_logi("type is magic code.");
-          }
-        }
+        ia_logi("Get magic code.");
         break;
       }
       pos += consume;
-      consume = 0;
     }
   }
 
@@ -2463,12 +2676,9 @@ static int32_t iamf_decoder_internal_init(IAMF_DecoderHandle handle,
                                                        size - pos);
   }
 
-  if (~ctx->flags & IAMF_FLAGS_CONFIG) {
-    ret = IAMF_ERR_NEED_MORE_DATA;
-  }
+  if (~ctx->flags & IAMF_FLAGS_CONFIG) ret = IAMF_ERR_BUFFER_TOO_SMALL;
 
   *rsize = pos;
-  ia_logt("read size %d pos", pos);
   return ret;
 }
 
@@ -2478,7 +2688,6 @@ uint32_t iamf_decoder_internal_read_descriptors_OBUs(IAMF_DecoderHandle handle,
   IAMF_OBU obu;
   uint32_t pos = 0, ret = 0, rsize = 0;
 
-  ia_logt("handle %p, data %p, size %d", handle, data, size);
   while (pos < size) {
     ret = IAMF_OBU_split(data + pos, size - pos, &obu);
     if (!ret) {
@@ -2502,8 +2711,8 @@ uint32_t iamf_decoder_internal_read_descriptors_OBUs(IAMF_DecoderHandle handle,
   return pos;
 }
 
-uint32_t iamf_decoder_internal_parameter_prepare(IAMF_DecoderHandle handle,
-                                                 uint64_t pid) {
+static uint32_t iamf_decoder_internal_parameter_prepare(
+    IAMF_DecoderHandle handle, uint64_t pid) {
   IAMF_DecoderContext *ctx = &handle->ctx;
   IAMF_Presentation *pst = ctx->presentation;
   IAMF_DataBase *db = &ctx->db;
@@ -2518,13 +2727,88 @@ uint32_t iamf_decoder_internal_parameter_prepare(IAMF_DecoderHandle handle,
         break;
       }
     }
-    if (dec) {
-      iamf_stream_decoder_update_parameter(dec, db, pid);
-      if (iamf_stream_decoder_check_prepared(dec)) pst->prepared_decoder = dec;
+    if (dec) iamf_stream_decoder_update_parameter(dec, db, pid);
+  }
+
+  if (pid == pst->output_gain_id) {
+    ParameterItem *pi = iamf_database_parameter_get_item(db, pid);
+    ElementItem *ei = 0;
+    Frame *f = &pst->frame;
+    int s = pst->nb_streams - 1;
+    if (s >= 0) {
+      ei = iamf_database_element_get_item(db, pst->streams[s]->element_id);
+      if ((ei && pi &&
+           iamf_database_parameter_check_timestamp(
+               db, pid, ei->timestamp + pst->decoders[s]->frame_size)) ||
+          pst->streams[s]->trimming_start == pst->decoders[s]->frame_size) {
+        f->flags |= IAMF_FRAME_EXTRA_MIX_GAIN;
+      }
     }
   }
 
   return IAMF_OK;
+}
+
+static int iamf_decoder_internal_sync(IAMF_DecoderHandle handle) {
+  IAMF_DecoderContext *ctx = &handle->ctx;
+  IAMF_DataBase *db = &ctx->db;
+  IAMF_Presentation *pst = ctx->presentation;
+  IAMF_Stream *s;
+  ElementItem *ei;
+
+  for (int i = 0; i < pst->nb_streams; ++i) {
+    s = pst->streams[i];
+    s->timestamp = iamf_database_element_get_timestamp(db, s->element_id);
+
+    ei = iamf_database_element_get_item(db, s->element_id);
+    if (ei && ei->mixGain && iamf_database_sync_check_id(db, ei->mixGain->id)) {
+      pst->decoders[i]->frame.mask |= IAMF_FRAME_EXTRA_MIX_GAIN;
+      // use mix gain parameter.
+      ei->mixGain->value.mix_gain.use_default = 0;
+      ia_logd("parameters includes mix gain.");
+    } else {
+      pst->decoders[i]->frame.mask &= ~IAMF_FRAME_EXTRA_MIX_GAIN;
+    }
+
+    ia_logd("stream %lu frame mask %04x", s->element_id,
+            pst->decoders[i]->frame.mask);
+  }
+
+  if (iamf_database_sync_check_id(db, pst->output_gain_id)) {
+    ParameterItem *pi =
+        iamf_database_parameter_get_item(db, pst->output_gain_id);
+    if (pi) pi->value.mix_gain.use_default = 0;
+    pst->frame.mask |= IAMF_FRAME_EXTRA_MIX_GAIN;
+    ia_logd("parameters includes output gain.");
+  } else {
+    pst->frame.mask &= ~IAMF_FRAME_EXTRA_MIX_GAIN;
+  }
+  ia_logd("presentation %lu frame mask %04x", pst->obj->mix_presentation_id,
+          pst->frame.mask);
+
+  return IAMF_OK;
+}
+
+static int iamf_decoder_internal_update_statue(IAMF_DecoderHandle handle) {
+  IAMF_DecoderContext *ctx = &handle->ctx;
+  IAMF_Presentation *pst = ctx->presentation;
+  int ret = 1;
+
+  for (int s = 0; s < pst->nb_streams; ++s) {
+    if (!iamf_stream_decoder_check_prepared(pst->decoders[s])) {
+      ret &= 0;
+      break;
+    }
+  }
+
+  if (ret && !iamf_frame_check_mask(&pst->frame)) {
+    iamf_decoder_internal_parameter_prepare(handle, pst->output_gain_id);
+    if (!iamf_frame_check_mask(&pst->frame)) ret &= 0;
+  }
+
+  if (ret) ctx->status = IAMF_DECODER_STATUS_RUN;
+
+  return ret;
 }
 
 uint32_t iamf_decoder_internal_parse_OBUs(IAMF_DecoderHandle handle,
@@ -2532,7 +2816,6 @@ uint32_t iamf_decoder_internal_parse_OBUs(IAMF_DecoderHandle handle,
   IAMF_OBU obu;
   uint32_t pos = 0, ret = 0;
 
-  ia_logd("handle %p, data %p, size %d", handle, data, size);
   while (pos < size) {
     ret = IAMF_OBU_split(data + pos, size - pos, &obu);
     if (!ret) {
@@ -2542,30 +2825,26 @@ uint32_t iamf_decoder_internal_parse_OBUs(IAMF_DecoderHandle handle,
 
     if (obu.type == IAMF_OBU_PARAMETER_BLOCK) {
       uint64_t pid = IAMF_OBU_get_object_id(&obu);
-      ia_logd("get parameter with id %lu", pid);
       if (pid != INVALID_ID) {
+        IAMF_ParameterParam ext;
+        memset(&ext, 0, sizeof(IAMF_ParameterParam));
+        IAMF_ObjectParameter *param = IAMF_OBJECT_PARAM(&ext);
+        IAMF_Object *obj;
+        ext.base.type = IAMF_OBU_PARAMETER_BLOCK;
+        ext.param_base = iamf_database_parameter_viewer_get_parmeter_base(
+            &handle->ctx.db, pid);
         IAMF_Element *e = IAMF_ELEMENT(
             iamf_database_get_element_by_parameterID(&handle->ctx.db, pid));
         if (e) {
-          IAMF_ParameterParam ext;
-          IAMF_ObjectParameter *param = IAMF_OBJECT_PARAM(&ext);
-          IAMF_Object *obj;
-
-          ia_logd("the element id for parameter %lu", e->element_id);
           if (e->element_type == AUDIO_ELEMENT_TYPE_CHANNEL_BASED &&
               e->channels_conf) {
-            memset(&ext, 0, sizeof(IAMF_ObjectParameter));
-            ext.base.type = IAMF_OBU_PARAMETER_BLOCK;
-            ext.param_base = iamf_database_parameter_viewer_get_parmeter_base(
-                &handle->ctx.db, pid);
             ext.nb_layers = e->channels_conf->nb_layers;
-            ext.recon_gain_flags = iamf_database_element_get_recon_gain_flags(
-                &handle->ctx.db, e->element_id);
           }
-          obj = IAMF_object_new(&obu, param);
-          iamf_database_add_object(&handle->ctx.db, obj);
-          iamf_decoder_internal_parameter_prepare(handle, pid);
         }
+        obj = IAMF_object_new(&obu, param);
+        iamf_database_add_object(&handle->ctx.db, obj);
+        iamf_decoder_internal_parameter_prepare(handle, pid);
+        iamf_decoder_internal_update_statue(handle);
       }
     } else if (obu.type >= IAMF_OBU_AUDIO_FRAME &&
                obu.type < IAMF_OBU_MAGIC_CODE) {
@@ -2573,45 +2852,23 @@ uint32_t iamf_decoder_internal_parse_OBUs(IAMF_DecoderHandle handle,
       IAMF_Frame *o = (IAMF_Frame *)obj;
       iamf_decoder_internal_deliver(handle, o);
       IAMF_object_free(obj);
+      iamf_decoder_internal_update_statue(handle);
     } else if (obu.type == IAMF_OBU_MAGIC_CODE) {
       ia_logi("*********** FOUND NEW MAGIC CODE **********");
-      handle->ctx.flags = IAMF_FLAGS_RECONFIG;
+      handle->ctx.status = IAMF_DECODER_STATUS_RECONFIGURE;
       break;
     } else if (obu.type == IAMF_OBU_SYNC) {
       ia_logi("*********** FOUND SYNC OBU **********");
       IAMF_Object *obj = IAMF_object_new(&obu, 0);
-      IAMF_Stream *s;
       IAMF_DecoderContext *ctx = &handle->ctx;
-      IAMF_Presentation *pst = ctx->presentation;
-      ElementItem *ei;
 
+      iamf_database_set_global_time(&handle->ctx.db, ctx->global_time);
       iamf_database_add_object(&handle->ctx.db, obj);
-
-      if (ctx->global_time < ctx->db.sViewer.start_global_time) {
-        ia_logi("global time changed from %lu to %lu", ctx->global_time,
-                ctx->db.sViewer.start_global_time);
-        ctx->global_time = ctx->db.sViewer.start_global_time;
-      }
-      // update timestamps of all streams
-      for (int i = 0; i < pst->nb_streams; ++i) {
-        s = pst->streams[i];
-        s->timestamp =
-            iamf_database_element_get_timestamp(&ctx->db, s->element_id);
-
-        ei = iamf_database_element_get_item(&ctx->db, s->element_id);
-        if (ei && ei->mixGain &&
-            iamf_database_sync_viewer_check_id(&ctx->db, ei->mixGain->id)) {
-          pst->decoders[i]->packet.pmask |= IAMF_PACKET_EXTRA_MIX_GAIN;
-        } else {
-          pst->decoders[i]->packet.pmask &= ~IAMF_PACKET_EXTRA_MIX_GAIN;
-        }
-      }
+      iamf_decoder_internal_sync(handle);
     }
     pos += ret;
 
-    if (handle->ctx.presentation->prepared_decoder) {
-      break;
-    }
+    if (handle->ctx.status == IAMF_DECODER_STATUS_RUN) break;
   }
   return pos;
 }
@@ -2652,27 +2909,41 @@ int iamf_decoder_internal_deliver(IAMF_DecoderHandle handle, IAMF_Frame *obj) {
     stream = pst->streams[i];
     decoder = pst->decoders[i];
 
-    ia_logd("frame id %lu and its stream (%d) id %lu, and index %d", obj->id, i,
-            pst->streams[i]->element_id, idx);
     if (idx == 0) {
-      ctx->global_time = stream->timestamp;
-      ia_logd("global time change to %lu", ctx->global_time);
+      ia_logd("frame id %lu and its stream (%d) id %lu", obj->id, i,
+              pst->streams[i]->element_id);
 
       if (obj->trim_start != stream->trimming_start) {
-        ia_logd("trimming start %lu to %lu", stream->trimming_start,
-                obj->trim_start);
         stream->trimming_start = obj->trim_start;
       }
 
       if (obj->trim_end != stream->trimming_end) {
-        ia_logd("trimming end %lu to %lu", stream->trimming_end, obj->trim_end);
         stream->trimming_end = obj->trim_end;
+      }
+
+      if (obj->trim_start > 0) ia_logd("trimming start %lu ", obj->trim_start);
+      if (obj->trim_end > 0) ia_logd("trimming end %lu", obj->trim_end);
+
+      if (decoder->packet.sub_packets[idx]) {
+        /* when the frame of stream has been overwrite, the timestamp of stream
+         * should be elapsed and the global time should be updated together. */
+
+        ia_logw(
+            "overwrite stream frame. current frame flags 0x%x(vs 0x%x), and "
+            "presentation frame flags 0x%x(vs 0x%x)",
+            decoder->frame.flags, decoder->frame.mask, pst->frame.flags,
+            pst->frame.mask);
+        stream->timestamp += decoder->frame_size;
+        iamf_database_element_time_elapse(db, stream->element_id,
+                                          decoder->frame_size);
+
+        if (ctx->global_time < decoder->stream->timestamp)
+          ctx->global_time = decoder->stream->timestamp;
       }
     }
     iamf_stream_decoder_receive_packet(decoder, idx, obj);
-
-    if (!iamf_stream_decoder_check_prepared(decoder) &&
-        decoder->packet.count == decoder->packet.nb_sub_packets) {
+    if (iamf_packet_check_count(&decoder->packet) &&
+        !iamf_frame_check_mask(&decoder->frame)) {
       ElementItem *ei = iamf_database_element_get_item(db, stream->element_id);
       if (ei) {
         ParameterItem *pi = ei->demixing;
@@ -2683,19 +2954,14 @@ int iamf_decoder_internal_deliver(IAMF_DecoderHandle handle, IAMF_Frame *obj) {
         if (pi) iamf_stream_decoder_update_parameter(decoder, db, pi->id);
       }
     }
-
-    if (iamf_stream_decoder_check_prepared(decoder)) {
-      pst->prepared_decoder = decoder;
-    }
-
   } else {
+    ElementItem *ei;
     for (int e = 0; e < db->eViewer.count; ++e) {
-      idx = iamf_database_element_get_substream_index(
-          db, db->eViewer.items[i].id, obj->id);
+      ei = (ElementItem *)db->eViewer.items[e];
+      idx = iamf_database_element_get_substream_index(db, ei->id, obj->id);
       if (!idx) {
-        iamf_database_element_time_elapse(
-            db, db->eViewer.items[i].id,
-            db->eViewer.items[i].codecConf->nb_samples_per_frame);
+        iamf_database_element_time_elapse(db, ei->id,
+                                          ei->codecConf->nb_samples_per_frame);
       }
     }
   }
@@ -2716,7 +2982,9 @@ static int iamf_target_layout_matching_calculation(TargetLayout *target,
         s = 100;
       }
     }
-  } else {
+  }
+
+  if (!s) {
     s = 50;
     int chs = 0;
     if (target->type == IAMF_LAYOUT_TYPE_LOUDSPEAKERS_SS_CONVENTION) {
@@ -2736,9 +3004,9 @@ static int iamf_target_layout_matching_calculation(TargetLayout *target,
 
 static float iamf_mix_presentation_get_best_loudness(IAMF_MixPresentation *obj,
                                                      LayoutInfo *layout) {
-  int score = 0, s, idx = INAVLID_INDEX;
+  int score = 0, s, idx = INVALID_INDEX;
   SubMixPresentation *sub;
-  float loudness = .0f, loudness_db;
+  float loudness_db = 0.f;
 
   if (obj->num_sub_mixes) {
     /* for (int n = 0; n < obj->num_sub_mixes; ++n) { */
@@ -2753,21 +3021,16 @@ static float iamf_mix_presentation_get_best_loudness(IAMF_MixPresentation *obj,
           idx = i;
         }
       }
-      if (idx > INAVLID_INDEX) {
+      if (idx > INVALID_INDEX) {
         loudness_db = q_to_float(sub->loudness[idx].integrated_loudness, 8);
-        // loudness_db = - 24 - loudness_db; // TV mode
-        // loudness_db = - 16 - loudness_db; // Mobile mode
-        loudness = db2lin(loudness_db);
-        ia_logi("selected loudness is %f(%f db) <- 0x%x", loudness, loudness_db,
+        ia_logi("selected loudness is %f db <- 0x%x", loudness_db,
                 sub->loudness[idx].integrated_loudness & U16_MASK);
-      } else {
-        loudness = 1.0f;
       }
     }
     /* } */
   }
 
-  return loudness;
+  return loudness_db;
 }
 
 static int iamf_mix_presentation_matching_calculation(IAMF_MixPresentation *obj,
@@ -2804,8 +3067,8 @@ static IAMF_MixPresentation *iamf_decoder_get_best_mix_presentation(
     } else if (ctx->mix_presentation_label) {
       int idx = iamf_database_mix_presentation_get_label_index(
           db, ctx->mix_presentation_label);
-      if (idx == INAVLID_INDEX) idx = 0;
-      mp = IAMF_MIX_PRESENTATION(db->mixPresentation->items[idx]);
+      if (idx == INVALID_INDEX) idx = 0;
+      mp = iamf_database_get_mix_presentation_by_index(db, idx);
     } else {
       int max_percentage = 0, sub_percentage;
 
@@ -2813,7 +3076,10 @@ static IAMF_MixPresentation *iamf_decoder_get_best_mix_presentation(
         obj = IAMF_MIX_PRESENTATION(db->mixPresentation->items[i]);
         sub_percentage =
             iamf_mix_presentation_matching_calculation(obj, ctx->output_layout);
-        if (max_percentage < sub_percentage) mp = obj;
+        if (max_percentage < sub_percentage) {
+          max_percentage = sub_percentage;
+          mp = obj;
+        }
       }
     }
   }
@@ -2837,6 +3103,7 @@ static int iamf_decoder_enable_mix_presentation(IAMF_DecoderHandle handle,
   if (!pst) return IAMF_ERR_ALLOC_FAIL;
 
   pst->obj = mixp;
+  pst->output_gain_id = INVALID_ID;
   ctx->presentation = pst;
 
   ia_logd("enable mix presentation id %lu, %p", mixp->mix_presentation_id,
@@ -2849,16 +3116,17 @@ static int iamf_decoder_enable_mix_presentation(IAMF_DecoderHandle handle,
     elem = iamf_database_get_element(db, sub->conf_s[i].element_id);
     cc = iamf_database_element_get_codec_conf(db, elem->element_id);
     pid = sub->conf_s[i].conf_m.gain.base.id;
-    pi = iamf_database_parameter_viewer_get_item(&db->pViewer, pid);
-    if (!pi &&
-        iamf_database_parameter_viewer_add_item(
-            db, &sub->conf_s[i].conf_m.gain.base, INVALID_ID) == IAMF_OK) {
+    pi = iamf_database_parameter_get_item(db, pid);
+    // the mix gain parameter may be used by multiple stream.
+    if (!pi && iamf_database_parameter_add_item(
+                   db, &sub->conf_s[i].conf_m.gain.base, INVALID_ID,
+                   iamf_codec_conf_get_sampling_rate(cc)) == IAMF_OK) {
       float gain_db;
-      pi = iamf_database_parameter_viewer_get_item(&db->pViewer, pid);
+      pi = iamf_database_parameter_get_item(db, pid);
       gain_db = q_to_float(sub->conf_s[i].conf_m.gain.mix_gain, 8);
-      pi->mix_gain->default_mix_gain = db2lin(gain_db);
+      pi->value.mix_gain.default_mix_gain = db2lin(gain_db);
       ia_logi("element %lu : mix gain %f (%f db) <- 0x%x",
-              sub->conf_s[i].element_id, pi->mix_gain->default_mix_gain,
+              sub->conf_s[i].element_id, pi->value.mix_gain.default_mix_gain,
               gain_db, sub->conf_s[i].conf_m.gain.mix_gain & U16_MASK);
     }
 
@@ -2876,6 +3144,20 @@ static int iamf_decoder_enable_mix_presentation(IAMF_DecoderHandle handle,
     if (ret != IAMF_OK) return ret;
   }
 
+  pid = sub->output_mix_config.gain.base.id;
+  pi = iamf_database_parameter_get_item(db, pid);
+  if (pi || iamf_database_parameter_add_item(
+                db, &sub->output_mix_config.gain.base, INVALID_ID,
+                ctx->sampling_rate) == IAMF_OK) {
+    float gain_db;
+    pi = iamf_database_parameter_get_item(db, pid);
+    gain_db = q_to_float(sub->output_mix_config.gain.mix_gain, 8);
+    pi->value.mix_gain.default_mix_gain = db2lin(gain_db);
+    pst->output_gain_id = pi->id;
+    ia_logi("output mix gain %f (%f db) <- 0x%x",
+            pi->value.mix_gain.default_mix_gain, gain_db,
+            sub->output_mix_config.gain.mix_gain & U16_MASK);
+  }
   SpeexResamplerState *resampler = 0;
   if (old) {
     resampler = iamf_presentation_take_resampler(old);
@@ -2884,58 +3166,12 @@ static int iamf_decoder_enable_mix_presentation(IAMF_DecoderHandle handle,
     IAMF_Stream *stream = pst->streams[0];
     resampler =
         iamf_stream_resampler_open(stream, stream->sampling_rate,
-                                   OUTPUT_SAMPLERATE, SPEEX_RESAMPLER_QUALITY);
+                                   ctx->sampling_rate, SPEEX_RESAMPLER_QUALITY);
     if (!resampler) return IAMF_ERR_INTERNAL;
   }
   pst->resampler = resampler;
 
   if (old) iamf_presentation_free(old);
-
-  return IAMF_OK;
-}
-
-static int iamf_decoder_frame_gain(void *in, void *out, int channels,
-                                   int frame_size, MixGain *gain) {
-  float *fin = (float *)in;
-  float *fout = (float *)out;
-  float g;
-  int count, offset;
-  ia_logt("gain %p, channels %d, samples of frame %d", gain, channels,
-          frame_size);
-
-  if (!gain || !gain->mix_gain_uints) {
-    count = frame_size * channels;
-    if (!gain) {
-      for (int i = 0; i < count; ++i) fout[i] = fin[i];
-    } else {
-      g = gain->default_mix_gain;
-      for (int i = 0; i < count; ++i) fout[i] = fin[i] * g;
-    }
-  } else {
-    int idx = 0;
-    for (int s = 0; s < gain->nb_seg; ++s) {
-      if (!gain->mix_gain_uints[s].gains) {
-        count = idx + gain->mix_gain_uints[s].count;
-        g = gain->mix_gain_uints[s].constant_gain;
-        for (int c = 0; c < channels; ++c) {
-          offset = c * frame_size;
-          for (int i = idx; i < count; ++i) {
-            fout[offset + i] = fin[offset + i] * g;
-          }
-        }
-      } else {
-        count = idx + gain->mix_gain_uints[s].count;
-        for (int i = idx, j = 0; i < count; ++i) {
-          g = gain->mix_gain_uints[s].gains[j];
-          for (int c = 0; c < channels; ++c) {
-            offset = c * frame_size;
-            fout[offset + i] = fin[offset + i] * g;
-          }
-        }
-      }
-      idx += gain->mix_gain_uints[s].count;
-    }
-  }
 
   return IAMF_OK;
 }
@@ -2950,7 +3186,7 @@ static int iamf_loudness_process(float *block, int frame_size, int channels,
   for (int c = 0; c < channels; ++c) {
     idx = c * frame_size;
     for (int i = 0; i < frame_size; ++i) {
-      block[idx + i] /= gain;
+      block[idx + i] *= gain;
     }
   }
 
@@ -2962,15 +3198,59 @@ static int iamf_resample(SpeexResamplerState *resampler, float *in, float *out,
   int resample_size =
       frame_size * (resampler->out_rate / resampler->in_rate + 1);
   ia_logt("input samples %d", frame_size);
-  ia_decoder_plane2stride_out_float(resampler->buffer, in, frame_size,
-                                    resampler->nb_channels);
-  speex_resampler_process_interleaved_float(
-      resampler, (const float *)resampler->buffer, (uint32_t *)&frame_size,
-      (float *)in, (uint32_t *)&resample_size);
+  if (resampler->rest_flag == 2) {
+    resample_size =
+        resampler->rest_size * (resampler->out_rate / resampler->in_rate);
+    speex_resampler_process_interleaved_float(
+        resampler, (const float *)NULL, (uint32_t *)&resampler->rest_size,
+        (float *)in, (uint32_t *)&resample_size);
+  } else {
+    ia_decoder_plane2stride_out_float(resampler->buffer, in, frame_size,
+                                      resampler->nb_channels);
+    speex_resampler_process_interleaved_float(
+        resampler, (const float *)resampler->buffer, (uint32_t *)&frame_size,
+        (float *)in, (uint32_t *)&resample_size);
+  }
+  if (!resampler->rest_flag) {
+    resampler->rest_size =
+        frame_size - resample_size * resampler->in_rate / resampler->out_rate;
+    resampler->rest_flag = 1;
+  }
   ia_decoder_stride2plane_out_float(out, in, resample_size,
                                     resampler->nb_channels);
   ia_logt("read samples %d, output samples %d", frame_size, resample_size);
   return resample_size;
+}
+
+static int iamf_delay_buffer_handle(IAMF_DecoderHandle handle, void *pcm) {
+  IAMF_DecoderContext *ctx = &handle->ctx;
+  IAMF_Presentation *pst = ctx->presentation;
+  SpeexResamplerState *resampler = pst->resampler;
+  AudioEffectPeakLimiter *limiter = handle->limiter;
+  int frame_size = limiter->delaySize;
+  int buffer_size = MAX_FRAME_SIZE * ctx->output_layout->channels;
+  float *in, *out;
+  in = IAMF_MALLOCZ(float, buffer_size);
+  out = IAMF_MALLOCZ(float, buffer_size);
+  if (resampler->in_rate != resampler->out_rate) {
+    pst->resampler->rest_flag = 2;
+    int resample_size = iamf_resample(pst->resampler, in, out, 0);
+    frame_size += resample_size;
+    swap((void **)&in, (void **)&out);
+    memset(out, 0, sizeof(float) * buffer_size);
+    for (int c = 0; c < resampler->nb_channels; c++) {
+      memcpy(out + c * frame_size, in + c * resample_size,
+             sizeof(float) * resample_size);
+    }
+    swap((void **)&in, (void **)&out);
+  }
+  frame_size =
+      audio_effect_peak_limiter_process_block(limiter, in, out, frame_size);
+  iamf_decoder_plane2stride_out(pcm, out, frame_size,
+                                ctx->output_layout->channels, ctx->bit_depth);
+  free(in);
+  free(out);
+  return frame_size;
 }
 
 static int iamf_decoder_internal_decode(IAMF_DecoderHandle handle,
@@ -2983,116 +3263,202 @@ static int iamf_decoder_internal_decode(IAMF_DecoderHandle handle,
   IAMF_Stream *stream;
   IAMF_Mixer *mixer = &pst->mixer;
   SpeexResamplerState *resampler = pst->resampler;
-  int ret = 0;
+  Frame *f;
+  int ret = 0, lret = 1;
   uint32_t r = 0;
   int real_frame_size = 0;
-  float *in, *out;
-  MixGain *gain = NULL;
+  float *out = 0;
+  MixGainUnit *u = 0;
+  ElementItem *ei = 0;
+  uint64_t gt = 0;
 
-  ia_logt("handle %p, data %p, size %d", handle, data, size);
-  r = iamf_decoder_internal_parse_OBUs(handle, data, size);
+  if (pst->nb_streams <= 0) return IAMF_ERR_INTERNAL;
 
-  *rsize = r;
+  if (data && size) {
+    r = iamf_decoder_internal_parse_OBUs(handle, data, size);
+    *rsize = r;
 
-  if (~handle->ctx.flags & IAMF_FLAGS_MAGIC_CODE) {
-    return IAMF_ERR_INVALID_STATE;
+    if (ctx->status == IAMF_DECODER_STATUS_RECONFIGURE) {
+      return IAMF_ERR_INVALID_STATE;
+    } else if (ctx->status != IAMF_DECODER_STATUS_RUN) {
+      return 0;
+    }
   }
 
-  if (!pst->prepared_decoder) {
-    return 0;
-  }
+  if ((data && size) || pst->decoders[0]->delay > 0) {
+    for (int s = 0; s < pst->nb_streams; ++s) {
+      decoder = pst->decoders[s];
+      stream = decoder->stream;
+      f = &decoder->frame;
+      f->data = decoder->buffers[0];
+      out = decoder->buffers[1];
 
-  decoder = pst->prepared_decoder;
-  stream = decoder->stream;
-  in = decoder->buffers[0];
-  out = decoder->buffers[1];
+      f->pts = stream->timestamp;
+      if (decoder->delay > 0) f->pts -= decoder->delay;
 
-  ia_logt("packet flag 0x%x", decoder->packet.pmask);
+      ret = iamf_stream_decoder_decode(decoder, f->data);
+      iamf_stream_decoder_decode_finish(decoder);
 
-  ret = iamf_stream_decoder_decode(decoder, in);
-  iamf_stream_decoder_decode_finish(decoder);
-  pst->prepared_decoder = 0;
+      if (ret != decoder->frame_size)
+        ia_logw("decoded result is %d, different frame size %d", ret,
+                decoder->frame_size);
 
-  real_frame_size = ret;
+      if (ret > 0) {
+        f->samples = ret;
 
-  if (ret < 0) {
-    ia_loge("fail to decode audio packet. error no. %d", ret);
-    stream->timestamp += decoder->frame_size;
-    iamf_database_element_time_elapse(db, stream->element_id,
-                                      decoder->frame_size);
-    return ret;
-  }
+        if (!data || size <= 0) {
+          f->etrim = decoder->frame_size - decoder->delay;
+          decoder->delay = 0;
+        }
+
+        ia_logd("strim %lu, frame size %u, delay size %d", f->strim,
+                decoder->frame_size, decoder->delay);
+        if (f->strim == decoder->frame_size ||
+            f->etrim == decoder->frame_size) {
+          ret = 0;
+          ia_logd("The whole frame which size is %d has been cut.", f->samples);
+        } else if ((f->strim && f->strim < decoder->frame_size) ||
+                   (f->etrim && f->etrim < decoder->frame_size) ||
+                   stream->trimming_start) {
+          if (f->etrim > 0 && decoder->delay > 0) {
+            if (decoder->delay > f->etrim) {
+              decoder->delay -= f->etrim;
+              f->etrim = 0;
+            } else {
+              f->etrim -= decoder->delay;
+              decoder->delay = 0;
+            }
+          }
+          ret = iamf_frame_trim(f, f->strim, f->etrim,
+                                stream->trimming_start - f->strim);
+
+          ia_logd("The remaining samples %d after cutting.", ret);
+        }
+      }
+
+      if (!s && f->strim > 0) {
+        ia_logd("external pts is %ld", ctx->pts);
+        ctx->pts +=
+            time_transform(f->strim, stream->sampling_rate, ctx->pts_time_base);
+        ia_logd("external pts changes to %ld", ctx->pts);
+      }
+
+      if (ret <= 0) {
+        if (ret < 0) ia_loge("fail to decode audio packet. error no. %d", ret);
+        stream->timestamp += decoder->frame_size;
+        iamf_database_element_time_elapse(db, stream->element_id,
+                                          decoder->frame_size);
+        if (stream->timestamp > gt) gt = stream->timestamp;
+        lret = ret;
+        continue;
+      }
+      real_frame_size = ret;
 
 #if SR
-  //////// SR decoding
-  iamf_rec_stream_log(stream->element_id, stream->nb_channels, in,
-                      real_frame_size);
-  ////// SR
+      // decoding
+      iamf_rec_stream_log(stream->element_id, stream->nb_channels, f->data,
+                          real_frame_size);
 #endif
 
-  iamf_stream_render(stream, in, out, real_frame_size);
+      iamf_stream_render(stream, f->data, out, real_frame_size);
 
 #if SR
-  //////// SR rendering
-  iamf_ren_stream_log(stream->element_id, stream->final_layout->channels, out,
-                      real_frame_size);
-  ////// SR
+      // rendering
+      iamf_ren_stream_log(stream->element_id, stream->final_layout->channels,
+                          out, real_frame_size);
 #endif
 
-  swap((void **)&in, (void **)&out);
+      swap((void **)&f->data, (void **)&out);
+      f->channels = ctx->output_layout->channels;
 
-  gain = iamf_database_element_get_mix_gain(db, stream->element_id,
-                                            stream->timestamp, real_frame_size);
-  if (gain) {
-    iamf_decoder_frame_gain(in, out, stream->final_layout->channels,
-                            real_frame_size, gain);
-    swap((void **)&in, (void **)&out);
-  }
+      ei = iamf_database_element_get_item(db, stream->element_id);
+      if (ei && ei->mixGain) {
+        u = iamf_database_parameter_get_mix_gain_unit(
+            db, ei->mixGain->id, f->pts, f->samples, stream->sampling_rate);
+        if (u) {
+          iamf_frame_gain(f, u);
+          mix_gain_unit_free(u);
+        }
+      }
 
-  // metadata
-  if (decoder->stream->scheme == AUDIO_ELEMENT_TYPE_CHANNEL_BASED &&
-      ctx->metadata.param) {
-    IAMF_Stream *stream = decoder->stream;
-    ChannelLayerContext *cctx = (ChannelLayerContext *)stream->priv;
-    if (cctx->dmx_mode >= 0) ctx->metadata.param->dmixp_mode = cctx->dmx_mode;
-  }
+      // metadata
+      if (decoder->stream->scheme == AUDIO_ELEMENT_TYPE_CHANNEL_BASED &&
+          ctx->metadata.param) {
+        IAMF_Stream *stream = decoder->stream;
+        ChannelLayerContext *cctx = (ChannelLayerContext *)stream->priv;
+        if (cctx->dmx_mode >= 0)
+          ctx->metadata.param->dmixp_mode = cctx->dmx_mode;
+      }
 
-  iamf_mixer_add_frame(mixer, stream->element_id, in, real_frame_size,
-                       stream->trimming_start, stream->trimming_end);
+      iamf_mixer_add_frame(mixer, f);
 
-  // timestamp
-  stream->timestamp += ret;
-  iamf_database_element_time_elapse(db, stream->element_id, ret);
+      // timestamp
+      stream->timestamp += decoder->frame_size;
+      iamf_database_element_time_elapse(db, stream->element_id,
+                                        decoder->frame_size);
+      if (stream->timestamp > gt) gt = stream->timestamp;
 
-  if (!mixer->enable_mix) {
-    return IAMF_OK;
-  }
-  real_frame_size = iamf_mixer_mix(mixer, out);
-  swap((void **)&in, (void **)&out);
+      pst->frame.data = out;
+      out = f->data;
+      f->flags = 0;
+    }
 
-  if (resampler->in_rate != resampler->out_rate) {
-    real_frame_size = iamf_resample(pst->resampler, in, out, real_frame_size);
-    swap((void **)&in, (void **)&out);
-  }
+    ctx->global_time = gt;
+    if (lret <= 0) {
+      ctx->status = IAMF_DECODER_STATUS_RECEIVE;
+      return lret;
+    }
 
-  // default mode.
-  /* iamf_loudness_process(in, ctx->output_layout->channels, real_frame_size, */
-  /* ctx->loudness); */
+    f = &pst->frame;
+    real_frame_size = iamf_mixer_mix(mixer, f);
 
-  audio_effect_peak_limiter_process_block(&ctx->limiter, in, out,
-                                          real_frame_size);
+    ia_logd("frame flag %04x, output gain flags %04x, pts %lu, id %lu", f->mask,
+            pst->frame.flags, f->pts, pst->output_gain_id);
 
-  iamf_decoder_plane2stride_out_short(pcm, out, real_frame_size,
-                                      ctx->output_layout->channels);
+    u = iamf_database_parameter_get_mix_gain_unit(
+        db, pst->output_gain_id, f->pts, f->samples, ctx->sampling_rate);
+    if (u) {
+      iamf_frame_gain(f, u);
+      mix_gain_unit_free(u);
+    }
+
+    iamf_database_parameters_time_elapse(db, real_frame_size);
+    f->flags = 0;
+
+    if (resampler->in_rate != resampler->out_rate) {
+      real_frame_size =
+          iamf_resample(pst->resampler, f->data, out, real_frame_size);
+      swap((void **)&f->data, (void **)&out);
+    }
+
+    if (ctx->normalization_loudness) {
+      iamf_loudness_process(
+          f->data, real_frame_size, ctx->output_layout->channels,
+          db2lin(ctx->normalization_loudness - ctx->loudness));
+    }
+
+    real_frame_size = audio_effect_peak_limiter_process_block(
+        handle->limiter, f->data, out, real_frame_size);
+
+    iamf_decoder_plane2stride_out(pcm, out, real_frame_size,
+                                  ctx->output_layout->channels, ctx->bit_depth);
+
 #if SR
-  //////// SR mixing
-  iamf_mix_stream_log(ctx->output_layout->channels, out, real_frame_size);
-  ////// SR
+    // mixing
+    iamf_mix_stream_log(ctx->output_layout->channels, out, real_frame_size);
 #endif
+  }
+
+  if (!data) {
+    if (real_frame_size > 0)
+      pcm = (char *)pcm +
+            ctx->bit_depth / 8 * real_frame_size * ctx->output_layout->channels;
+    real_frame_size += iamf_delay_buffer_handle(handle, pcm);
+  }
 
   ctx->duration += real_frame_size;
   ctx->last_frame_size = real_frame_size;
-
+  ctx->status = IAMF_DECODER_STATUS_RECEIVE;
   return real_frame_size;
 }
 
@@ -3196,11 +3562,11 @@ static int iamf_extra_data_init(IAMF_DecoderHandle handle) {
   ia_logt("initialize iamf extra data.");
   metadata->output_sound_system =
       iamf_layout_get_sound_system(&ctx->output_layout->layout);
-  metadata->bitdepth = 16;
+  metadata->bitdepth = ctx->bit_depth;
   metadata->sampling_rate = OUTPUT_SAMPLERATE;
   metadata->output_sound_mode = iamf_presentation_get_output_sound_mode(pst);
 
-  ia_logt("mix presetation %p", ctx->presentation->obj);
+  ia_logt("mix presentation %p", ctx->presentation->obj);
   metadata->num_loudness_layouts =
       ctx->presentation->obj->sub_mixes->num_layouts;
   metadata->loudness_layout =
@@ -3304,6 +3670,8 @@ IAMF_DecoderHandle IAMF_decoder_open(void) {
     handle->ctx.time_precision = OUTPUT_SAMPLERATE;
     handle->ctx.threshold_db = LIMITER_MaximumTruePeak;
     handle->ctx.loudness = 1.0f;
+    handle->ctx.sampling_rate = OUTPUT_SAMPLERATE;
+    handle->ctx.status = IAMF_DECODER_STATUS_INIT;
     if (iamf_database_init(db) != IAMF_OK) {
       IAMF_decoder_close(handle);
       handle = 0;
@@ -3326,30 +3694,84 @@ int32_t IAMF_decoder_close(IAMF_DecoderHandle handle) {
 
 int32_t IAMF_decoder_configure(IAMF_DecoderHandle handle, const uint8_t *data,
                                uint32_t size, uint32_t *rsize) {
-  int32_t ret = 0;
+  int32_t ret = IAMF_OK;
+  IAMF_DecoderContext *ctx;
+  IAMF_DataBase *db;
 
   ia_logt("handle %p, data %p, size %d", handle, data, size);
 
-  if (!handle || !data || !size) {
+  if (!handle) return IAMF_ERR_BAD_ARG;
+
+  ctx = &handle->ctx;
+  db = &ctx->db;
+  if (data && size > 0) {
+    if (ctx->status == IAMF_DECODER_STATUS_INIT)
+      ctx->status = IAMF_DECODER_STATUS_CONFIGURE;
+    else if (ctx->status == IAMF_DECODER_STATUS_RECEIVE)
+      ctx->status = IAMF_DECODER_STATUS_RECONFIGURE;
+
+    if (ctx->status == IAMF_DECODER_STATUS_RECONFIGURE) {
+      ia_logi("Reconfigure decoder.");
+      iamf_database_reset(db);
+      iamf_database_init(db);
+      iamf_extra_data_reset(&ctx->metadata);
+      ctx->status = IAMF_DECODER_STATUS_CONFIGURE;
+    }
+
+    if (!handle->limiter) {
+      ia_logi("Initialize limiter.");
+      handle->limiter = audio_effect_peak_limiter_create();
+      if (!handle->limiter) return IAMF_ERR_ALLOC_FAIL;
+      audio_effect_peak_limiter_init(
+          handle->limiter, handle->ctx.threshold_db, OUTPUT_SAMPLERATE,
+          iamf_layout_channels_count(&handle->ctx.output_layout->layout),
+          LIMITER_AttackSec, LIMITER_ReleaseSec, LIMITER_LookAhead);
+    }
+    ret = iamf_decoder_internal_init(handle, data, size, rsize);
+
+    if (ret == IAMF_OK) ctx->need_configure = 0;
+  } else if (ctx->need_configure) {
+    if (ctx->status < IAMF_DECODER_STATUS_RECEIVE) {
+      ia_loge("Decoder need configure with descriptor obus.");
+      return IAMF_ERR_BAD_ARG;
+    }
+
+    if (ctx->need_configure & IAMF_DECODER_CONFIG_MIX_PRESENTATION) {
+      int idx = iamf_database_mix_presentation_get_label_index(
+          db, ctx->mix_presentation_label);
+      IAMF_MixPresentation *mp = 0;
+
+      ctx->need_configure &= ~IAMF_DECODER_CONFIG_MIX_PRESENTATION;
+
+      if (idx == INVALID_INDEX) return IAMF_OK;
+
+      mp = iamf_database_get_mix_presentation_by_index(db, idx);
+      if (mp->mix_presentation_id ==
+          ctx->presentation->obj->mix_presentation_id) {
+        return IAMF_OK;
+      }
+
+#if 0
+      if (ctx->presentation) {
+        iamf_presentation_free(ctx->presentation);
+        ctx->presentation = 0;
+      }
+
+      if (handle->limiter) {
+        audio_effect_peak_limiter_uninit(handle->limiter);
+        audio_effect_peak_limiter_init(
+            handle->limiter, handle->ctx.threshold_db, OUTPUT_SAMPLERATE,
+            iamf_layout_channels_count(&handle->ctx.output_layout->layout),
+            LIMITER_AttackSec, LIMITER_ReleaseSec, LIMITER_LookAhead);
+      }
+#endif
+    }
+
+    ctx->need_configure = 0;
+  } else {
+    ia_loge("Decoder need configure with descriptor obus.");
     return IAMF_ERR_BAD_ARG;
   }
-
-  if (handle->ctx.flags & IAMF_FLAGS_RECONFIG) {
-    IAMF_DecoderContext *ctx = &handle->ctx;
-
-    ia_logi("reconfigure decoder.");
-    iamf_database_reset(&ctx->db);
-    iamf_database_init(&ctx->db);
-    iamf_extra_data_reset(&ctx->metadata);
-    handle->ctx.flags &= ~IAMF_FLAGS_RECONFIG;
-  } else {
-    ia_logd("initialize limiter.");
-    audio_effect_peak_limiter_init(
-        &handle->ctx.limiter, handle->ctx.threshold_db, OUTPUT_SAMPLERATE,
-        iamf_layout_channels_count(&handle->ctx.output_layout->layout),
-        LIMITER_AttackSec, LIMITER_ReleaseSec, LIMITER_LookAhead);
-  }
-  ret = iamf_decoder_internal_init(handle, data, size, rsize);
 
   if (ret == IAMF_OK) {
     IAMF_MixPresentation *mixp = iamf_decoder_get_best_mix_presentation(handle);
@@ -3360,26 +3782,34 @@ int32_t IAMF_decoder_configure(IAMF_DecoderHandle handle, const uint8_t *data,
       if (ret == IAMF_OK) {
         iamf_mixer_init(handle);
         iamf_extra_data_init(handle);
+        handle->ctx.status = IAMF_DECODER_STATUS_RECEIVE;
       }
       handle->ctx.loudness = iamf_mix_presentation_get_best_loudness(
           mixp, handle->ctx.output_layout);
     } else {
-      handle->ctx.flags = IAMF_FLAGS_RECONFIG;
       ret = IAMF_ERR_INVALID_PACKET;
       ia_loge("Fail to find the mix presentation obu, try again.");
     }
   }
 
+  if (ret == IAMF_OK && db->sync) {
+    IAMF_Object *s = db->sync;
+    db->sync = 0;
+    iamf_database_parameters_clear_segments(db);
+    iamf_database_set_global_time(&handle->ctx.db, 0);
+    iamf_database_sync_update(db, s);
+    iamf_decoder_internal_sync(handle);
+  }
   return ret;
 }
 
 int IAMF_decoder_decode(IAMF_DecoderHandle handle, const uint8_t *data,
                         int32_t size, uint32_t *rsize, void *pcm) {
-  IAMF_DecoderContext *ctx = &handle->ctx;
-  ia_logd("handle %p, data %p, size %d", handle, data, size);
-  if (!(ctx->flags & IAMF_FLAGS_CONFIG)) {
+  ia_logt("handle %p, data %p, size %d", handle, data, size);
+
+  if (!handle) return IAMF_ERR_BAD_ARG;
+  if (handle->ctx.status != IAMF_DECODER_STATUS_RECEIVE)
     return IAMF_ERR_INVALID_STATE;
-  }
   return iamf_decoder_internal_decode(handle, data, size, rsize, pcm);
 }
 
@@ -3469,9 +3899,14 @@ int IAMF_decoder_set_mix_presentation_label(IAMF_DecoderHandle handle,
 
   slen = strlen(label);
   ctx->mix_presentation_label = IAMF_MALLOC(char, slen + 1);
+  if (!ctx->mix_presentation_label) {
+    return IAMF_ERR_ALLOC_FAIL;
+  }
   strcpy(ctx->mix_presentation_label, label);
   ctx->mix_presentation_label[slen] = 0;
 
+  ctx->need_configure |= IAMF_DECODER_CONFIG_MIX_PRESENTATION;
+  ia_logd("set new mix presentation label %s.", label);
   return IAMF_OK;
 }
 
@@ -3550,6 +3985,19 @@ char *IAMF_decoder_get_codec_capability() {
   return list;
 }
 
+int IAMF_decoder_set_normalization_loudness(IAMF_DecoderHandle handle,
+                                            float loudness) {
+  if (!handle) return IAMF_ERR_BAD_ARG;
+  handle->ctx.normalization_loudness = loudness;
+  return IAMF_OK;
+}
+
+int IAMF_decoder_set_bit_depth(IAMF_DecoderHandle handle, uint32_t bit_depth) {
+  if (!handle) return IAMF_ERR_BAD_ARG;
+  handle->ctx.bit_depth = bit_depth;
+  return IAMF_OK;
+}
+
 int IAMF_decoder_peak_limiter_set_threshold(IAMF_DecoderHandle handle,
                                             float db) {
   if (!handle) return IAMF_ERR_BAD_ARG;
@@ -3562,7 +4010,23 @@ float IAMF_decoder_peak_limiter_get_threshold(IAMF_DecoderHandle handle) {
   return handle->ctx.threshold_db;
 }
 
-int IAMF_decoder_set_pts(IAMF_DecoderHandle handle, uint32_t pts,
+int IAMF_decoder_set_sampling_rate(IAMF_DecoderHandle handle, uint32_t rate) {
+  uint32_t sampling_rates[] = {16000, 44100, 48000};
+  int ret = IAMF_ERR_BAD_ARG;
+
+  if (!handle) return IAMF_ERR_BAD_ARG;
+
+  for (int i = 0; i < sizeof(sampling_rates) / sizeof(uint32_t); ++i) {
+    if (rate == sampling_rates[i]) {
+      if (rate != handle->ctx.sampling_rate) handle->ctx.sampling_rate = rate;
+      ret = IAMF_OK;
+      break;
+    }
+  }
+  return ret;
+}
+
+int IAMF_decoder_set_pts(IAMF_DecoderHandle handle, int64_t pts,
                          uint32_t time_base) {
   IAMF_DecoderContext *ctx;
   if (!handle) return IAMF_ERR_BAD_ARG;
@@ -3571,22 +4035,22 @@ int IAMF_decoder_set_pts(IAMF_DecoderHandle handle, uint32_t pts,
   ctx->pts = pts;
   ctx->pts_time_base = time_base;
   ctx->duration = 0;
-  ia_logd("set pts %u/%u", pts, time_base);
+  ia_logd("set pts %ld/%u", pts, time_base);
 
   return IAMF_OK;
 }
 
-int IAMF_decoder_get_last_metadata(IAMF_DecoderHandle handle, uint32_t *pts,
+int IAMF_decoder_get_last_metadata(IAMF_DecoderHandle handle, int64_t *pts,
                                    IAMF_extradata *metadata) {
   IAMF_DecoderContext *ctx;
-  uint64_t d;
+  int64_t d;
   if (!handle || !pts || !metadata) return IAMF_ERR_BAD_ARG;
 
   ctx = &handle->ctx;
-  d = (uint64_t)ctx->pts_time_base * (ctx->duration - ctx->last_frame_size) /
-      ctx->time_precision;
-  *pts = ctx->pts + (uint32_t)d;
-  ia_logd("pts %u/%u, last duration %u/%u", *pts, ctx->pts_time_base,
+  d = time_transform(ctx->duration - ctx->last_frame_size, ctx->time_precision,
+                     ctx->pts_time_base);
+  *pts = ctx->pts + d;
+  ia_logd("pts %ld/%u, last duration %u/%u", *pts, ctx->pts_time_base,
           ctx->duration - ctx->last_frame_size, ctx->time_precision);
 
   iamf_extra_data_copy(metadata, &ctx->metadata);

@@ -78,7 +78,7 @@ static FLAC__StreamDecoderReadStatus flac_stream_read(
     void *client_data) {
   FLACDecoderHandle *handle = (FLACDecoderHandle *)client_data;
   if (handle->packet) {
-    ia_logd("read stream %d data", handle->packet_size);
+    ia_logt("read stream %d data", handle->packet_size);
     memcpy(buffer, handle->packet, handle->packet_size);
     *bytes = handle->packet_size;
     handle->packet = 0;
@@ -99,7 +99,6 @@ static FLAC__StreamDecoderWriteStatus flac_stream_write(
 
   handle->fs = frame->header.blocksize;
   fss = handle->fs * sizeof(FLAC__int32);
-  ia_logd("block size %d, bytes %d", frame->header.blocksize, fss);
 
   for (int i = 0; i < handle->stream_info.channels; ++i) {
     memcpy(out, (void *)buffer[i], fss);
@@ -114,11 +113,10 @@ static void flac_stream_metadata(const FLAC__StreamDecoder *decoder,
                                  void *client_data) {
   if (metadata->type == FLAC__METADATA_TYPE_STREAMINFO) {
     FLACDecoderHandle *handle = (FLACDecoderHandle *)client_data;
-    uint32_t depth = 0;
     handle->stream_info.depth = metadata->data.stream_info.bits_per_sample;
     handle->stream_info.channels = metadata->data.stream_info.channels;
     handle->stream_info.sample_rate = metadata->data.stream_info.sample_rate;
-    ia_logi("depth %d, channels %d, sample_rate %d.", depth,
+    ia_logi("depth %d, channels %d, sample_rate %d.", handle->stream_info.depth,
             handle->stream_info.channels, handle->stream_info.sample_rate);
   }
 }
@@ -143,7 +141,7 @@ static int flac_header_set_channels(uint8_t *h, uint32_t size, int n) {
       offset += 12;
       byte = ~(0x7 << 1) & h[offset];
       byte = ((n - 1) & 0x7) << 1 | byte;
-      ia_logd("%d byte 1 bit: 0x%x->0x%x", offset, h[offset], byte);
+      ia_logt("%d byte 1 bit: 0x%x->0x%x", offset, h[offset], byte);
       if (offset < size) h[offset] = byte;
     } else
       offset += s;
@@ -155,10 +153,9 @@ static int flac_header_set_channels(uint8_t *h, uint32_t size, int n) {
   return IAMF_OK;
 }
 
-static int flac_multistream_decode_list_native(FLACMSDecoder *st,
-                                               uint8_t *buffer[],
-                                               uint32_t size[], void *pcm,
-                                               int frame_size) {
+static int flac_multistream_decode_native(FLACMSDecoder *st, uint8_t *buffer[],
+                                          uint32_t size[], void *pcm,
+                                          int frame_size) {
   FLACDecoderHandle *handle = NULL;
   char *out = (char *)pcm;
   int ss = 0;
@@ -273,15 +270,15 @@ FLACMSDecoder *flac_multistream_decoder_open(uint8_t *config, uint32_t size,
     st = 0;
   }
 
+  for (int i = 0; i < 2; ++i) IAMF_FREE(header[i]);
+
   return st;
 }
 
-int flac_multistream_decode_list(FLACMSDecoder *st, uint8_t *buffer[],
-                                 uint32_t size[], void *pcm,
-                                 uint32_t frame_size) {
+int flac_multistream_decode(FLACMSDecoder *st, uint8_t *buffer[],
+                            uint32_t size[], void *pcm, uint32_t frame_size) {
   if (st->flags & AUDIO_FRAME_PLANE)
-    return flac_multistream_decode_list_native(st, buffer, size, pcm,
-                                               frame_size);
+    return flac_multistream_decode_native(st, buffer, size, pcm, frame_size);
   else {
     return IAMF_ERR_UNIMPLEMENTED;
   }

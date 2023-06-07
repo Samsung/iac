@@ -79,7 +79,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>..\..\..\src\iamf_enc\dmpd\asc\generated\;..\..\..\src\iamf_enc\dmpd\asc\src\;..\..\..\src\iamf_enc\dmpd\asc\include;..\..\..\dep_external\include\;..\..\..\src\iamf_enc\dmpd\asc\3rdparty\stft\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\..\src\iamf_enc\dmpd\asc\generated\;..\..\..\src\iamf_enc\dmpd\asc\src\;..\..\..\src\iamf_enc\dmpd\asc\include;..\..\..\dep_external\include\;..\..\..\src\iamf_enc\dmpd\asc\3rdparty\stft\;..\..\..\src\iamf_enc\dmpd\asc\resampler\</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>HAVE_CONFIG_H;WIN32;_CRT_SECURE_NO_WARNINGS;DISABLE_EXECUTION;USE_QUEUE_METHOD;DISABLE_DEBUG_LOG</PreprocessorDefinitions>
       <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -93,7 +93,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>..\..\..\src\iamf_enc\dmpd\asc\generated\;..\..\..\src\iamf_enc\dmpd\asc\src\;..\..\..\src\iamf_enc\dmpd\asc\include;..\..\..\dep_external\include\;..\..\..\src\iamf_enc\dmpd\asc\3rdparty\stft\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\..\src\iamf_enc\dmpd\asc\generated\;..\..\..\src\iamf_enc\dmpd\asc\src\;..\..\..\src\iamf_enc\dmpd\asc\include;..\..\..\dep_external\include\;..\..\..\src\iamf_enc\dmpd\asc\3rdparty\stft\;..\..\..\src\iamf_enc\dmpd\asc\resampler\</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>HAVE_CONFIG_H;WIN32;_CRT_SECURE_NO_WARNINGS;DISABLE_EXECUTION;USE_QUEUE_METHOD;DISABLE_DEBUG_LOG</PreprocessorDefinitions>
     </ClCompile>
     <Link>
@@ -129,6 +129,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\resampler\asc_resample.c" />
     <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\asc_common_bs.c" />
     <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\asc_dn.c" />
     <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\asc_test.c" />
@@ -173,8 +174,9 @@
     <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\wave.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\include\iamf_asc.h" />
+    <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\resampler\asc_resampler.h" />
     <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\src\asc_common_bs.h" />
-    <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\src\asc_dn.h" />
     <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\src\builtin_op_data.h" />
     <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\src\common.h" />
     <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\src\defs.h" />

@@ -63,6 +63,8 @@ extern "C" {
     typedef int(*resampler_basic_func)(SpeexResamplerState *, uint32_t, const float *, uint32_t *, float *, uint32_t *);
     struct SpeexResamplerState_ {
         float *buffer;
+        uint32_t rest_flag;
+        uint32_t rest_size;
 
         uint32_t in_rate;
         uint32_t out_rate;

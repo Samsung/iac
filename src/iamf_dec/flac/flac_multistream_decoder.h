@@ -42,9 +42,8 @@ typedef struct FLACMSDecoder FLACMSDecoder;
 FLACMSDecoder *flac_multistream_decoder_open(uint8_t *config, uint32_t size,
                                              int streams, int coupled_streams,
                                              uint32_t flags, int *error);
-int flac_multistream_decode_list(FLACMSDecoder *st, uint8_t *buffer[],
-                                 uint32_t len[], void *pcm,
-                                 uint32_t frame_size);
+int flac_multistream_decode(FLACMSDecoder *st, uint8_t *buffer[],
+                            uint32_t len[], void *pcm, uint32_t frame_size);
 void flac_multistream_decoder_close(FLACMSDecoder *st);
 int flac_multistream_decoder_get_sample_bits(FLACMSDecoder *st);
 

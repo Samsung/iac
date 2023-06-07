@@ -32,7 +32,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @date Created 03/03/2023
  **/
 
-
 #ifndef ATOM_H_INCLUDED
 #define ATOM_H_INCLUDED
 
@@ -53,9 +52,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 enum {
   ATOM_TYPE_FTYP = atom_type('f', 't', 'y', 'p'),
-  ATOM_TYPE_STYP = atom_type('s', 't', 'y', 'p'),
-  ATOM_TYPE_SIDX = atom_type('s', 'i', 'd', 'x'),
-  ATOM_TYPE_FREE = atom_type('f', 'r', 'e', 'e'),
   ATOM_TYPE_MDAT = atom_type('m', 'd', 'a', 't'),
   ATOM_TYPE_MOOV = atom_type('m', 'o', 'o', 'v'),
   ATOM_TYPE_MOOF = atom_type('m', 'o', 'o', 'f'),
@@ -65,32 +61,12 @@ enum {
   ATOM_TYPE_TRUN = atom_type('t', 'r', 'u', 'n'),
   ATOM_TYPE_MVHD = atom_type('m', 'v', 'h', 'd'),
   ATOM_TYPE_MDIA = atom_type('m', 'd', 'i', 'a'),
-  ATOM_TYPE_UDTA = atom_type('u', 'd', 't', 'a'),
-  ATOM_TYPE_META = atom_type('m', 'e', 't', 'a'),
   ATOM_TYPE_MINF = atom_type('m', 'i', 'n', 'f'),
   ATOM_TYPE_STBL = atom_type('s', 't', 'b', 'l'),
-  ATOM_TYPE_ILST = atom_type('i', 'l', 's', 't'),
-  ATOM_TYPE_MP4A = atom_type('m', 'p', '4', 'a'),
-  ATOM_TYPE_ESDS = atom_type('e', 's', 'd', 's'),
-  ATOM_TYPE_OPUS = atom_type('O', 'p', 'u', 's'),
-  ATOM_TYPE_DOPS = atom_type('d', 'O', 'p', 's'),
-  ATOM_TYPE_EC_3 = atom_type('e', 'c', '-', '3'),
-  ATOM_TYPE_DEC3 = atom_type('d', 'e', 'c', '3'),
-  ATOM_TYPE_AC_3 = atom_type('a', 'c', '-', '3'),
-  ATOM_TYPE_DAC3 = atom_type('d', 'a', 'c', '3'),
-
-  /* Immersive audio atom */
-  ATOM_TYPE_IATM = atom_type('i', 'a', 't', 'm'),
-  ATOM_TYPE_I3DA = atom_type('i', '3', 'd', 'a'),
-  ATOM_TYPE_IASM = atom_type('i', 'a', 's', 'm'),
-  ATOM_TYPE_CALC = atom_type('c', 'a', 'l', 'c'),
-
   ATOM_TYPE_STTS = atom_type('s', 't', 't', 's'),
   ATOM_TYPE_STSC = atom_type('s', 't', 's', 'c'),
   ATOM_TYPE_STSZ = atom_type('s', 't', 's', 'z'),
   ATOM_TYPE_STCO = atom_type('s', 't', 'c', 'o'),
-  ATOM_TYPE_SGPD = atom_type('s', 'g', 'p', 'd'),
-  ATOM_TYPE_SBGP = atom_type('s', 'b', 'g', 'p')
 };
 
 typedef struct atom_header_s {
@@ -127,13 +103,8 @@ typedef struct atom_mvhd_v1_s {
   uint32_t next_track_id;
 } atom_mvhd_v1;
 
-typedef struct atom_meta_s {
-  uint8_t version;
-  uint8_t flags[3];
-} atom_meta;
-
 void atom_set_logger(FILE *logger);
-int atom_dump(FILE *fp, long apos, uint32_t tmp);
+int atom_dump(FILE *fp, uint64_t apos, uint32_t tmp);
 
 #pragma pack(pop)
 

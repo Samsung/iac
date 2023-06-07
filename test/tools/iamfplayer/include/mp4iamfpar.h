@@ -32,7 +32,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @date Created 03/03/2023
  **/
 
-
 #ifndef __MP4_IAMF_PAR_H_
 #define __MP4_IAMF_PAR_H_
 
@@ -47,12 +46,15 @@ typedef struct {
 MP4IAMFParser *mp4_iamf_parser_create();
 void mp4_iamf_parser_init(MP4IAMFParser *);
 void mp4_iamf_parser_destroy(MP4IAMFParser *);
-int mp4_iamf_parser_open_trak(MP4IAMFParser *, const char *mp4file,
-                              IAMFHeader **header);
+int mp4_iamf_parser_open_audio_track(MP4IAMFParser *, const char *mp4file,
+                                     IAMFHeader **header);
+int mp4_iamf_parser_get_audio_track_header(MP4IAMFParser *,
+                                           IAMFHeader **header);
 int mp4_iamf_parser_read_packet(MP4IAMFParser *, int trakn, void *pkt_buf,
                                 int inbytes, int *pktlen_out,
                                 int64_t *sample_offs, int *ent_no);
 void mp4_iamf_parser_close(MP4IAMFParser *);
 int mp4_iamf_parser_set_logger(MP4IAMFParser *, FILE *logger);
+int mp4_iamf_parser_set_starting_time(MP4IAMFParser *, int tn, uint32_t s);
 
 #endif /* __MP4_IAMF_PAR_H_ */

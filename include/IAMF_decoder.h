@@ -67,7 +67,10 @@ IAMF_DecoderHandle IAMF_decoder_open(void);
 int IAMF_decoder_close(IAMF_DecoderHandle handle);
 
 /**
- * @brief     Configurate an iamf decoder.
+ * @brief     Configurate an iamf decoder. The first configurating decoder must
+ *            need descriptor OBUs, then if only some properties have been
+ *            changed, @ref IAMF_decoder_set_mix_presentation_label API. the
+ *            descriptor OBUs is not need.
  * @param     [in] handle : iamf decoder handle.
  * @param     [in] data : the bitstream.
  * @param     [in] size : the size in bytes of bitstream.
@@ -138,10 +141,27 @@ int IAMF_layout_sound_system_channels_count(IAMF_SoundSystem ss);
 int IAMF_layout_binaural_channels_count();
 
 /**
- * @brief     Get the codec capability of iamf.Need to free string manually.
+ * @brief     Get the codec capability of iamf. Need to free string manually.
  * @return    the supported codec string.
  */
 char *IAMF_decoder_get_codec_capability();
+
+/**
+ * @brief     Set target normalization loudness.
+ * @param     [in] handle : iamf decoder handle.
+ * @param     [in] loundness : target normalization loundness in LKFS.
+ * @return    @ref IAErrCode.
+ */
+int IAMF_decoder_set_normalization_loudness(IAMF_DecoderHandle handle,
+                                            float loudness);
+
+/**
+ * @brief     Set pcm output bitdepth.
+ * @param     [in] handle : iamf decoder handle.
+ * @param     [in] bit depth : target bit depth in bit.
+ * @return    @ref IAErrCode.
+ */
+int IAMF_decoder_set_bit_depth(IAMF_DecoderHandle handle, uint32_t bit_depth);
 
 /**
  * @brief     Set peak threshold value to limiter.
@@ -158,6 +178,14 @@ int IAMF_decoder_peak_limiter_set_threshold(IAMF_DecoderHandle handle,
  * @return    Peak threshold in dB.
  */
 float IAMF_decoder_peak_limiter_get_threshold(IAMF_DecoderHandle handle);
+
+/**
+ * @brief     Set sampling rate.
+ * @param     [in] handle : iamf decoder handle.
+ * @param     [in] rate : sampling rate.
+ * @return    @ref IAErrCode.
+ */
+int IAMF_decoder_set_sampling_rate(IAMF_DecoderHandle handle, uint32_t rate);
 
 // only for tizen
 
@@ -192,9 +220,9 @@ typedef struct IAMF_extradata {
   IAMF_Param *param;
 } IAMF_extradata;
 
-int IAMF_decoder_set_pts(IAMF_DecoderHandle handle, uint32_t pts,
+int IAMF_decoder_set_pts(IAMF_DecoderHandle handle, int64_t pts,
                          uint32_t time_base);
-int IAMF_decoder_get_last_metadata(IAMF_DecoderHandle handle, uint32_t *pts,
+int IAMF_decoder_get_last_metadata(IAMF_DecoderHandle handle, int64_t *pts,
                                    IAMF_extradata *metadata);
 #ifdef __cplusplus
 }

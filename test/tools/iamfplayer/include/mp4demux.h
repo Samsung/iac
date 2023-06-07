@@ -42,6 +42,8 @@ extern "C" {
 typedef struct {
   uint32_t first_chunk;
   uint32_t sample_per_chunk;
+  uint32_t sample_offset;
+  int sample_description_index;
 } chunkinfo;
 
 #ifndef _CREATE_T_
@@ -91,11 +93,19 @@ typedef struct {
     int current;
     int maxsize;
   } frame;
+  int64_t start;
+
+  int frag_sdidx;
   // AudioSpecificConfig data:
   struct {
     uint8_t buf[10];
     int size;
   } asc;
+
+  int csc_count;
+  int csc_idx;
+  uint32_t csc_maxsize;
+
   void *csc;  // codec specific
   struct {
     int size;
@@ -117,11 +127,11 @@ typedef struct {
   uint32_t mdatofs;
   uint32_t mdatsize;
 
-  long moof_position;
+  uint64_t moof_position;
   int moof_flag;
 
-  long next_moov;
-  long next_moof;
+  uint64_t next_moov;
+  uint64_t next_moof;
 
   int num_v_trak;
   int num_a_trak;

@@ -44,7 +44,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include"DHE.h"
 #include"wave.h"
 
-#include "ia_heq.h"
+#include "iamf_heq.h"
 
 FILE *fp = NULL;
 double * dspInBuf[MAX_CHANNELS];
@@ -140,10 +140,10 @@ static int get_height_channels(HEQ_CHANNEL_LAYOUT lay_out)
   return ret;
 }
 
-IA_HEQ *ia_heq_start(int layout,int frame_rate, QueuePlus *pq)
+IAMF_HEQ *iamf_heq_start(int layout,int frame_rate, QueuePlus *pq, char* out_file)
 {
-  IA_HEQ *heq = (IA_HEQ*)malloc(sizeof(IA_HEQ));
-  memset(heq, 0x00, sizeof(IA_HEQ));
+  IAMF_HEQ *heq = (IAMF_HEQ*)malloc(sizeof(IAMF_HEQ));
+  memset(heq, 0x00, sizeof(IAMF_HEQ));
   heq->layout = layout;
   heq->dhe.dspOutBuf_rmse_hgt_short = 0.0;
   heq->dhe.dspOutBuf_rmse_srd_long = 0.0;
@@ -162,8 +162,13 @@ IA_HEQ *ia_heq_start(int layout,int frame_rate, QueuePlus *pq)
 #ifdef USE_QUEUE_METHOD
     heq->pq = pq;
 #else
+#if 0
     char *filename = "audio_w.txt";
     heq->fp = (FILE*)fopen(filename, "w+");
+#else
+    if (out_file)
+      asc->fp = (FILE*)fopen(out_file, "w+");
+#endif
 #endif
   }
   else
@@ -173,7 +178,7 @@ IA_HEQ *ia_heq_start(int layout,int frame_rate, QueuePlus *pq)
   return heq;
 }
 
-int ia_heq_process(IA_HEQ *heq, int16_t *input, int size)
+int iamf_heq_process(IAMF_HEQ *heq, int16_t *input, int size)
 {
   int ret = 0;
 
@@ -292,7 +297,7 @@ int ia_heq_process(IA_HEQ *heq, int16_t *input, int size)
   return 0;
 }
 
-int ia_heq_stop(IA_HEQ *heq)
+int iamf_heq_stop(IAMF_HEQ *heq)
 {
   if(heq->fp)
     fclose(heq->fp);

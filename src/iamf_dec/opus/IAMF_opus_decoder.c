@@ -32,22 +32,26 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @date Created 03/03/2023
  **/
 
+#include <stdlib.h>
+
 #include "IAMF_codec.h"
 #include "IAMF_debug.h"
 #include "IAMF_types.h"
-#include "bitstreamrw.h"
-
+#include "bitstream.h"
 #include "opus_multistream2_decoder.h"
 
 #ifdef IA_TAG
 #undef IA_TAG
 #endif
 
-#define IA_TAG "IAOPUS"
+#define IA_TAG "IAMF_OPUS"
 
-typedef struct IAOpusContext {
+typedef struct IAMF_OPUS_Context {
   void *dec;
-} IAOpusContext;
+  short *out;
+} IAMF_OPUS_Context;
+
+static int iamf_opus_close(IAMF_CodecContext *ths);
 
 /**
  *  IAC-OPUS Specific
@@ -81,8 +85,8 @@ typedef struct IAOpusContext {
  * endian
  *
  * */
-static int ia_opus_init(IACodecContext *ths) {
-  IAOpusContext *ctx = (IAOpusContext *)ths->priv;
+static int iamf_opus_init(IAMF_CodecContext *ths) {
+  IAMF_OPUS_Context *ctx = (IAMF_OPUS_Context *)ths->priv;
   int ec = IAMF_OK;
   int ret = 0;
   uint8_t *config = ths->cspec;
@@ -91,48 +95,67 @@ static int ia_opus_init(IACodecContext *ths) {
     return IAMF_ERR_BAD_ARG;
   }
 
-  ths->delay = get_uint16be(config, 2);
-  ths->sample_rate = get_uint32be(config, 4);
-  ths->channel_mapping_family = get_uint8(config, 10);
+  ths->sample_rate = readu32be(config, 4);
+  ths->channel_mapping_family = config[10];
 
-  ctx->dec = opus_multistream2_decoder_create(
-      ths->sample_rate, ths->streams, ths->coupled_streams,
-      AUDIO_FRAME_FLOAT | AUDIO_FRAME_PLANE, &ret);
+  ctx->dec = opus_multistream2_decoder_create(ths->sample_rate, ths->streams,
+                                              ths->coupled_streams,
+                                              AUDIO_FRAME_PLANE, &ret);
   if (!ctx->dec) {
     ia_loge("fail to open opus decoder.");
     ec = IAMF_ERR_INVALID_STATE;
   }
 
+  ctx->out = (short *)malloc(sizeof(short) * MAX_OPUS_FRAME_SIZE *
+                             (ths->streams + ths->coupled_streams));
+  if (!ctx->out) {
+    iamf_opus_close(ths);
+    return IAMF_ERR_ALLOC_FAIL;
+  }
+
   return ec;
 }
 
-static int ia_opus_decode_list(IACodecContext *ths, uint8_t *buf[],
-                               uint32_t len[], uint32_t count, void *pcm,
-                               const uint32_t frame_size) {
-  IAOpusContext *ctx = (IAOpusContext *)ths->priv;
+static int iamf_opus_decode(IAMF_CodecContext *ths, uint8_t *buf[],
+                            uint32_t len[], uint32_t count, void *pcm,
+                            const uint32_t frame_size) {
+  IAMF_OPUS_Context *ctx = (IAMF_OPUS_Context *)ths->priv;
   OpusMS2Decoder *dec = (OpusMS2Decoder *)ctx->dec;
+  int ret = IAMF_OK;
 
   if (count != ths->streams) {
     return IAMF_ERR_BAD_ARG;
   }
-  return opus_multistream2_decode_list(dec, buf, len, pcm, frame_size);
+  ret = opus_multistream2_decode(dec, buf, len, ctx->out, frame_size);
+  if (ret > 0) {
+    float *out = (float *)pcm;
+    uint32_t samples = ret * (ths->streams + ths->coupled_streams);
+    for (int i = 0; i < samples; ++i) {
+      out[i] = ctx->out[i] / 32768.f;
+    }
+  }
+  return ret;
 }
 
-static int ia_opus_close(IACodecContext *ths) {
-  IAOpusContext *ctx = (IAOpusContext *)ths->priv;
+int iamf_opus_close(IAMF_CodecContext *ths) {
+  IAMF_OPUS_Context *ctx = (IAMF_OPUS_Context *)ths->priv;
   OpusMS2Decoder *dec = (OpusMS2Decoder *)ctx->dec;
 
   if (dec) {
     opus_multistream2_decoder_destroy(dec);
     ctx->dec = 0;
   }
+
+  if (ctx->out) {
+    free(ctx->out);
+  }
   return IAMF_OK;
 }
 
-const IACodec ia_opus_decoder = {
+const IAMF_Codec iamf_opus_decoder = {
     .cid = IAMF_CODEC_OPUS,
-    .priv_size = sizeof(IAOpusContext),
-    .init = ia_opus_init,
-    .decode_list = ia_opus_decode_list,
-    .close = ia_opus_close,
+    .priv_size = sizeof(IAMF_OPUS_Context),
+    .init = iamf_opus_init,
+    .decode = iamf_opus_decode,
+    .close = iamf_opus_close,
 };

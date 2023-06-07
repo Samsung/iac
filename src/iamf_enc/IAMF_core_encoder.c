@@ -342,7 +342,7 @@ static int opus_decode_init(AudioElementEncoder *ae) {
 
   for (int i = 0; i < ae->channel_groups; i++) {
     for (int j = 0; j < ae->ia_core_decoder[i].stream_count; j++) {
-      if (j < ae->ia_core_encoder[i].coupled_stream_count) {
+      if (j < ae->ia_core_decoder[i].coupled_stream_count) {
         ae->ia_core_decoder[i].dep_decoder[j] = opus_multistream_decoder_create(
             ae->input_sample_rate, 2, 1, 1, def_stream_map, &error);
         if (error != 0) {
@@ -953,7 +953,7 @@ static int aac_decode_init(AudioElementEncoder *ae) {
       if (!ae->ia_core_decoder[i].dep_decoder[j]) {
         ia_loge("Error opening decoder\n");
       }
-      if (j < ae->ia_core_encoder[i].coupled_stream_count) {
+      if (j < ae->ia_core_decoder[i].coupled_stream_count) {
         if ((err = aacDecoder_ConfigRaw(ae->ia_core_decoder[i].dep_decoder[j],
                                         &extra_data_c, &extra_data_size)) !=
             AAC_DEC_OK) {

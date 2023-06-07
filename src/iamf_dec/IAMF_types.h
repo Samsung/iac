@@ -91,7 +91,6 @@ typedef enum {
 
 typedef enum {
   AUDIO_FRAME_PLANE = 0x1,
-  AUDIO_FRAME_FLOAT = 0x2,
 } AFlag;
 
 typedef enum {
@@ -113,17 +112,5 @@ typedef enum {
 #define MAX_FLAC_FRAME_SIZE 32768
 
 #define MAX_STREAMS 255
-
-/**
- * opus delay : pre-skip 312
- * */
-#define OPUS_DELAY 312
-
-/**
- * aac delay : 1024 + 1024 + 576 + 144;
- * framing delay + MDCT delay + block switching delay (fl/2 + fs/2). fs = fl
- * / 8. encoder delay is 2048 decoder delay is 720 fl???
- * */
-#define AAC_DELAY 2768
 
 #endif /* IAMF_TYPES_H_ */

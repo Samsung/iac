@@ -30,7 +30,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @brief Claimed IAMF encoder APIs
  * @version 0.1
  * @date Created 3/3/2023
-**/
+ **/
 
 #ifndef IAMF_ENCODER_H
 #define IAMF_ENCODER_H
@@ -136,6 +136,7 @@ typedef struct {
   float start_point_value;
   float end_point_value;
   float control_point_value;
+  float control_point_relative_time;
 } BezierParameterData;
 
 typedef struct {
@@ -147,35 +148,18 @@ typedef struct {
   };
 } AnimatedParameterData;
 
-typedef struct {
-  /*
-  mix_gain is a value in dBs. For mixing of the audio element, this gain shall
-  be applied to all of channels of the audio element. It shall be stored in a
-  16-bit, signed, two’s complement fixed-point value with 8 fractional bits
-  (i.e. Q7.8 in [Q-Format]).
-  */
-  int time_base;
+typedef struct MixGainConfig {
+  uint32_t parameter_rate;
   float default_mix_gain;  // db
 
-  uint32_t duration;
-  uint32_t num_segments;
-  uint32_t constant_segment_interval;
+  uint64_t num_parameter_blks;
+  uint64_t *duration;
+  uint64_t *num_subblocks;
+  uint64_t *constant_subblock_duration;
 
-  uint32_t *segment_interval;                      // num_segments
-  AnimatedParameterData *animated_parameter_data;  // num_segments
-} ElementMixConfig;
-
-typedef struct OutputMixConfig {
-  int time_base;
-  float default_mix_gain;  // db
-
-  uint32_t duration;
-  uint32_t num_segments;
-  uint32_t constant_segment_interval;
-
-  uint32_t *segment_interval;                      // num_segments
-  AnimatedParameterData *animated_parameter_data;  // num_segments
-} OutputMixConfig;
+  uint64_t **subblock_duration;
+  AnimatedParameterData **animated_parameter_data;
+} MixGainConfig;
 
 typedef struct {
   uint8_t info_type;
@@ -223,6 +207,7 @@ typedef struct {
 
 #define MAX_MEASURED_LAYOUT_NUM 10
 typedef struct MixPresentation {
+  int mix_presentation_obu_id;
   MixPresentationAnnotations mix_presentation_annotations;
   int num_sub_mixes;  // simple and base profile, set with 1
 
@@ -230,24 +215,14 @@ typedef struct MixPresentation {
   int audio_element_id[2];
   MixPresentationElementAnnotations mix_presentation_element_annotations[2];
   RenderingConfig rendering_config[2];
-  ElementMixConfig element_mix_config[2];
+  MixGainConfig element_mix_config[2];
 
-  OutputMixConfig output_mix_config;
+  MixGainConfig output_mix_config;
 
   int num_layouts;
   IAMFLayout loudness_layout[MAX_MEASURED_LAYOUT_NUM];
   LoudnessInfo loudness[MAX_MEASURED_LAYOUT_NUM];
 } MixPresentation;
-
-#define MAX_OBU_ID_NUM 100  // TODO
-typedef struct {
-  uint32_t global_offset;
-  uint32_t num_obu_ids;
-  uint32_t obu_id[MAX_OBU_ID_NUM];
-  uint32_t obu_data_type[MAX_OBU_ID_NUM];
-  uint32_t reinitialize_decoder[MAX_OBU_ID_NUM];
-  uint32_t relative_offset[MAX_OBU_ID_NUM];
-} SyncInfo;
 
 #ifndef DEMIXING_MATRIX_SIZE_MAX
 #define DEMIXING_MATRIX_SIZE_MAX (18 * 18 * 2)
@@ -257,7 +232,7 @@ typedef struct IAFrame {
   uint32_t num_samples_to_trim_at_start;
   uint32_t num_samples_to_trim_at_end;
   int element_id;
-  int frame_size;
+  int samples;
   void *pcm;
   struct IAFrame *next;
 } IAFrame;
@@ -342,10 +317,10 @@ int IAMF_encoder_target_loudness_measure_stop(
  * @brief     Set mix presentation.
  * @param     [in] ie : IAMF encoder handler.
  * @param     [in] mix_presentation : the mix_presentation struct
- * @return    @0: success,@others: fail
+ * @return    return mix presentation id.
  */
-void IAMF_encoder_set_mix_presentation(IAMF_Encoder *ie,
-                                       MixPresentation mix_presentation);
+int IAMF_encoder_set_mix_presentation(IAMF_Encoder *ie,
+                                      MixPresentation mix_presentation);
 
 /**
  * @brief     Clear all mix presentations.

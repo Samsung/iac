@@ -32,7 +32,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @date Created 03/03/2023
  **/
 
-
 #include "audio_effect_peak_limiter.h"
 
 #include <math.h>
@@ -87,6 +86,7 @@ void audio_effect_peak_limiter_init(AudioEffectPeakLimiter* ths,
 
   ths->delaySize = delay_size;
   ths->delayBufferSize = delay_size;
+  ths->padsize = delay_size;
 
   for (int channel = 0; channel < num_channels; channel++) {
     for (int i = 0; i < MAX_DELAYSIZE + 1; i++)
@@ -186,7 +186,22 @@ int audio_effect_peak_limiter_process_block(AudioEffectPeakLimiter* ths,
   if (ths->delaySize > 0) {
     ths->entryIndex = DB_IDX(ths->entryIndex + frame_size);
   }
-
+  if (!ths->init) {
+    if (ths->padsize >= frame_size) {
+      ths->padsize -= frame_size;
+      frame_size = 0;
+    } else {
+      int i = 0;
+      for (int c = 0; c < ths->numChannels; c++) {
+        pos = c * frame_size;
+        for (int k = ths->padsize; k < frame_size; k++) {
+          audioBlock[i++] = audioBlock[pos + k];
+        }
+      }
+      frame_size -= ths->padsize;
+      ths->init = 1;
+    }
+  }
   // transmit the block and release memory
   return (frame_size);
 }

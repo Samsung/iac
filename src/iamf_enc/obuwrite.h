@@ -80,7 +80,8 @@ typedef enum ATTRIBUTE_PACKED {
   OBU_IA_Audio_Frame_ID19 = 28,
   OBU_IA_Audio_Frame_ID20 = 29,
   OBU_IA_Audio_Frame_ID21 = 30,
-  OBU_IA_Magic_Code = 31
+  OBU_IA_Magic_Code = 31,
+  OBU_IA_MAX_Count
 
 } AUDIO_OBU_TYPE;
 

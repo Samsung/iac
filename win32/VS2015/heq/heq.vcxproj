@@ -137,6 +137,7 @@
   <ItemGroup>
     <ClInclude Include="..\..\..\src\iamf_enc\dmpd\heq\common.h" />
     <ClInclude Include="..\..\..\src\iamf_enc\dmpd\heq\DHE.h" />
+    <ClInclude Include="..\..\..\src\iamf_enc\dmpd\heq\include\iamf_heq.h" />
     <ClInclude Include="..\..\..\src\iamf_enc\dmpd\heq\utils.h" />
     <ClInclude Include="..\..\..\src\iamf_enc\dmpd\heq\wave.h" />
   </ItemGroup>

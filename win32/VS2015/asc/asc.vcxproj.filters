@@ -141,12 +141,12 @@
     <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\src\kernels\transpose_conv.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\src\iamf_enc\dmpd\asc\resampler\asc_resample.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\src\asc_common_bs.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\src\asc_dn.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\src\builtin_op_data.h">
@@ -174,6 +174,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\src\wave.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\resampler\asc_resampler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\iamf_enc\dmpd\asc\include\iamf_asc.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

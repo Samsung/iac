@@ -121,7 +121,6 @@ typedef struct IAMF_ParameterParam {
   IAMF_ObjectParameter base;
   ParameterBase *param_base;
   int nb_layers;
-  uint32_t recon_gain_flags;
 } IAMF_ParameterParam;
 
 /**
@@ -336,38 +335,41 @@ typedef struct IAMF_Parameter {
   ParameterSegment **segments;
 } IAMF_Parameter;
 
-#define ANIMATED_PARAMETER_DEFINE(Type)     \
-  typedef struct AnimatedParameter_##Type { \
-    uint64_t animated_type;                 \
-    Type start;                             \
-    Type end;                               \
-    Type control;                           \
-    uint8_t control_relative_time;          \
-  } AnimatedParameter_##Type
+#define ANIMATED_PARAMETER_DEFINE(T1, T2)      \
+  typedef struct AnimatedParameter_##T1_##T2 { \
+    uint64_t animated_type;                    \
+    T1 start;                                  \
+    T1 end;                                    \
+    T1 control;                                \
+    T2 control_relative_time;                  \
+  } AnimatedParameter_##T1_##T2
 
-ANIMATED_PARAMETER_DEFINE(short);
+ANIMATED_PARAMETER_DEFINE(short, uint8_t);
+ANIMATED_PARAMETER_DEFINE(float, float);
 
-#define AnimatedParameter(Type) AnimatedParameter_##Type
+#define AnimatedParameter(T1, T2) AnimatedParameter_##T1_##T2
 
 struct ParameterSegment {
+  uint64_t type;
   uint64_t segment_interval;
 };
 
 typedef struct MixGainSegment {
   ParameterSegment seg;
-  AnimatedParameter(short) mix_gain;
+  AnimatedParameter(short, uint8_t) mix_gain;
+  AnimatedParameter(float, float) mix_gain_f;
 } MixGainSegment;
 
 typedef struct DemixingSegment {
   ParameterSegment seg;
-  uint32_t demixing_mode;
+  int demixing_mode;
 } DemixingSegment;
 
 typedef struct ReconGain {
   int layout;
   uint32_t flags;
-  uint32_t channels;
   uint8_t *recon_gain;
+  float *recon_gain_f;
 } ReconGain;
 
 typedef struct ReconGainList {
@@ -413,7 +415,7 @@ struct ObjectSync {
   uint64_t obu_id;
   uint8_t obu_data_type;
   uint8_t reinitialize_decoder;
-  int relative_offset;
+  int64_t relative_offset;
 };
 
 uint32_t IAMF_OBU_split(const uint8_t *data, uint32_t size, IAMF_OBU *obu);
@@ -422,5 +424,5 @@ uint64_t IAMF_OBU_get_object_id(IAMF_OBU *obu);
 const char *IAMF_OBU_type_string(IAMF_OBU_Type type);
 IAMF_Object *IAMF_object_new(IAMF_OBU *obu, IAMF_ObjectParameter *param);
 void IAMF_object_free(IAMF_Object *obj);
-uint32_t IAMF_frame_get_obu_type(uint32_t substream_id);
+void IAMF_parameter_segment_free(ParameterSegment *seg);
 #endif
