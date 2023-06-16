@@ -73,15 +73,13 @@ typedef struct GlobalTimming {
   uint32_t time_rate;
 } GlobalTimming;
 
-#define MAX_AUDIO_ELEMENT_NUM 2
-
 typedef struct {
   uint32_t ia_code;
-  uint32_t version;
-  uint32_t profile_version;
+  uint32_t profile_name;
+  uint32_t profile_compatible;
 
   int obu_redundant_copy;
-} MagicCode;
+} IASequenceHeader;
 
 typedef struct {
   uint32_t codec_config_id;
@@ -113,21 +111,6 @@ typedef struct {
   ChannelAudioLayerConfig channel_audio_layer_config[IA_CHANNEL_LAYOUT_COUNT];
 } ScalableChannelLayoutConfig;
 
-/*
-typedef struct {
-  uint32_t output_channel_count;
-  uint32_t substream_count;
-  uint32_t channel_mapping[12]; //todo
-}AmbisonicsMonoConfig;
-
-typedef struct {
-  uint32_t output_channel_count;
-  uint32_t substream_count;
-  uint32_t coupled_substream_count;
-  uint32_t channel_mapping[12]; //todo
-  uint32_t  demixing_matrix[DEMIXING_MATRIX_SIZE_MAX]; // todo
-DEMIXING_MATRIX_SIZE_MAX? }AmbisonicsProjectionConfig;
-*/
 typedef struct {
   uint32_t ambisonics_mode;
   union {
@@ -199,7 +182,6 @@ typedef struct IamfDataObu {
   uint64_t index;
 } IamfDataObu;
 
-#define MAX_MEASURED_LAYOUT_NUM 10
 #define MAX_MIX_PRESENTATIONS_NUM 10
 typedef struct MixPresentationPriv {
   int mix_presentation_obu_id;
@@ -214,7 +196,7 @@ typedef struct MixPresentationPriv {
 } MixPresentationPriv;
 
 typedef struct DescriptorConfig {
-  MagicCode magic_code;
+  IASequenceHeader ia_sequence_header;
   CodecConfig codec_config;
 
   uint32_t num_audio_elements;
@@ -257,10 +239,18 @@ typedef enum {
 typedef enum {
   AUDIO_PRESKIP_SIZE_INVALID = -1,
   AUDIO_PRESKIP_SIZE_OPUS = 312,
-  AUDIO_PRESKIP_SIZE_AAC = 720,
+  AUDIO_PRESKIP_SIZE_AAC = 0,
   AUDIO_PRESKIP_SIZE_FLAC = 0,
   AUDIO_PRESKIP_SIZE_PCM = 0
 } AudioPreskipSize;
+
+typedef enum {
+  AUDIO_DECODER_DELAY_INVALID = -1,
+  AUDIO_DECODER_DELAY_OPUS = 0,
+  AUDIO_DECODER_DELAY_AAC = 720,
+  AUDIO_DECODER_DELAY_FLAC = 0,
+  AUDIO_DECODER_DELAY_PCM = 0
+} AudioDecoderDelay;
 
 typedef enum {
   PARAMETER_DEFINITION_MIX_GAIN = 0,
@@ -363,12 +353,17 @@ typedef struct ChannelBasedEnc {
   FileContext fc;
 
   int the_preskip_frame;
+  int the_dec_delay_frame;
   QueuePlus queue_dm[QUEUE_STEP_MAX];  // asc
   QueuePlus queue_wg[QUEUE_STEP_MAX];  // heq
   QueuePlus queue_m[IA_CHANNEL_LAYOUT_COUNT];
+  QueuePlus queue_s[IA_CHANNEL_LAYOUT_COUNT];
   QueuePlus queue_r[IA_CHANNEL_LAYOUT_COUNT];
   QueuePlus queue_d[IA_CHANNEL_LAYOUT_COUNT];
   QueuePlus queue_rg[IA_CHANNEL_LAYOUT_COUNT];
+
+  QueuePlus queue_pad_i;
+  QueuePlus queue_pad_f;
 
   // ASC and HEQ
   IAMF_ASC *asc;
@@ -401,6 +396,7 @@ typedef struct AudioElementEncoder {
   int channels;
   int frame_size;
   int preskip_size;
+  int dec_delay_size;
   int codec_id;
 
   IA_CORE_ENCODER ia_core_encoder[IA_CHANNEL_LAYOUT_COUNT];

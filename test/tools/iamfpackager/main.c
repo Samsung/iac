@@ -42,8 +42,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "cJSON.h"
 #include "mp4mux.h"
 #include "progressbar.h"
-#include "wavreader.h"
-#include "wavwriter.h"
+#include "dep_wavreader.h"
+#include "dep_wavwriter.h"
 #ifndef MAX_OUTPUT_CHANNELS
 #define MAX_OUTPUT_CHANNELS 24
 #endif
@@ -68,14 +68,18 @@ typedef struct {
 
 void print_usage(char *argv[]) {
   fprintf(stderr, "Usage:\n");
-  fprintf(stderr, "-profile : <0/1(simpe/base)>\n");
+  fprintf(stderr, "-profile   : <0/1(simpe/base)>\n");
   fprintf(stderr,
           "-codec     : <codec name/frame size(opus,aac,flac,pcm/1024)>\n");
-  fprintf(stderr,
-          "-mode      : <audio element "
-          "type(0:channle-based,1:scene-based(Mono),2:scene-based(Projection))/"
-          "input "
-          "channel layout/channel layout combinations>\n");
+  fprintf(
+      stderr,
+      "-mode      : <audio element "
+      "type(0:channle-based,1:scene-based(Mono),2:scene-based(Projection)/"
+      "config> \n"
+      "             <0/channel layout/channel layout combinations>\n"
+      "             <1/output channel count/substream count/channel mapping>\n"
+      "             <2/output channel count/substream count/coupled substream "
+      "count/demixing matrix>\n");
   fprintf(stderr, "-i         : <input wav file>\n");
   fprintf(stderr, "-o         : <0/1/2(bitstream/mp4/fmp4)> <output file>\n");
   fprintf(stderr,
@@ -84,8 +88,8 @@ void print_usage(char *argv[]) {
           "simple_profile.iamf\n");
   fprintf(stderr,
           "or\niamfpackager -profile 1 -codec opus -mode 0/7.1.4/3.1.2+5.1.2 "
-          "-i input1.wav -mode 1 -i "
-          "input2.wav -o 0 base_profile.iamf\n");
+          "-i input1.wav -mode 1/4/4/0,1,2,3 -i "
+          "input2.wav -o 1 base_profile.mp4\n");
 }
 
 static void mix_presentation_free(MixPresentation *mixp) {
@@ -239,15 +243,16 @@ static char *sound_system_str[] = {
     {"SOUND_SYSTEM_E"},        // 4+5+1, 1
     {"SOUND_SYSTEM_F"},        // 3+7+0, 2
     {"SOUND_SYSTEM_G"},        // 4+9+0, 1
-    {"SOUND_SYSTEM_H"},        // 9+10+3, 2
+    {"SOUND_SYSTEM_H"},        // 9+10+3,2
     {"SOUND_SYSTEM_I"},        // 0+7+0, 1
     {"SOUND_SYSTEM_J"},        // 4+7+0, 1
     {"SOUND_SYSTEM_EXT_712"},  // 2+7+0, 1
     {"SOUND_SYSTEM_EXT_312"},  // 2+3+0, 1
+    {"SOUND_SYSTEM_MONO"},     // 0+1+0, 0
 };
 
 static int get_sound_system_by_string(char *sound_system) {
-  for (int i = 0; i < 12; i++) {
+  for (int i = 0; i < SOUND_SYSTEM_END; i++) {
     if (!strcmp(sound_system_str[i], sound_system)) return i;
   }
   return -1;
@@ -257,12 +262,23 @@ static int parse_mix_repsentation(cJSON *json, MixPresentation_t *mixp_t) {
   for (int mix = 0; mix < mix_num; mix++) {
     MixPresentation *mixp = &(mixp_t[mix].mixp);
     cJSON *json_mix = cJSON_GetArrayItem(json, mix);
-    cJSON *json_mix_anotation =
-        cJSON_GetObjectItem(json_mix, "mix_presentation_annotations");
-    mixp->mix_presentation_annotations.mix_presentation_friendly_label =
-        cJSON_GetObjectItem(json_mix_anotation,
-                            "mix_presentation_friendly_label")
-            ->valuestring;
+    mixp->count_label = cJSON_GetObjectItem(json_mix, "count_label")->valueint;
+    cJSON *json_languages = cJSON_GetObjectItem(json_mix, "language_labels");
+    for (int label = 0; label < mixp->count_label; label++) {
+      cJSON *json_language = cJSON_GetArrayItem(json_languages, label);
+      mixp->language_label[label] = json_language->valuestring;
+    }
+    cJSON *json_presentation_annotations =
+        cJSON_GetObjectItem(json_mix, "presentation_annotations");
+    for (int label = 0; label < mixp->count_label; label++) {
+      cJSON *json_mix_presentation_anotation =
+          cJSON_GetArrayItem(json_presentation_annotations, label);
+      mixp->mix_presentation_annotations[label]
+          .mix_presentation_friendly_label =
+          cJSON_GetObjectItem(json_mix_presentation_anotation,
+                              "mix_presentation_friendly_label")
+              ->valuestring;
+    }
     mixp->num_sub_mixes =
         cJSON_GetObjectItem(json_mix, "num_sub_mixes")->valueint;
     cJSON *json_mix_submix = cJSON_GetObjectItem(json_mix, "sub_mixes");
@@ -277,13 +293,17 @@ static int parse_mix_repsentation(cJSON *json, MixPresentation_t *mixp_t) {
       int element_index =
           cJSON_GetObjectItem(json_element, "element_index")->valueint;
       mixp_t[mix].element_index[ele] = element_index;
-      cJSON *json_element_annotations = cJSON_GetObjectItem(
-          json_element, "mix_presentation_element_annotations");
-      mixp->mix_presentation_element_annotations[ele]
-          .mix_presentation_friendly_label =
-          cJSON_GetObjectItem(json_element_annotations,
-                              "audio_element_friendly_label")
-              ->valuestring;
+      cJSON *json_element_annotations =
+          cJSON_GetObjectItem(json_element, "element_annotations");
+      for (int label = 0; label < mixp->count_label; label++) {
+        cJSON *json_mix_element_anotation =
+            cJSON_GetArrayItem(json_element_annotations, label);
+        mixp->mix_presentation_element_annotations[ele][label]
+            .audio_element_friendly_label =
+            cJSON_GetObjectItem(json_mix_element_anotation,
+                                "audio_element_friendly_label")
+                ->valuestring;
+      }
       cJSON *json_element_config =
           cJSON_GetObjectItem(json_element, "element_mix_config");
       cJSON *json_element_mix_gain =
@@ -361,6 +381,10 @@ static int parse_mix_repsentation(cJSON *json, MixPresentation_t *mixp_t) {
         cJSON_GetObjectItem(json_mix_submix, "output_mix_config");
     cJSON *json_out_mix_gain =
         cJSON_GetObjectItem(json_output_mix_config, "output_mix_gain");
+    cJSON *json_out_mix_para =
+        cJSON_GetObjectItem(json_out_mix_gain, "param_definition");
+    mixp->output_mix_config.parameter_rate =
+        cJSON_GetObjectItem(json_out_mix_para, "parameter_rate")->valueint;
     cJSON *json_out_mix_anim =
         cJSON_GetObjectItem(json_out_mix_gain, "animation");
     if (json_out_mix_anim) {
@@ -448,6 +472,7 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
 
   int measured_target[10];
   int num_layouts = 0;
+  AudioElementConfig element_config;
 
   while (args < argc) {
     if (argv[args][0] == '-') {
@@ -508,16 +533,84 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
           fprintf(stderr, "\n \n");
 
           channel_layout_cb[index] = IA_CHANNEL_LAYOUT_COUNT;
+
+          element_config.layout_in = channel_layout_in;
+          element_config.layout_cb = channel_layout_cb;
         } else if (argv[args][0] == '1') {
           audio_element_type = AUDIO_ELEMENT_SCENE_BASED;
-          ambisonics_mode = 0;
+          element_config.ambisonics_mode = 0;
+          char argv_string[1024];
+          strcpy(argv_string, argv[args]);
+          char *amb_conf = strtok(argv_string, "/");
+          amb_conf = strtok(NULL, "/");
+          if (amb_conf) {
+            element_config.ambisonics_mono_config.output_channel_count =
+                atoi(amb_conf);
+          }
+          amb_conf = strtok(NULL, "/");
+          if (amb_conf) {
+            element_config.ambisonics_mono_config.substream_count =
+                atoi(amb_conf);
+          }
+          amb_conf = strtok(NULL, "/");
+          if (amb_conf) {
+            char *mapping_s = strtok(amb_conf, ",");
+            int mapping_i = 0;
+            while (mapping_s) {
+              element_config.ambisonics_mono_config
+                  .channel_mapping[mapping_i++] = atoi(mapping_s);
+              mapping_s = strtok(NULL, ",");
+            }
+            if (mapping_i !=
+                element_config.ambisonics_mono_config.output_channel_count) {
+              fprintf(stderr, "wrong mapping\n");
+              return (0);
+            }
+          }
           fprintf(stderr, "\nAudio Element Type:%s\n",
                   audio_element_type == AUDIO_ELEMENT_CHANNEL_BASED
                       ? "Channel-Base"
                       : "Scene-Base");
         } else if (argv[args][0] == '2') {
           audio_element_type = AUDIO_ELEMENT_SCENE_BASED;
-          ambisonics_mode = 1;
+          element_config.ambisonics_mode = 1;
+          char argv_string[1024];
+          strcpy(argv_string, argv[args]);
+          char *amb_conf = strtok(argv_string, "/");
+          amb_conf = strtok(NULL, "/");
+          if (amb_conf) {
+            element_config.ambisonics_projection_config.output_channel_count =
+                atoi(amb_conf);
+          }
+          amb_conf = strtok(NULL, "/");
+          if (amb_conf) {
+            element_config.ambisonics_projection_config.substream_count =
+                atoi(amb_conf);
+          }
+          amb_conf = strtok(NULL, "/");
+          if (amb_conf) {
+            element_config.ambisonics_projection_config
+                .coupled_substream_count = atoi(amb_conf);
+          }
+          amb_conf = strtok(NULL, "/");
+          if (amb_conf) {
+            char *demix_s = strtok(amb_conf, ",");
+            int mapping_i = 0;
+            while (demix_s) {
+              element_config.ambisonics_projection_config
+                  .demixing_matrix[mapping_i++] = atoi(demix_s);
+              demix_s = strtok(NULL, ",");
+            }
+            if (mapping_i != element_config.ambisonics_projection_config
+                                     .output_channel_count *
+                                 (element_config.ambisonics_projection_config
+                                      .substream_count +
+                                  element_config.ambisonics_projection_config
+                                      .coupled_substream_count)) {
+              fprintf(stderr, "wrong demixing_matrix\n");
+              return (0);
+            }
+          }
           fprintf(stderr, "\nAudio Element Type:%s\n",
                   audio_element_type == AUDIO_ELEMENT_CHANNEL_BASED
                       ? "Channel-Base"
@@ -562,15 +655,17 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
   int file_size = ftell(fp);
   rewind(fp);
 
-  char json_string[1024 * 10];
+  char *json_string = malloc(file_size);
   fread(json_string, 1, file_size, fp);
   fclose(fp);
 
   cJSON *json = cJSON_Parse(json_string);
   if (!json) {
     printf("Error before: [%s]\n", cJSON_GetErrorPtr());
+    free(json_string);
     return 1;
   }
+  free(json_string);
   MixPresentation_t mixp_t[10];
   for (int i = 0; i < 10; i++) {
     memset(&mixp_t[i], 0x00, sizeof(MixPresentation_t));
@@ -617,7 +712,7 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
   char in_wav[255] = {0};
   if (strlen(in_file) < 255) strncpy(in_wav, in_file, strlen(in_file));
   // sprintf(in_wav, "%s.wav", in_file);
-  in_wavf = wav_read_open(in_wav);
+  in_wavf = dep_wav_read_open(in_wav);
   if (!in_wavf) {
     fprintf(stderr, "Could not open input file %s\n", in_wav);
     goto failure;
@@ -630,9 +725,9 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
   int endianness;
   unsigned int data_length;
 
-  wav_get_header(in_wavf, &format, &channels, &sample_rate, &bits_per_sample,
+  dep_wav_get_header(in_wavf, &format, &channels, &sample_rate, &bits_per_sample,
                  &endianness, &data_length);
-  if (in_wavf) wav_read_close(in_wavf);
+  if (in_wavf) dep_wav_read_close(in_wavf);
   fprintf(stderr,
           "input wav: format[%d] channels[%d] sample_rate[%d] "
           "bits_per_sample[%d] endianness[%s] data_length[%d]\n",
@@ -666,36 +761,6 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
       IAMF_encoder_create(sample_rate, bits_per_sample, endianness,
                           codec_id,  // 1:opus, 2:aac
                           chunk_size, &error);
-  AudioElementConfig element_config;
-  if (audio_element_type == AUDIO_ELEMENT_CHANNEL_BASED) {
-    element_config.layout_in = channel_layout_in;
-    element_config.layout_cb = channel_layout_cb;
-  } else if (audio_element_type == AUDIO_ELEMENT_SCENE_BASED) {
-    element_config.input_channels = channels;
-    if (ambisonics_mode == 0) {
-      element_config.ambisonics_mode = ambisonics_mode;
-      element_config.ambisonics_mono_config.output_channel_count = channels;
-      element_config.ambisonics_mono_config.substream_count = channels;
-      for (int i = 0; i < channels; i++) {
-        element_config.ambisonics_mono_config.channel_mapping[i] = i;
-      }
-    } else if (ambisonics_mode == 1) {
-      element_config.ambisonics_mode = ambisonics_mode;
-      element_config.ambisonics_projection_config.output_channel_count =
-          channels;
-      element_config.ambisonics_projection_config.substream_count = channels;
-      element_config.ambisonics_projection_config.coupled_substream_count = 0;
-      for (int s = 0; s < channels; s++)
-        for (int c = 0; c < channels; c++) {
-          if (s == c)
-            element_config.ambisonics_projection_config
-                .demixing_matrix[s * channels + c] = 32767;
-          else
-            element_config.ambisonics_projection_config
-                .demixing_matrix[s * channels + c] = 0;
-        }
-    }
-  }
   int element_id =
       IAMF_audio_element_add(ia_enc, audio_element_type, element_config);
 
@@ -719,9 +784,9 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
   // least.
   for (int i = 0; i < mix_num; i++) {
     mixp_t[i].mixp.audio_element_id[0] = element_id;
-    in_wavf = wav_read_open(in_wav);
+    in_wavf = dep_wav_read_open(in_wav);
     if (mixp_t[i].mixp.num_layouts > 0) {
-      int pcm_frames = wav_read_data(in_wavf, (unsigned char *)wav_samples,
+      int pcm_frames = dep_wav_read_data(in_wavf, (unsigned char *)wav_samples,
                                      bsize_of_samples);
       int count = 0;
       IAMF_encoder_target_loudness_measure_start(ia_enc, &mixp_t[i].mixp);
@@ -736,12 +801,12 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
         ia_frame.pcm = wav_samples;
         IAMF_encoder_target_loudness_measure(ia_enc, &mixp_t[i].mixp,
                                              &ia_frame);
-        pcm_frames = wav_read_data(in_wavf, (unsigned char *)wav_samples,
+        pcm_frames = dep_wav_read_data(in_wavf, (unsigned char *)wav_samples,
                                    bsize_of_samples);
       }
       IAMF_encoder_target_loudness_measure_stop(ia_enc, &mixp_t[i].mixp);
     }
-    if (in_wavf) wav_read_close(in_wavf);
+    if (in_wavf) dep_wav_read_close(in_wavf);
     if (mixp_t[i].element_para_data[0].animation_type >
         ANIMATION_TYPE_INVALID) {
       uint64_t total_samples = data_length / bsize_of_1sample;
@@ -766,17 +831,17 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
   /**
    * 3. ASC and HEQ pre-process.
    * */
-  in_wavf = wav_read_open(in_wav);
+  in_wavf = dep_wav_read_open(in_wav);
   if (index > 0)  // non-scalable
   {
     start_t = clock();
     int pcm_frames =
-        wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
+        dep_wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
     IAMF_encoder_dmpd_start(ia_enc, element_id);
     while (pcm_frames) {
       IAMF_encoder_dmpd_process(ia_enc, element_id, wav_samples,
                                 pcm_frames / bsize_of_1sample);
-      pcm_frames = wav_read_data(in_wavf, (unsigned char *)wav_samples,
+      pcm_frames = dep_wav_read_data(in_wavf, (unsigned char *)wav_samples,
                                  bsize_of_samples);
     }
     IAMF_encoder_dmpd_stop(ia_enc, element_id);
@@ -785,15 +850,15 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
             (float)(stop_t - start_t) / CLOCKS_PER_SEC);
   }
 
-  if (in_wavf) wav_read_close(in_wavf);
+  if (in_wavf) dep_wav_read_close(in_wavf);
 
   start_t = clock();
   /**
    * 4. loudness and gain pre-process.
    * */
-  in_wavf = wav_read_open(in_wav);
+  in_wavf = dep_wav_read_open(in_wav);
   int pcm_frames =
-      wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
+      dep_wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
   ProgressBar bar;
   ProgressBarInit(&bar);
   int total, current;
@@ -802,12 +867,13 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
   bar.startBar(&bar, "Loudness", 0);
   total = data_length;
   current = 0;
+  IAMF_encoder_scalable_loudnessgain_start(ia_enc, element_id);
   while (pcm_frames) {
     IAMF_encoder_scalable_loudnessgain_measure(ia_enc, element_id, wav_samples,
                                                pcm_frames / bsize_of_1sample);
 
     pcm_frames =
-        wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
+        dep_wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
     wr = (wav_reader_s *)in_wavf;
     current = total - wr->data_length;
     float pct = ((float)current / 1000) / ((float)total / 1000) * 100;
@@ -817,24 +883,23 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
 
   IAMF_encoder_scalable_loudnessgain_stop(ia_enc, element_id);
 
-  if (in_wavf) wav_read_close(in_wavf);
+  if (in_wavf) dep_wav_read_close(in_wavf);
   /**
    * 5. calculate recon gain.
    * */
-  in_wavf = wav_read_open(in_wav);
+  in_wavf = dep_wav_read_open(in_wav);
   pcm_frames =
-      wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
-
+      dep_wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
+  IAMF_encoder_reconstruct_gain_start(ia_enc, element_id);
   while (pcm_frames) {
     IAMF_encoder_reconstruct_gain(ia_enc, element_id, wav_samples,
                                   pcm_frames / bsize_of_1sample);
     pcm_frames =
-        wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
+        dep_wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
   }
 
+  if (in_wavf) dep_wav_read_close(in_wavf);
 ENCODING:
-  if (in_wavf) wav_read_close(in_wavf);
-
   /**
    * 6. get immersive audio global descriptor sample group.
    * */
@@ -881,9 +946,9 @@ ENCODING:
   uint32_t max_packet_size = MAX_OUTPUT_CHANNELS * chunk_size *
                              MAX_BITS_PER_SAMPLE * 2;  // one audio elements
   unsigned char *encode_ia = malloc(max_packet_size);
-  in_wavf = wav_read_open(in_wav);
+  in_wavf = dep_wav_read_open(in_wav);
   pcm_frames =
-      wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
+      dep_wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
   int demix_mode = 0;
   while (1) {
     IAFrame ia_frame;
@@ -921,7 +986,7 @@ ENCODING:
     }
 
     pcm_frames =
-        wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
+        dep_wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
     frame_count++;
   }
 
@@ -945,7 +1010,7 @@ ENCODING:
   }
   if (encode_ia) free(encode_ia);
 failure:
-  if (in_wavf) wav_read_close(in_wavf);
+  if (in_wavf) dep_wav_read_close(in_wavf);
 
   cJSON_Delete(json);
   return 0;
@@ -985,12 +1050,12 @@ void iamf_pre_process(BaseProfileHandler *handler, int element_index) {
      * 4. ASC and HEQ pre-process.
      * */
     handler->in_wavf[element_index] =
-        wav_read_open(handler->in_file[element_index]);
+        dep_wav_read_open(handler->in_file[element_index]);
 
     IAMF_encoder_dmpd_start(handler->ia_enc,
                             handler->element_id[element_index]);
     int pcm_frames =
-        wav_read_data(handler->in_wavf[element_index],
+        dep_wav_read_data(handler->in_wavf[element_index],
                       (unsigned char *)handler->wav_samples[element_index],
                       handler->bsize_of_samples[element_index]);
     while (pcm_frames) {
@@ -999,21 +1064,21 @@ void iamf_pre_process(BaseProfileHandler *handler, int element_index) {
           handler->wav_samples[element_index],
           pcm_frames / handler->bsize_of_1sample[element_index]);
       pcm_frames =
-          wav_read_data(handler->in_wavf[element_index],
+          dep_wav_read_data(handler->in_wavf[element_index],
                         (unsigned char *)handler->wav_samples[element_index],
                         handler->bsize_of_samples[element_index]);
     }
     IAMF_encoder_dmpd_stop(handler->ia_enc, handler->element_id[element_index]);
 
-    wav_read_close(handler->in_wavf[element_index]);
+    dep_wav_read_close(handler->in_wavf[element_index]);
 
     /**
      * 4. loudness and gain pre-process.
      * */
     handler->in_wavf[element_index] =
-        wav_read_open(handler->in_file[element_index]);
+        dep_wav_read_open(handler->in_file[element_index]);
     pcm_frames =
-        wav_read_data(handler->in_wavf[element_index],
+        dep_wav_read_data(handler->in_wavf[element_index],
                       (unsigned char *)handler->wav_samples[element_index],
                       handler->bsize_of_samples[element_index]);
     ProgressBar bar;
@@ -1024,6 +1089,8 @@ void iamf_pre_process(BaseProfileHandler *handler, int element_index) {
     bar.startBar(&bar, "Loudness", 0);
     total = handler->data_length[element_index];
     current = 0;
+    IAMF_encoder_scalable_loudnessgain_start(
+        handler->ia_enc, handler->element_id[element_index]);
     while (pcm_frames) {
       IAMF_encoder_scalable_loudnessgain_measure(
           handler->ia_enc, handler->element_id[element_index],
@@ -1031,7 +1098,7 @@ void iamf_pre_process(BaseProfileHandler *handler, int element_index) {
           pcm_frames / handler->bsize_of_1sample[element_index]);
 
       pcm_frames =
-          wav_read_data(handler->in_wavf[element_index],
+          dep_wav_read_data(handler->in_wavf[element_index],
                         (unsigned char *)handler->wav_samples[element_index],
                         handler->bsize_of_samples[element_index]);
       wr = (wav_reader_s *)handler->in_wavf[element_index];
@@ -1044,31 +1111,32 @@ void iamf_pre_process(BaseProfileHandler *handler, int element_index) {
     IAMF_encoder_scalable_loudnessgain_stop(handler->ia_enc,
                                             handler->element_id[element_index]);
 
-    wav_read_close(handler->in_wavf[element_index]);
+    dep_wav_read_close(handler->in_wavf[element_index]);
 
     /**
      * 6. calculate recon gain.
      * */
     handler->in_wavf[element_index] =
-        wav_read_open(handler->in_file[element_index]);
+        dep_wav_read_open(handler->in_file[element_index]);
 
     pcm_frames =
-        wav_read_data(handler->in_wavf[element_index],
+        dep_wav_read_data(handler->in_wavf[element_index],
                       (unsigned char *)handler->wav_samples[element_index],
                       handler->bsize_of_samples[element_index]);
-
+    IAMF_encoder_reconstruct_gain_start(handler->ia_enc,
+                                        handler->element_id[element_index]);
     while (pcm_frames) {
       IAMF_encoder_reconstruct_gain(
           handler->ia_enc, handler->element_id[element_index],
           handler->wav_samples[element_index],
           pcm_frames / handler->bsize_of_1sample[element_index]);
       pcm_frames =
-          wav_read_data(handler->in_wavf[element_index],
+          dep_wav_read_data(handler->in_wavf[element_index],
                         (unsigned char *)handler->wav_samples[element_index],
                         handler->bsize_of_samples[element_index]);
     }
 
-    wav_read_close(handler->in_wavf[element_index]);
+    dep_wav_read_close(handler->in_wavf[element_index]);
   } else if (handler->audio_element_type[element_index] ==
              AUDIO_ELEMENT_SCENE_BASED) {
   }
@@ -1169,16 +1237,93 @@ int iamf_base_profile_test(int argc, char *argv[]) {
           fprintf(stderr, "\n \n");
 
           channel_layout_cb[element_id][index] = IA_CHANNEL_LAYOUT_COUNT;
+
+          handler.element_config[element_id].layout_in =
+              channel_layout_in[element_id];
+          handler.element_config[element_id].layout_cb =
+              channel_layout_cb[element_id];
         } else if (argv[args][0] == '1') {
           audio_element_type = AUDIO_ELEMENT_SCENE_BASED;
-          ambisonics_mode[element_id] = 0;
+          handler.element_config[element_id].ambisonics_mode = 0;
+          char argv_string[1024];
+          strcpy(argv_string, argv[args]);
+          char *amb_conf = strtok(argv_string, "/");
+          amb_conf = strtok(NULL, "/");
+          if (amb_conf) {
+            handler.element_config[element_id]
+                .ambisonics_mono_config.output_channel_count = atoi(amb_conf);
+          }
+          amb_conf = strtok(NULL, "/");
+          if (amb_conf) {
+            handler.element_config[element_id]
+                .ambisonics_mono_config.substream_count = atoi(amb_conf);
+          }
+          amb_conf = strtok(NULL, "/");
+          if (amb_conf) {
+            char *mapping_s = strtok(amb_conf, ",");
+            int mapping_i = 0;
+            while (mapping_s) {
+              handler.element_config[element_id]
+                  .ambisonics_mono_config.channel_mapping[mapping_i++] =
+                  atoi(mapping_s);
+              mapping_s = strtok(NULL, ",");
+            }
+            if (mapping_i != handler.element_config[element_id]
+                                 .ambisonics_mono_config.output_channel_count) {
+              fprintf(stderr, "wrong mapping\n");
+              return (0);
+            }
+          }
           fprintf(stderr, "\nAudio Element Type:%s\n",
                   audio_element_type == AUDIO_ELEMENT_CHANNEL_BASED
                       ? "Channel-Base"
                       : "Scene-Base");
         } else if (argv[args][0] == '2') {
           audio_element_type = AUDIO_ELEMENT_SCENE_BASED;
-          ambisonics_mode[element_id] = 1;
+          handler.element_config[element_id].ambisonics_mode = 1;
+
+          char argv_string[1024];
+          strcpy(argv_string, argv[args]);
+          char *amb_conf = strtok(argv_string, "/");
+          amb_conf = strtok(NULL, "/");
+          if (amb_conf) {
+            handler.element_config[element_id]
+                .ambisonics_projection_config.output_channel_count =
+                atoi(amb_conf);
+          }
+          amb_conf = strtok(NULL, "/");
+          if (amb_conf) {
+            handler.element_config[element_id]
+                .ambisonics_projection_config.substream_count = atoi(amb_conf);
+          }
+          amb_conf = strtok(NULL, "/");
+          if (amb_conf) {
+            handler.element_config[element_id]
+                .ambisonics_projection_config.coupled_substream_count =
+                atoi(amb_conf);
+          }
+          amb_conf = strtok(NULL, "/");
+          if (amb_conf) {
+            char *demix_s = strtok(amb_conf, ",");
+            int mapping_i = 0;
+            while (demix_s) {
+              handler.element_config[element_id]
+                  .ambisonics_projection_config.demixing_matrix[mapping_i++] =
+                  atoi(demix_s);
+              demix_s = strtok(NULL, ",");
+            }
+            if (mapping_i !=
+                handler.element_config[element_id]
+                        .ambisonics_projection_config.output_channel_count *
+                    (handler.element_config[element_id]
+                         .ambisonics_projection_config.substream_count +
+                     handler.element_config[element_id]
+                         .ambisonics_projection_config
+                         .coupled_substream_count)) {
+              fprintf(stderr, "wrong demixing_matrix\n");
+              return (0);
+            }
+          }
           fprintf(stderr, "\nAudio Element Type:%s\n",
                   audio_element_type == AUDIO_ELEMENT_CHANNEL_BASED
                       ? "Channel-Base"
@@ -1226,15 +1371,17 @@ int iamf_base_profile_test(int argc, char *argv[]) {
   int file_size = ftell(fp);
   rewind(fp);
 
-  char json_string[1024 * 10];
+  char *json_string = malloc(file_size);
   fread(json_string, 1, file_size, fp);
   fclose(fp);
 
   cJSON *json = cJSON_Parse(json_string);
   if (!json) {
     printf("Error before: [%s]\n", cJSON_GetErrorPtr());
+    free(json_string);
     return 1;
   }
+  free(json_string);
   MixPresentation_t mixp_t[10];
   for (int i = 0; i < 10; i++) {
     memset(&mixp_t[i], 0x00, sizeof(MixPresentation_t));
@@ -1289,13 +1436,13 @@ int iamf_base_profile_test(int argc, char *argv[]) {
   }
 
   for (int i = 0; i < handler.num_of_elements; i++) {
-    handler.in_wavf[i] = wav_read_open(handler.in_file[i]);
+    handler.in_wavf[i] = dep_wav_read_open(handler.in_file[i]);
     if (!handler.in_wavf[i]) {
       fprintf(stderr, "Could not open input file %s\n", handler.in_wavf[i]);
       goto failure;
     }
 
-    wav_get_header(handler.in_wavf[i], &(handler.format[i]),
+    dep_wav_get_header(handler.in_wavf[i], &(handler.format[i]),
                    &(handler.channels[i]), &(handler.sample_rate[i]),
                    &(handler.bits_per_sample[i]), &(handler.endianness[i]),
                    &(handler.data_length[i]));
@@ -1315,43 +1462,7 @@ int iamf_base_profile_test(int argc, char *argv[]) {
         chunk_size * handler.channels[i] * handler.bits_per_sample[i] / 8 *
         sizeof(unsigned char));
 
-    if (handler.audio_element_type[i] == AUDIO_ELEMENT_CHANNEL_BASED) {
-      handler.element_config[i].layout_in = channel_layout_in[i];
-      handler.element_config[i].layout_cb = channel_layout_cb[i];
-    } else if (handler.audio_element_type[i] == AUDIO_ELEMENT_SCENE_BASED) {
-      handler.element_config[i].ambisonics_mode = ambisonics_mode[i];
-      handler.element_config[i].input_channels = handler.channels[i];
-      if (ambisonics_mode[i] == 0) {
-        handler.element_config[i].ambisonics_mono_config.output_channel_count =
-            handler.channels[i];
-        handler.element_config[i].ambisonics_mono_config.substream_count =
-            handler.channels[i];
-        for (int j = 0; j < handler.channels[i]; j++) {
-          handler.element_config[i].ambisonics_mono_config.channel_mapping[j] =
-              i;
-        }
-      } else if (ambisonics_mode[i] == 1) {
-        handler.element_config[i]
-            .ambisonics_projection_config.output_channel_count =
-            handler.channels[i];
-        handler.element_config[i].ambisonics_projection_config.substream_count =
-            handler.channels[i];
-        handler.element_config[i]
-            .ambisonics_projection_config.coupled_substream_count = 0;
-        for (int s = 0; s < handler.channels[i]; s++)
-          for (int c = 0; c < handler.channels[i]; c++) {
-            if (s == c)
-              handler.element_config[i]
-                  .ambisonics_projection_config
-                  .demixing_matrix[s * handler.channels[i] + c] = 32767;
-            else
-              handler.element_config[i]
-                  .ambisonics_projection_config
-                  .demixing_matrix[s * handler.channels[i] + c] = 0;
-          }
-      }
-    }
-    wav_read_close(handler.in_wavf[i]);
+    dep_wav_read_close(handler.in_wavf[i]);
   }
 
   /**
@@ -1393,13 +1504,13 @@ int iamf_base_profile_test(int argc, char *argv[]) {
 
     if (mixp_t[i].mixp.num_layouts > 0) {
       for (int j = 0; j < handler.num_of_elements; j++) {
-        handler.in_wavf[j] = wav_read_open(handler.in_file[j]);
+        handler.in_wavf[j] = dep_wav_read_open(handler.in_file[j]);
       }
       int pcm_frames[2] = {0, 0};
-      pcm_frames[0] = wav_read_data(handler.in_wavf[0],
+      pcm_frames[0] = dep_wav_read_data(handler.in_wavf[0],
                                     (unsigned char *)handler.wav_samples[0],
                                     handler.bsize_of_samples[0]);
-      pcm_frames[1] = wav_read_data(handler.in_wavf[1],
+      pcm_frames[1] = dep_wav_read_data(handler.in_wavf[1],
                                     (unsigned char *)handler.wav_samples[1],
                                     handler.bsize_of_samples[1]);
       int count = 0;
@@ -1430,17 +1541,17 @@ int iamf_base_profile_test(int argc, char *argv[]) {
 
         IAMF_encoder_target_loudness_measure(handler.ia_enc, &mixp_t[i].mixp,
                                              &ia_frame);
-        pcm_frames[0] = wav_read_data(handler.in_wavf[0],
+        pcm_frames[0] = dep_wav_read_data(handler.in_wavf[0],
                                       (unsigned char *)handler.wav_samples[0],
                                       handler.bsize_of_samples[0]);
-        pcm_frames[1] = wav_read_data(handler.in_wavf[1],
+        pcm_frames[1] = dep_wav_read_data(handler.in_wavf[1],
                                       (unsigned char *)handler.wav_samples[1],
                                       handler.bsize_of_samples[1]);
       }
       IAMF_encoder_target_loudness_measure_stop(handler.ia_enc,
                                                 &mixp_t[i].mixp);
       for (int j = 0; j < handler.num_of_elements; j++) {
-        wav_read_close(handler.in_wavf[j]);
+        dep_wav_read_close(handler.in_wavf[j]);
       }
     }
     uint64_t duration[2] = {0, 0};
@@ -1517,7 +1628,7 @@ int iamf_base_profile_test(int argc, char *argv[]) {
    * 8. immersive audio encode.
    * */
   for (int i = 0; i < handler.num_of_elements; i++) {
-    handler.in_wavf[i] = wav_read_open(handler.in_file[i]);
+    handler.in_wavf[i] = dep_wav_read_open(handler.in_file[i]);
   }
   uint64_t frame_count = 0;
   uint32_t max_packet_size =
@@ -1525,10 +1636,10 @@ int iamf_base_profile_test(int argc, char *argv[]) {
       3;  // two audio elements
   unsigned char *encode_ia = malloc(max_packet_size);
   int pcm_frames =
-      wav_read_data(handler.in_wavf[0], (unsigned char *)handler.wav_samples[0],
+      dep_wav_read_data(handler.in_wavf[0], (unsigned char *)handler.wav_samples[0],
                     handler.bsize_of_samples[0]);
   int pcm_frames2 =
-      wav_read_data(handler.in_wavf[1], (unsigned char *)handler.wav_samples[1],
+      dep_wav_read_data(handler.in_wavf[1], (unsigned char *)handler.wav_samples[1],
                     handler.bsize_of_samples[1]);
 
   while (1) {
@@ -1563,10 +1674,10 @@ int iamf_base_profile_test(int argc, char *argv[]) {
     } else {
       fwrite(ia_packet.data, ia_packet.packet_size, 1, iamf_file);
     }
-    pcm_frames = wav_read_data(handler.in_wavf[0],
+    pcm_frames = dep_wav_read_data(handler.in_wavf[0],
                                (unsigned char *)handler.wav_samples[0],
                                handler.bsize_of_samples[0]);
-    pcm_frames2 = wav_read_data(handler.in_wavf[1],
+    pcm_frames2 = dep_wav_read_data(handler.in_wavf[1],
                                 (unsigned char *)handler.wav_samples[1],
                                 handler.bsize_of_samples[1]);
     frame_count++;
@@ -1587,7 +1698,7 @@ int iamf_base_profile_test(int argc, char *argv[]) {
   IAMF_encoder_destroy(handler.ia_enc);
 failure:
   for (int i = 0; i < handler.num_of_elements; i++) {
-    if (handler.in_wavf[i]) wav_read_close(handler.in_wavf[i]);
+    if (handler.in_wavf[i]) dep_wav_read_close(handler.in_wavf[i]);
     if (handler.wav_samples[i]) free(handler.wav_samples[i]);
   }
 

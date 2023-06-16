@@ -16,7 +16,7 @@
  * -------------------------------------------------------------------
  */
 
-#include "wavreader.h"
+#include "wav/dep_wavreader.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -25,7 +25,7 @@
 
 #define TAG(a, b, c, d) (((a) << 24) | ((b) << 16) | ((c) << 8) | (d))
 
-struct wav_reader {
+struct dep_wav_reader {
   FILE* wav;
   uint32_t data_length;
 
@@ -40,7 +40,7 @@ struct wav_reader {
   int streamed;
 };
 
-static uint32_t read_tag(struct wav_reader* wr) {
+static uint32_t read_tag(struct dep_wav_reader* wr) {
   uint32_t tag = 0;
   tag = (tag << 8) | fgetc(wr->wav);
   tag = (tag << 8) | fgetc(wr->wav);
@@ -49,7 +49,7 @@ static uint32_t read_tag(struct wav_reader* wr) {
   return tag;
 }
 
-static uint32_t read_int32(struct wav_reader* wr) {
+static uint32_t read_int32(struct dep_wav_reader* wr) {
   uint32_t value = 0;
   value |= fgetc(wr->wav) << 0;
   value |= fgetc(wr->wav) << 8;
@@ -58,14 +58,14 @@ static uint32_t read_int32(struct wav_reader* wr) {
   return value;
 }
 
-static uint16_t read_int16(struct wav_reader* wr) {
+static uint16_t read_int16(struct dep_wav_reader* wr) {
   uint16_t value = 0;
   value |= fgetc(wr->wav) << 0;
   value |= fgetc(wr->wav) << 8;
   return value;
 }
 
-static uint32_t readb_int32(struct wav_reader* wr) {
+static uint32_t readb_int32(struct dep_wav_reader* wr) {
   uint32_t value = 0;
   value |= fgetc(wr->wav) << 24;
   value |= fgetc(wr->wav) << 16;
@@ -74,7 +74,7 @@ static uint32_t readb_int32(struct wav_reader* wr) {
   return value;
 }
 
-static uint16_t readb_int16(struct wav_reader* wr) {
+static uint16_t readb_int16(struct dep_wav_reader* wr) {
   uint16_t value = 0;
   value |= fgetc(wr->wav) << 8;
   value |= fgetc(wr->wav) << 0;
@@ -86,24 +86,24 @@ static void skip(FILE* f, int n) {
   for (i = 0; i < n; i++) fgetc(f);
 }
 
-static uint16_t avio_int16(int endianness, struct wav_reader* wr) {
+static uint16_t avio_int16(int endianness, struct dep_wav_reader* wr) {
   if (endianness == 1)  // little end
-    read_int16(wr);
+    return read_int16(wr);
   else {
-    readb_int16(wr);
+    return readb_int16(wr);
   }
 }
 
-static uint32_t avio_int32(int endianness, struct wav_reader* wr) {
+static uint32_t avio_int32(int endianness, struct dep_wav_reader* wr) {
   if (endianness == 1)  // little end
-    read_int32(wr);
+    return read_int32(wr);
   else {
-    readb_int32(wr);
+    return readb_int32(wr);
   }
 }
 
-void* wav_read_open(const char* filename) {
-  struct wav_reader* wr = (struct wav_reader*)malloc(sizeof(*wr));
+void* dep_wav_read_open(const char* filename) {
+  struct dep_wav_reader* wr = (struct dep_wav_reader*)malloc(sizeof(*wr));
   long data_pos = 0;
   memset(wr, 0, sizeof(*wr));
 
@@ -202,16 +202,16 @@ void* wav_read_open(const char* filename) {
   return wr;
 }
 
-void wav_read_close(void* obj) {
-  struct wav_reader* wr = (struct wav_reader*)obj;
+void dep_wav_read_close(void* obj) {
+  struct dep_wav_reader* wr = (struct dep_wav_reader*)obj;
   if (wr->wav != stdin) fclose(wr->wav);
   free(wr);
 }
 
-int wav_get_header(void* obj, int* format, int* channels, int* sample_rate,
+int dep_wav_get_header(void* obj, int* format, int* channels, int* sample_rate,
                    int* bits_per_sample, int* endianness,
                    unsigned int* data_length) {
-  struct wav_reader* wr = (struct wav_reader*)obj;
+  struct dep_wav_reader* wr = (struct dep_wav_reader*)obj;
   if (format) *format = wr->format;
   if (channels) *channels = wr->channels;
   if (sample_rate) *sample_rate = wr->sample_rate;
@@ -221,8 +221,8 @@ int wav_get_header(void* obj, int* format, int* channels, int* sample_rate,
   return wr->format && wr->sample_rate;
 }
 
-int wav_read_data(void* obj, unsigned char* data, unsigned int length) {
-  struct wav_reader* wr = (struct wav_reader*)obj;
+int dep_wav_read_data(void* obj, unsigned char* data, unsigned int length) {
+  struct dep_wav_reader* wr = (struct dep_wav_reader*)obj;
   int n;
   if (wr->wav == NULL) return -1;
   if (length > wr->data_length && !wr->streamed) length = wr->data_length;

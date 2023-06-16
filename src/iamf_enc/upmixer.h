@@ -80,11 +80,11 @@ typedef struct {
 } UpMixer;
 
 UpMixer *upmix_create(int recon_gain_flag,
-                      const unsigned char *channel_layout_map, int frame_size,
-                      int preskip_size);
+                      const unsigned char *channel_layout_map, int frame_size);
 // void upmix_push_buffer(UpMixer *um, unsigned char *ab2ch, unsigned char
 // *tpq4ch, unsigned char *suv6ch);
 void upmix(UpMixer *um, const unsigned char *gain_down_map);
+void upmix_set_preskip_size(UpMixer *um, int preskip_size);
 void upmix_destroy(UpMixer *um);
 
 #endif

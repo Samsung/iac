@@ -8,12 +8,12 @@ SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(BUILD_SHARED_LIBS "Build shared library" ON)
 
-add_definitions(-DIAMF_PROFILE=0100)
-add_definitions(-DIAMF_VERSION=0000)
+add_definitions(-DIAMF_PROFILE=001)
 
 set(CODEC_LIB_DIR  "${PROJECT_SOURCE_DIR}/dep_codecs/lib")
 set(CODEC_INCLUDE_DIR  "${PROJECT_SOURCE_DIR}/dep_codecs/include")
 set(EXTER_LIB_DIR  "${PROJECT_SOURCE_DIR}/dep_external/lib")
+set(EXTER_INCLUDE_DIR  "${PROJECT_SOURCE_DIR}/dep_external/include")
 set(DMPD_LIB_DIR  "${PROJECT_SOURCE_DIR}/src/iamf_enc/dmpd")
 
 option(CODEC_CAP "Codec capability check" ON)
@@ -44,6 +44,7 @@ if(CODEC_CAP)
 endif()
 
 include_directories (include)
+aux_source_directory (dep_external/src/wav DIR_DEP_EXTERNAL_WAV)
 aux_source_directory (src/common DIR_IAMF_COMMON)
 aux_source_directory (src/iamf_dec DIR_IAMF_DEC)
 if(NOT ${find_opus} STREQUAL "find_opus-NOTFOUND")
@@ -62,6 +63,7 @@ aux_source_directory (src/iamf_enc DIR_IAMF_ENC)
 
 include_directories(
     ${CODEC_INCLUDE_DIR}
+    ${EXTER_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/src/common
     ${PROJECT_SOURCE_DIR}/src/iamf_dec
     ${PROJECT_SOURCE_DIR}/src/iamf_dec/opus
@@ -81,7 +83,7 @@ link_directories (
 )
 
 if(BUILD_SHARED_LIBS)
-  add_library(${PROJECT_NAME} SHARED ${DIR_IAMF_COMMON} ${DIR_IAMF_ENC}
+  add_library(${PROJECT_NAME} SHARED ${DIR_DEP_EXTERNAL_WAV} ${DIR_IAMF_COMMON} ${DIR_IAMF_ENC}
     ${DIR_IAMF_DEC_OPUS} ${DIR_IAMF_DEC_AAC} ${DIR_IAMF_DEC_FLAC} ${DIR_IAMF_DEC_PCM} ${DIR_IAMF_DEC})
   target_link_libraries (${PROJECT_NAME} asc heq flatccrt decimate stft fftw3f )
   
@@ -99,7 +101,7 @@ if(BUILD_SHARED_LIBS)
   
   add_subdirectory(src/iamf_enc/dmpd)
 else()
-  add_library(${PROJECT_NAME} STATIC ${DIR_IAMF_COMMON} ${DIR_IAMF_ENC}
+  add_library(${PROJECT_NAME} STATIC ${DIR_DEP_EXTERNAL_WAV} ${DIR_IAMF_COMMON} ${DIR_IAMF_ENC}
     ${DIR_IAMF_DEC_OPUS} ${DIR_IAMF_DEC_AAC} ${DIR_IAMF_DEC_PCM}
     ${DIR_IAMF_DEC_FLAC} ${DIR_IAMF_DEC})
   add_subdirectory(src/iamf_enc/dmpd)

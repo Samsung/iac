@@ -42,7 +42,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <string.h>
 
 #include "IAMF_OBU.h"
-#include "bitstreamrw.h"
+#include "bitstream.h"
 #include "vlogging_tool_sr.h"
 
 #define LOG_BUFFER_SIZE 100000
@@ -290,16 +290,16 @@ int write_yaml_form(char* log, uint8_t indent, const char* format, ...) {
   return ret;
 }
 
-static void write_magic_code_log(uint64_t idx, void* obu, char* log) {
+static void write_sequence_header_log(uint64_t idx, void* obu, char* log) {
   IAMF_Version* mc_obu = (IAMF_Version*)obu;
 
   log += write_prefix(LOG_OBU, log);
   log += write_yaml_form(log, 0, "MagicCodeOBU_%llu:", idx);
   log += write_yaml_form(log, 0, "- ia_code: %u",
                          swapByteOrder(mc_obu->iamf_code));
-  log += write_yaml_form(log, 1, "version: %u", mc_obu->version);
-  log +=
-      write_yaml_form(log, 1, "profile_version: %u", mc_obu->profile_version);
+  log += write_yaml_form(log, 1, "profile_name: %u", mc_obu->profile_name);
+  log += write_yaml_form(log, 1, "profile_compatible: %u",
+                         mc_obu->profile_compatible);
   write_postfix(LOG_OBU, log);
 }
 
@@ -324,12 +324,12 @@ static void write_codec_config_log(uint64_t idx, void* obu, char* log) {
     // __KWON_TODO
   } else if (cc_obu->codec_id == get_4cc_codec_id('O', 'p', 'u', 's') ||
              cc_obu->codec_id == get_4cc_codec_id('d', 'O', 'p', 's')) {
-    uint8_t version = get_uint8(cc_obu->decoder_conf, 0);
-    uint8_t output_channel_count = get_uint8(cc_obu->decoder_conf, 1);
-    uint16_t pre_skip = get_uint16be(cc_obu->decoder_conf, 2);
-    uint32_t input_sample_rate = get_uint32be(cc_obu->decoder_conf, 4);
-    uint16_t output_gain = get_uint16be(cc_obu->decoder_conf, 8);
-    uint8_t channel_mapping_family = get_uint8(cc_obu->decoder_conf, 10);
+    uint8_t version = readu8(cc_obu->decoder_conf, 0);
+    uint8_t output_channel_count = readu8(cc_obu->decoder_conf, 1);
+    uint16_t pre_skip = readu16be(cc_obu->decoder_conf, 2);
+    uint32_t input_sample_rate = readu32be(cc_obu->decoder_conf, 4);
+    uint16_t output_gain = readu16be(cc_obu->decoder_conf, 8);
+    uint8_t channel_mapping_family = readu8(cc_obu->decoder_conf, 10);
 
     log += write_yaml_form(log, 2, "decoder_config_opus:");
     log += write_yaml_form(log, 3, "version: %u", version);
@@ -341,9 +341,9 @@ static void write_codec_config_log(uint64_t idx, void* obu, char* log) {
     log +=
         write_yaml_form(log, 3, "mapping_family: %u", channel_mapping_family);
   } else if (cc_obu->codec_id == get_4cc_codec_id('i', 'p', 'c', 'm')) {
-    uint8_t sample_format_flags = get_uint8(cc_obu->decoder_conf, 0);
-    uint8_t sample_size = get_uint8(cc_obu->decoder_conf, 1);
-    uint32_t sample_rate = get_uint32be(cc_obu->decoder_conf, 2);
+    uint8_t sample_format_flags = readu8(cc_obu->decoder_conf, 0);
+    uint8_t sample_size = readu8(cc_obu->decoder_conf, 1);
+    uint32_t sample_rate = readu32be(cc_obu->decoder_conf, 2);
 
     log += write_yaml_form(log, 2, "decoder_config_lpcm:");
     log +=
@@ -635,6 +635,7 @@ static void write_temporal_delimiter_block_log(uint64_t idx, void* obu,
   write_postfix(LOG_OBU, log);
 }
 
+#ifdef SYNC_OBU
 static void write_sync_log(uint64_t idx, void* obu, char* log) {
   IAMF_Sync* sc_obu = (IAMF_Sync*)obu;
 
@@ -656,6 +657,7 @@ static void write_sync_log(uint64_t idx, void* obu, char* log) {
   }
   write_postfix(LOG_OBU, log);
 }
+#endif
 
 int vlog_obu(uint32_t obu_type, void* obu,
              uint64_t num_samples_to_trim_at_start,
@@ -685,11 +687,13 @@ int vlog_obu(uint32_t obu_type, void* obu,
     case IAMF_OBU_TEMPORAL_DELIMITER:
       write_temporal_delimiter_block_log(obu_count++, obu, log);
       break;
+#ifdef SYNC_OBU
     case IAMF_OBU_SYNC:
       write_sync_log(obu_count++, obu, log);
       break;
-    case IAMF_OBU_MAGIC_CODE:
-      write_magic_code_log(obu_count++, obu, log);
+#endif
+    case IAMF_OBU_SEQUENCE_HEADER:
+      write_sequence_header_log(obu_count++, obu, log);
       break;
     default:
       if (obu_type >= IAMF_OBU_AUDIO_FRAME &&

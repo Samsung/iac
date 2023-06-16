@@ -67,6 +67,7 @@ typedef struct QueuePlus {
 
 int QueueInit(QueuePlus *pq, ValueType type, int size, int coeffs);
 int QueuePush(QueuePlus *pq, void *input);
+int QueuePush2(QueuePlus *pq, void *input, int size);
 int QueuePop(QueuePlus *pq, void *output, int size);
 int QueueLength(QueuePlus *pq);
 int QueueDestroy(QueuePlus *pq);

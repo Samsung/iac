@@ -53,7 +53,7 @@ typedef struct AmbisonicsProjectionConfig {
   uint8_t output_channel_count;
   uint8_t substream_count;
   uint8_t coupled_substream_count;
-  uint16_t demixing_matrix[256];
+  int16_t demixing_matrix[256];
 } AmbisonicsProjectionConfig;
 
 typedef struct AudioElementConfig {
@@ -63,7 +63,6 @@ typedef struct AudioElementConfig {
 
   // scene-baesd
   AmbisonicsMode ambisonics_mode;
-  int input_channels;
   union {
     AmbisonicsMonoConfig ambisonics_mono_config;
     AmbisonicsProjectionConfig ambisonics_projection_config;
@@ -75,7 +74,7 @@ typedef struct MixPresentationAnnotations {
 } MixPresentationAnnotations;
 
 typedef struct MixPresentationElementAnnotations {
-  char *mix_presentation_friendly_label;
+  char *audio_element_friendly_label;
 } MixPresentationElementAnnotations;
 
 typedef struct Bs2127DirectSpeakersConfig {
@@ -161,11 +160,16 @@ typedef struct MixGainConfig {
   AnimatedParameterData **animated_parameter_data;
 } MixGainConfig;
 
+#define MAX_NUM_ANCHORED_LOUDNESS 16
 typedef struct {
   uint8_t info_type;
   int16_t integrated_loudness;
   int16_t digital_peak;
   int16_t true_peak;
+
+  uint8_t num_anchored_loudness;
+  uint8_t anchor_element[MAX_NUM_ANCHORED_LOUDNESS];
+  int16_t anchored_loudness[MAX_NUM_ANCHORED_LOUDNESS];
 } LoudnessInfo;
 
 #define MAX_LOUDSPEAKERS_NUM 256  // TODO
@@ -205,17 +209,23 @@ typedef struct {
   IAMF_SoundSystem sound_system;
 } IAMFLayout;
 
-#define MAX_MEASURED_LAYOUT_NUM 10
+#define MAX_MEASURED_LAYOUT_NUM 16
+#define MAX_LABEL_COUNT 128
+#define MAX_AUDIO_ELEMENT_NUM 2
 typedef struct MixPresentation {
   int mix_presentation_obu_id;
-  MixPresentationAnnotations mix_presentation_annotations;
+  int count_label;
+  char *language_label[MAX_LABEL_COUNT];
+  MixPresentationAnnotations mix_presentation_annotations[MAX_LABEL_COUNT];
   int num_sub_mixes;  // simple and base profile, set with 1
 
   int num_audio_elements;
-  int audio_element_id[2];
-  MixPresentationElementAnnotations mix_presentation_element_annotations[2];
-  RenderingConfig rendering_config[2];
-  MixGainConfig element_mix_config[2];
+  int audio_element_id[MAX_AUDIO_ELEMENT_NUM];
+  MixPresentationElementAnnotations
+      mix_presentation_element_annotations[MAX_AUDIO_ELEMENT_NUM]
+                                          [MAX_LABEL_COUNT];
+  RenderingConfig rendering_config[MAX_AUDIO_ELEMENT_NUM];
+  MixGainConfig element_mix_config[MAX_AUDIO_ELEMENT_NUM];
 
   MixGainConfig output_mix_config;
 
@@ -360,8 +370,19 @@ int IAMF_encoder_dmpd_process(IAMF_Encoder *ie, int element_id,
 int IAMF_encoder_dmpd_stop(IAMF_Encoder *ie, int element_id);
 
 /*
-Following 2 apis are used to calculate loundness and output_gain.
+Following 3 apis are used to calculate loundness and output_gain of scalable
+audio.
 */
+
+/**
+ * @brief     Prepare loudness &gain process for single scalable channle-based
+ * audio
+ * @param     [in] ie : channel group encoder handle.
+ * @param     [in] element_id : audio element id.
+ * @return    @0: success,@others: fail
+ */
+int IAMF_encoder_scalable_loudnessgain_start(IAMF_Encoder *ie, int element_id);
+
 /**
  * @brief     loudness &gain process for single scalable channle-based audio
  * element
@@ -381,6 +402,14 @@ int IAMF_encoder_scalable_loudnessgain_measure(IAMF_Encoder *ie, int element_id,
  * @return    @0: success,@others: fail
  */
 int IAMF_encoder_scalable_loudnessgain_stop(IAMF_Encoder *ie, int element_id);
+
+/**
+ * @brief     Prepare the reconstruct gain calculation.
+ * @param     [in] ie : immersive audio encoder handle.
+ * @param     [in] element_id : audio element id.
+ * @return    @0: success,@others: fail
+ */
+int IAMF_encoder_reconstruct_gain_start(IAMF_Encoder *ie, int element_id);
 
 /**
  * @brief     Calculate the reconstruct gain.

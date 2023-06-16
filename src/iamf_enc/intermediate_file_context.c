@@ -42,8 +42,8 @@ void ia_intermediate_file_writeopen(ChannelBasedEnc *ce, int file_type,
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
-          ce->fc.f_downmix_m_wav[map].file = wav_write_open3(
-              downmix_m_wav[map], WAVE_FORMAT_FLOAT2, ce->input_sample_rate,
+          ce->fc.f_downmix_m_wav[map].file = dep_wav_write_open2(
+              downmix_m_wav[map], DEP_WAVE_FORMAT_FLOAT, ce->input_sample_rate,
               16 * 2, enc_get_layout_channel_count(map));
           ce->fc.f_downmix_m_wav[map].info.channels =
               enc_get_layout_channel_count(map);
@@ -53,8 +53,8 @@ void ia_intermediate_file_writeopen(ChannelBasedEnc *ce, int file_type,
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
           if (!strcmp(file_name, downmix_m_wav[map])) {
-            ce->fc.f_downmix_m_wav[map].file = wav_write_open3(
-                downmix_m_wav[map], WAVE_FORMAT_FLOAT2, ce->input_sample_rate,
+            ce->fc.f_downmix_m_wav[map].file = dep_wav_write_open2(
+                downmix_m_wav[map], DEP_WAVE_FORMAT_FLOAT, ce->input_sample_rate,
                 16 * 2, enc_get_layout_channel_count(map));
             ce->fc.f_downmix_m_wav[map].info.channels =
                 enc_get_layout_channel_count(map);
@@ -69,8 +69,8 @@ void ia_intermediate_file_writeopen(ChannelBasedEnc *ce, int file_type,
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
-          ce->fc.f_downmix_s_wav[map].file = wav_write_open3(
-              downmix_s_wav[map], WAVE_FORMAT_FLOAT2, ce->input_sample_rate,
+          ce->fc.f_downmix_s_wav[map].file = dep_wav_write_open2(
+              downmix_s_wav[map], DEP_WAVE_FORMAT_FLOAT, ce->input_sample_rate,
               16 * 2, enc_get_layout_channel_count(map) - pre_ch);
           ce->fc.f_downmix_s_wav[map].info.channels =
               enc_get_layout_channel_count(map) - pre_ch;
@@ -82,8 +82,8 @@ void ia_intermediate_file_writeopen(ChannelBasedEnc *ce, int file_type,
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
           if (!strcmp(file_name, downmix_s_wav[map])) {
-            ce->fc.f_downmix_s_wav[map].file = wav_write_open3(
-                downmix_s_wav[map], WAVE_FORMAT_FLOAT2, ce->input_sample_rate,
+            ce->fc.f_downmix_s_wav[map].file = dep_wav_write_open2(
+                downmix_s_wav[map], DEP_WAVE_FORMAT_FLOAT, ce->input_sample_rate,
                 16 * 2, enc_get_layout_channel_count(map) - pre_ch);
             ce->fc.f_downmix_s_wav[map].info.channels =
                 enc_get_layout_channel_count(map) - pre_ch;
@@ -99,8 +99,8 @@ void ia_intermediate_file_writeopen(ChannelBasedEnc *ce, int file_type,
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
-          ce->fc.f_gaindown_wav[map].file = wav_write_open3(
-              gaindown_wav[map], WAVE_FORMAT_PCM2, ce->input_sample_rate, 16,
+          ce->fc.f_gaindown_wav[map].file = dep_wav_write_open2(
+              gaindown_wav[map], DEP_WAVE_FORMAT_PCM, ce->input_sample_rate, 16,
               enc_get_layout_channel_count(map) - pre_ch);
           ce->fc.f_gaindown_wav[map].info.channels =
               enc_get_layout_channel_count(map) - pre_ch;
@@ -112,8 +112,8 @@ void ia_intermediate_file_writeopen(ChannelBasedEnc *ce, int file_type,
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
           if (!strcmp(file_name, gaindown_wav[map])) {
-            ce->fc.f_gaindown_wav[map].file = wav_write_open3(
-                gaindown_wav[map], WAVE_FORMAT_PCM2, ce->input_sample_rate, 16,
+            ce->fc.f_gaindown_wav[map].file = dep_wav_write_open2(
+                gaindown_wav[map], DEP_WAVE_FORMAT_PCM, ce->input_sample_rate, 16,
                 enc_get_layout_channel_count(map) - pre_ch);
             ce->fc.f_gaindown_wav[map].info.channels =
                 enc_get_layout_channel_count(map) - pre_ch;
@@ -128,8 +128,8 @@ void ia_intermediate_file_writeopen(ChannelBasedEnc *ce, int file_type,
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
-          ce->fc.f_upmix_wav[map].file = wav_write_open3(
-              upmix_wav[map], WAVE_FORMAT_FLOAT2, ce->input_sample_rate, 16 * 2,
+          ce->fc.f_upmix_wav[map].file = dep_wav_write_open2(
+              upmix_wav[map], DEP_WAVE_FORMAT_FLOAT, ce->input_sample_rate, 16 * 2,
               enc_get_layout_channel_count(map));
           ce->fc.f_upmix_wav[map].info.channels =
               enc_get_layout_channel_count(map);
@@ -139,8 +139,8 @@ void ia_intermediate_file_writeopen(ChannelBasedEnc *ce, int file_type,
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
           if (!strcmp(file_name, upmix_wav[map])) {
-            ce->fc.f_upmix_wav[map].file = wav_write_open3(
-                upmix_wav[map], WAVE_FORMAT_FLOAT2, ce->input_sample_rate,
+            ce->fc.f_upmix_wav[map].file = dep_wav_write_open2(
+                upmix_wav[map], DEP_WAVE_FORMAT_FLOAT, ce->input_sample_rate,
                 16 * 2, enc_get_layout_channel_count(map));
             ce->fc.f_upmix_wav[map].info.channels =
                 enc_get_layout_channel_count(map);
@@ -155,8 +155,8 @@ void ia_intermediate_file_writeopen(ChannelBasedEnc *ce, int file_type,
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
-          ce->fc.f_decoded_wav[map].file = wav_write_open3(
-              decoded_wav[map], WAVE_FORMAT_PCM2, ce->input_sample_rate, 16,
+          ce->fc.f_decoded_wav[map].file = dep_wav_write_open2(
+              decoded_wav[map], DEP_WAVE_FORMAT_PCM, ce->input_sample_rate, 16,
               enc_get_layout_channel_count(map) - pre_ch);
           ce->fc.f_decoded_wav[map].info.channels =
               enc_get_layout_channel_count(map) - pre_ch;
@@ -168,8 +168,8 @@ void ia_intermediate_file_writeopen(ChannelBasedEnc *ce, int file_type,
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
           if (!strcmp(file_name, decoded_wav[map])) {
-            ce->fc.f_decoded_wav[map].file = wav_write_open3(
-                decoded_wav[map], WAVE_FORMAT_PCM2, ce->input_sample_rate, 16,
+            ce->fc.f_decoded_wav[map].file = dep_wav_write_open2(
+                decoded_wav[map], DEP_WAVE_FORMAT_PCM, ce->input_sample_rate, 16,
                 enc_get_layout_channel_count(map) - pre_ch);
             ce->fc.f_decoded_wav[map].info.channels =
                 enc_get_layout_channel_count(map) - pre_ch;
@@ -232,11 +232,11 @@ void ia_intermediate_file_readopen(ChannelBasedEnc *ce, int file_type,
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
-          ce->fc.f_downmix_m_wav[map].file = wav_read_open2(downmix_m_wav[map]);
-          wav_get_header2(ce->fc.f_downmix_m_wav[map].file, NULL,
+          ce->fc.f_downmix_m_wav[map].file = dep_wav_read_open(downmix_m_wav[map]);
+          dep_wav_get_header(ce->fc.f_downmix_m_wav[map].file, NULL,
                           &(ce->fc.f_downmix_m_wav[map].info.channels), NULL,
                           &(ce->fc.f_downmix_m_wav[map].info.bits_per_sample),
-                          NULL);
+                          NULL, NULL);
         }
       } else {
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
@@ -244,11 +244,11 @@ void ia_intermediate_file_readopen(ChannelBasedEnc *ce, int file_type,
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
           if (!strcmp(file_name, downmix_m_wav[map])) {
             ce->fc.f_downmix_m_wav[map].file =
-                wav_read_open2(downmix_m_wav[map]);
-            wav_get_header2(ce->fc.f_downmix_m_wav[map].file, NULL,
+                dep_wav_read_open(downmix_m_wav[map]);
+            dep_wav_get_header(ce->fc.f_downmix_m_wav[map].file, NULL,
                             &(ce->fc.f_downmix_m_wav[map].info.channels), NULL,
                             &(ce->fc.f_downmix_m_wav[map].info.bits_per_sample),
-                            NULL);
+                            NULL, NULL);
             break;
           }
         }
@@ -259,11 +259,11 @@ void ia_intermediate_file_readopen(ChannelBasedEnc *ce, int file_type,
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
-          ce->fc.f_downmix_s_wav[map].file = wav_read_open2(downmix_s_wav[map]);
-          wav_get_header2(ce->fc.f_downmix_s_wav[map].file, NULL,
+          ce->fc.f_downmix_s_wav[map].file = dep_wav_read_open(downmix_s_wav[map]);
+          dep_wav_get_header(ce->fc.f_downmix_s_wav[map].file, NULL,
                           &(ce->fc.f_downmix_s_wav[map].info.channels), NULL,
                           &(ce->fc.f_downmix_s_wav[map].info.bits_per_sample),
-                          NULL);
+                          NULL, NULL);
         }
       } else {
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
@@ -271,11 +271,11 @@ void ia_intermediate_file_readopen(ChannelBasedEnc *ce, int file_type,
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
           if (!strcmp(file_name, downmix_s_wav[map])) {
             ce->fc.f_downmix_s_wav[map].file =
-                wav_read_open2(downmix_s_wav[map]);
-            wav_get_header2(ce->fc.f_downmix_s_wav[map].file, NULL,
+                dep_wav_read_open(downmix_s_wav[map]);
+            dep_wav_get_header(ce->fc.f_downmix_s_wav[map].file, NULL,
                             &(ce->fc.f_downmix_s_wav[map].info.channels), NULL,
                             &(ce->fc.f_downmix_s_wav[map].info.bits_per_sample),
-                            NULL);
+                            NULL, NULL);
             break;
           }
         }
@@ -286,22 +286,22 @@ void ia_intermediate_file_readopen(ChannelBasedEnc *ce, int file_type,
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
-          ce->fc.f_gaindown_wav[map].file = wav_read_open2(gaindown_wav[map]);
-          wav_get_header2(ce->fc.f_gaindown_wav[map].file, NULL,
+          ce->fc.f_gaindown_wav[map].file = dep_wav_read_open(gaindown_wav[map]);
+          dep_wav_get_header(ce->fc.f_gaindown_wav[map].file, NULL,
                           &(ce->fc.f_gaindown_wav[map].info.channels), NULL,
                           &(ce->fc.f_gaindown_wav[map].info.bits_per_sample),
-                          NULL);
+                          NULL, NULL);
         }
       } else {
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
           if (!strcmp(file_name, gaindown_wav[map])) {
-            ce->fc.f_gaindown_wav[map].file = wav_read_open2(gaindown_wav[map]);
-            wav_get_header2(ce->fc.f_gaindown_wav[map].file, NULL,
+            ce->fc.f_gaindown_wav[map].file = dep_wav_read_open(gaindown_wav[map]);
+            dep_wav_get_header(ce->fc.f_gaindown_wav[map].file, NULL,
                             &(ce->fc.f_gaindown_wav[map].info.channels), NULL,
                             &(ce->fc.f_gaindown_wav[map].info.bits_per_sample),
-                            NULL);
+                            NULL, NULL);
             break;
           }
         }
@@ -312,22 +312,22 @@ void ia_intermediate_file_readopen(ChannelBasedEnc *ce, int file_type,
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
-          ce->fc.f_upmix_wav[map].file = wav_read_open2(upmix_wav[map]);
-          wav_get_header2(ce->fc.f_upmix_wav[map].file, NULL,
+          ce->fc.f_upmix_wav[map].file = dep_wav_read_open(upmix_wav[map]);
+          dep_wav_get_header(ce->fc.f_upmix_wav[map].file, NULL,
                           &(ce->fc.f_upmix_wav[map].info.channels), NULL,
                           &(ce->fc.f_upmix_wav[map].info.bits_per_sample),
-                          NULL);
+                          NULL, NULL);
         }
       } else {
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
           if (!strcmp(file_name, upmix_wav[map])) {
-            ce->fc.f_upmix_wav[map].file = wav_read_open2(upmix_wav[map]);
-            wav_get_header2(ce->fc.f_upmix_wav[map].file, NULL,
+            ce->fc.f_upmix_wav[map].file = dep_wav_read_open(upmix_wav[map]);
+            dep_wav_get_header(ce->fc.f_upmix_wav[map].file, NULL,
                             &(ce->fc.f_upmix_wav[map].info.channels), NULL,
                             &(ce->fc.f_upmix_wav[map].info.bits_per_sample),
-                            NULL);
+                            NULL, NULL);
             break;
           }
         }
@@ -338,22 +338,22 @@ void ia_intermediate_file_readopen(ChannelBasedEnc *ce, int file_type,
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
-          ce->fc.f_decoded_wav[map].file = wav_read_open2(decoded_wav[map]);
-          wav_get_header2(ce->fc.f_decoded_wav[map].file, NULL,
+          ce->fc.f_decoded_wav[map].file = dep_wav_read_open(decoded_wav[map]);
+          dep_wav_get_header(ce->fc.f_decoded_wav[map].file, NULL,
                           &(ce->fc.f_decoded_wav[map].info.channels), NULL,
                           &(ce->fc.f_decoded_wav[map].info.bits_per_sample),
-                          NULL);
+                          NULL, NULL);
         }
       } else {
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
           if (!strcmp(file_name, decoded_wav[map])) {
-            ce->fc.f_decoded_wav[map].file = wav_read_open2(decoded_wav[map]);
-            wav_get_header2(ce->fc.f_decoded_wav[map].file, NULL,
+            ce->fc.f_decoded_wav[map].file = dep_wav_read_open(decoded_wav[map]);
+            dep_wav_get_header(ce->fc.f_decoded_wav[map].file, NULL,
                             &(ce->fc.f_decoded_wav[map].info.channels), NULL,
                             &(ce->fc.f_decoded_wav[map].info.bits_per_sample),
-                            NULL);
+                            NULL, NULL);
             break;
           }
         }
@@ -412,7 +412,7 @@ void ia_intermediate_file_write(ChannelBasedEnc *ce, int file_type,
         if (!strcmp(file_name, downmix_m_wav[i])) {
           int size_ = ce->fc.f_downmix_m_wav[i].info.channels * size *
                       sizeof(int16_t) * 2;  // float PCM
-          wav_write_data2(ce->fc.f_downmix_m_wav[i].file,
+          dep_wav_write_data(ce->fc.f_downmix_m_wav[i].file,
                           (unsigned char *)input, size_);
           break;
         }
@@ -423,7 +423,7 @@ void ia_intermediate_file_write(ChannelBasedEnc *ce, int file_type,
         if (!strcmp(file_name, downmix_s_wav[i])) {
           int size_ = ce->fc.f_downmix_s_wav[i].info.channels * size *
                       sizeof(int16_t) * 2;  // float PCM
-          wav_write_data2(ce->fc.f_downmix_s_wav[i].file,
+          dep_wav_write_data(ce->fc.f_downmix_s_wav[i].file,
                           (unsigned char *)input, size_);
           break;
         }
@@ -434,7 +434,7 @@ void ia_intermediate_file_write(ChannelBasedEnc *ce, int file_type,
         if (!strcmp(file_name, gaindown_wav[i])) {
           int size_ = ce->fc.f_gaindown_wav[i].info.channels * size *
                       sizeof(int16_t);  // PCM
-          wav_write_data2(ce->fc.f_gaindown_wav[i].file, (unsigned char *)input,
+          dep_wav_write_data(ce->fc.f_gaindown_wav[i].file, (unsigned char *)input,
                           size_);
           break;
         }
@@ -445,7 +445,7 @@ void ia_intermediate_file_write(ChannelBasedEnc *ce, int file_type,
         if (!strcmp(file_name, upmix_wav[i])) {
           int size_ = ce->fc.f_upmix_wav[i].info.channels * size *
                       sizeof(int16_t) * 2;  // float PCM
-          wav_write_data2(ce->fc.f_upmix_wav[i].file, (unsigned char *)input,
+          dep_wav_write_data(ce->fc.f_upmix_wav[i].file, (unsigned char *)input,
                           size_);
           break;
         }
@@ -456,7 +456,7 @@ void ia_intermediate_file_write(ChannelBasedEnc *ce, int file_type,
         if (!strcmp(file_name, decoded_wav[i])) {
           int size_ = ce->fc.f_decoded_wav[i].info.channels * size *
                       sizeof(int16_t);  // PCM
-          wav_write_data2(ce->fc.f_decoded_wav[i].file, (unsigned char *)input,
+          dep_wav_write_data(ce->fc.f_decoded_wav[i].file, (unsigned char *)input,
                           size_);
           break;
         }
@@ -495,7 +495,7 @@ int ia_intermediate_file_read(ChannelBasedEnc *ce, int file_type,
         if (!strcmp(file_name, downmix_m_wav[i])) {
           int size_ = ce->fc.f_downmix_m_wav[i].info.channels * size *
                       sizeof(int16_t) * 2;  // float PCM
-          length = wav_read_data2(ce->fc.f_downmix_m_wav[i].file,
+          length = dep_wav_read_data(ce->fc.f_downmix_m_wav[i].file,
                                   (unsigned char *)output, size_);
           break;
         }
@@ -506,7 +506,7 @@ int ia_intermediate_file_read(ChannelBasedEnc *ce, int file_type,
         if (!strcmp(file_name, downmix_s_wav[i])) {
           int size_ = ce->fc.f_downmix_s_wav[i].info.channels * size *
                       sizeof(int16_t) * 2;  // float PCM
-          length = wav_read_data2(ce->fc.f_downmix_s_wav[i].file,
+          length = dep_wav_read_data(ce->fc.f_downmix_s_wav[i].file,
                                   (unsigned char *)output, size_);
           break;
         }
@@ -517,7 +517,7 @@ int ia_intermediate_file_read(ChannelBasedEnc *ce, int file_type,
         if (!strcmp(file_name, gaindown_wav[i])) {
           int size_ = ce->fc.f_gaindown_wav[i].info.channels * size *
                       sizeof(int16_t);  // PCM
-          length = wav_read_data2(ce->fc.f_gaindown_wav[i].file,
+          length = dep_wav_read_data(ce->fc.f_gaindown_wav[i].file,
                                   (unsigned char *)output, size_);
           break;
         }
@@ -528,7 +528,7 @@ int ia_intermediate_file_read(ChannelBasedEnc *ce, int file_type,
         if (!strcmp(file_name, upmix_wav[i])) {
           int size_ = ce->fc.f_upmix_wav[i].info.channels * size *
                       sizeof(int16_t) * 2;  // float PCM
-          length = wav_read_data2(ce->fc.f_upmix_wav[i].file,
+          length = dep_wav_read_data(ce->fc.f_upmix_wav[i].file,
                                   (unsigned char *)output, size_);
           break;
         }
@@ -539,7 +539,7 @@ int ia_intermediate_file_read(ChannelBasedEnc *ce, int file_type,
         if (!strcmp(file_name, decoded_wav[i])) {
           int size_ = ce->fc.f_decoded_wav[i].info.channels * size *
                       sizeof(int16_t);  // PCM
-          length = wav_read_data2(ce->fc.f_decoded_wav[i].file,
+          length = dep_wav_read_data(ce->fc.f_decoded_wav[i].file,
                                   (unsigned char *)output, size_);
           break;
         }
@@ -578,7 +578,7 @@ void ia_intermediate_file_writeclose(ChannelBasedEnc *ce, int file_type,
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
           if (ce->fc.f_downmix_m_wav[map].file) {
-            wav_write_close2(ce->fc.f_downmix_m_wav[map].file);
+            dep_wav_write_close(ce->fc.f_downmix_m_wav[map].file);
             ce->fc.f_downmix_m_wav[map].file = NULL;
           }
         }
@@ -586,7 +586,7 @@ void ia_intermediate_file_writeclose(ChannelBasedEnc *ce, int file_type,
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           if (!strcmp(file_name, downmix_m_wav[i])) {
             if (ce->fc.f_downmix_m_wav[i].file) {
-              wav_write_close2(ce->fc.f_downmix_m_wav[i].file);
+              dep_wav_write_close(ce->fc.f_downmix_m_wav[i].file);
               ce->fc.f_downmix_m_wav[i].file = NULL;
             }
             break;
@@ -600,7 +600,7 @@ void ia_intermediate_file_writeclose(ChannelBasedEnc *ce, int file_type,
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
           if (ce->fc.f_downmix_s_wav[map].file) {
-            wav_write_close2(ce->fc.f_downmix_s_wav[map].file);
+            dep_wav_write_close(ce->fc.f_downmix_s_wav[map].file);
             ce->fc.f_downmix_s_wav[map].file = NULL;
           }
         }
@@ -608,7 +608,7 @@ void ia_intermediate_file_writeclose(ChannelBasedEnc *ce, int file_type,
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           if (!strcmp(file_name, downmix_s_wav[i])) {
             if (ce->fc.f_downmix_s_wav[i].file) {
-              wav_write_close2(ce->fc.f_downmix_s_wav[i].file);
+              dep_wav_write_close(ce->fc.f_downmix_s_wav[i].file);
               ce->fc.f_downmix_s_wav[i].file = NULL;
             }
             break;
@@ -622,7 +622,7 @@ void ia_intermediate_file_writeclose(ChannelBasedEnc *ce, int file_type,
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
           if (ce->fc.f_gaindown_wav[map].file) {
-            wav_write_close2(ce->fc.f_gaindown_wav[map].file);
+            dep_wav_write_close(ce->fc.f_gaindown_wav[map].file);
             ce->fc.f_gaindown_wav[map].file = NULL;
           }
         }
@@ -630,7 +630,7 @@ void ia_intermediate_file_writeclose(ChannelBasedEnc *ce, int file_type,
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           if (!strcmp(file_name, gaindown_wav[i])) {
             if (ce->fc.f_gaindown_wav[i].file) {
-              wav_write_close2(ce->fc.f_gaindown_wav[i].file);
+              dep_wav_write_close(ce->fc.f_gaindown_wav[i].file);
               ce->fc.f_gaindown_wav[i].file = NULL;
             }
             break;
@@ -644,7 +644,7 @@ void ia_intermediate_file_writeclose(ChannelBasedEnc *ce, int file_type,
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
           if (ce->fc.f_upmix_wav[map].file) {
-            wav_write_close2(ce->fc.f_upmix_wav[map].file);
+            dep_wav_write_close(ce->fc.f_upmix_wav[map].file);
             ce->fc.f_upmix_wav[map].file = NULL;
           }
         }
@@ -652,7 +652,7 @@ void ia_intermediate_file_writeclose(ChannelBasedEnc *ce, int file_type,
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           if (!strcmp(file_name, upmix_wav[i])) {
             if (ce->fc.f_upmix_wav[i].file) {
-              wav_write_close2(ce->fc.f_upmix_wav[i].file);
+              dep_wav_write_close(ce->fc.f_upmix_wav[i].file);
               ce->fc.f_upmix_wav[i].file = NULL;
             }
             break;
@@ -666,7 +666,7 @@ void ia_intermediate_file_writeclose(ChannelBasedEnc *ce, int file_type,
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
           if (ce->fc.f_decoded_wav[map].file) {
-            wav_write_close2(ce->fc.f_decoded_wav[map].file);
+            dep_wav_write_close(ce->fc.f_decoded_wav[map].file);
             ce->fc.f_decoded_wav[map].file = NULL;
           }
         }
@@ -674,7 +674,7 @@ void ia_intermediate_file_writeclose(ChannelBasedEnc *ce, int file_type,
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           if (!strcmp(file_name, decoded_wav[i])) {
             if (ce->fc.f_decoded_wav[i].file) {
-              wav_write_close2(ce->fc.f_decoded_wav[i].file);
+              dep_wav_write_close(ce->fc.f_decoded_wav[i].file);
               ce->fc.f_decoded_wav[i].file = NULL;
             }
             break;
@@ -741,7 +741,7 @@ void ia_intermediate_file_readclose(ChannelBasedEnc *ce, int file_type,
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
           if (ce->fc.f_downmix_m_wav[map].file) {
-            wav_read_close2(ce->fc.f_downmix_m_wav[map].file);
+            dep_wav_read_close(ce->fc.f_downmix_m_wav[map].file);
             ce->fc.f_downmix_m_wav[map].file = NULL;
           }
         }
@@ -749,7 +749,7 @@ void ia_intermediate_file_readclose(ChannelBasedEnc *ce, int file_type,
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           if (!strcmp(file_name, downmix_m_wav[i])) {
             if (ce->fc.f_downmix_m_wav[i].file) {
-              wav_read_close2(ce->fc.f_downmix_m_wav[i].file);
+              dep_wav_read_close(ce->fc.f_downmix_m_wav[i].file);
               ce->fc.f_downmix_m_wav[i].file = NULL;
             }
             break;
@@ -763,7 +763,7 @@ void ia_intermediate_file_readclose(ChannelBasedEnc *ce, int file_type,
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
           if (ce->fc.f_downmix_s_wav[map].file) {
-            wav_read_close2(ce->fc.f_downmix_s_wav[map].file);
+            dep_wav_read_close(ce->fc.f_downmix_s_wav[map].file);
             ce->fc.f_downmix_s_wav[map].file = NULL;
           }
         }
@@ -771,7 +771,7 @@ void ia_intermediate_file_readclose(ChannelBasedEnc *ce, int file_type,
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           if (!strcmp(file_name, downmix_s_wav[i])) {
             if (ce->fc.f_downmix_s_wav[i].file) {
-              wav_read_close2(ce->fc.f_downmix_s_wav[i].file);
+              dep_wav_read_close(ce->fc.f_downmix_s_wav[i].file);
               ce->fc.f_downmix_s_wav[i].file = NULL;
             }
             break;
@@ -785,7 +785,7 @@ void ia_intermediate_file_readclose(ChannelBasedEnc *ce, int file_type,
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
           if (ce->fc.f_gaindown_wav[map].file) {
-            wav_read_close2(ce->fc.f_gaindown_wav[map].file);
+            dep_wav_read_close(ce->fc.f_gaindown_wav[map].file);
             ce->fc.f_gaindown_wav[map].file = NULL;
           }
         }
@@ -793,7 +793,7 @@ void ia_intermediate_file_readclose(ChannelBasedEnc *ce, int file_type,
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           if (!strcmp(file_name, gaindown_wav[i])) {
             if (ce->fc.f_gaindown_wav[i].file) {
-              wav_read_close2(ce->fc.f_gaindown_wav[i].file);
+              dep_wav_read_close(ce->fc.f_gaindown_wav[i].file);
               ce->fc.f_gaindown_wav[i].file = NULL;
             }
             break;
@@ -807,7 +807,7 @@ void ia_intermediate_file_readclose(ChannelBasedEnc *ce, int file_type,
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
           if (ce->fc.f_upmix_wav[map].file) {
-            wav_read_close2(ce->fc.f_upmix_wav[map].file);
+            dep_wav_read_close(ce->fc.f_upmix_wav[map].file);
             ce->fc.f_upmix_wav[map].file = NULL;
           }
         }
@@ -815,7 +815,7 @@ void ia_intermediate_file_readclose(ChannelBasedEnc *ce, int file_type,
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           if (!strcmp(file_name, upmix_wav[i])) {
             if (ce->fc.f_upmix_wav[i].file) {
-              wav_read_close2(ce->fc.f_upmix_wav[i].file);
+              dep_wav_read_close(ce->fc.f_upmix_wav[i].file);
               ce->fc.f_upmix_wav[i].file = NULL;
             }
             break;
@@ -829,7 +829,7 @@ void ia_intermediate_file_readclose(ChannelBasedEnc *ce, int file_type,
           unsigned char map = ce->channel_layout_map[i];
           if (map == IA_CHANNEL_LAYOUT_COUNT) break;
           if (ce->fc.f_decoded_wav[map].file) {
-            wav_read_close2(ce->fc.f_decoded_wav[map].file);
+            dep_wav_read_close(ce->fc.f_decoded_wav[map].file);
             ce->fc.f_decoded_wav[map].file = NULL;
           }
         }
@@ -837,7 +837,7 @@ void ia_intermediate_file_readclose(ChannelBasedEnc *ce, int file_type,
         for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
           if (!strcmp(file_name, decoded_wav[i])) {
             if (ce->fc.f_decoded_wav[i].file) {
-              wav_read_close2(ce->fc.f_decoded_wav[i].file);
+              dep_wav_read_close(ce->fc.f_decoded_wav[i].file);
               ce->fc.f_decoded_wav[i].file = NULL;
             }
             break;

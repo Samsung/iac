@@ -114,12 +114,6 @@
     <ClCompile Include="..\..\src\iamf_dec\resample.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\common\wavreader2.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\src\common\wavwriter2.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\src\iamf_dec\flac\flac_multistream_decoder.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -130,6 +124,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\iamf_dec\queue_t.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dep_external\src\wav\dep_wavreader.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dep_external\src\wav\dep_wavwriter.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -236,12 +236,6 @@
     <ClInclude Include="..\..\src\iamf_dec\speex_resampler.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\common\wavwriter2.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\common\wavreader2.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\src\common\IAMF_debug.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -255,6 +249,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\iamf_dec\queue_t.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dep_external\include\wav\dep_wavreader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dep_external\include\wav\dep_wavwriter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

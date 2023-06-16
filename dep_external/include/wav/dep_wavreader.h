@@ -1,4 +1,4 @@
-﻿/* ------------------------------------------------------------------
+/* ------------------------------------------------------------------
  * Copyright (C) 2009 Martin Storsjo
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,23 +16,24 @@
  * -------------------------------------------------------------------
  */
 
-#ifndef WAVREADER2_H
-#define WAVREADER2_H
+#ifndef DEP_WAVREADER_H
+#define DEP_WAVREADER_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#ifndef WAVE_FORMAT_PCM2
-#define WAVE_FORMAT_PCM2 1
-#define WAVE_FORMAT_FLOAT2 3
+#ifndef DEP_WAVE_FORMAT_PCM
+#define DEP_WAVE_FORMAT_PCM 1
+#define DEP_WAVE_FORMAT_FLOAT 3
 #endif
 
-void* wav_read_open2(const char* filename);
-void wav_read_close2(void* obj);
-int wav_get_header2(void* obj, int* format, int* channels, int* sample_rate,
-                    int* bits_per_sample, unsigned int* data_length);
-int wav_read_data2(void* obj, unsigned char* data, unsigned int length);
+void* dep_wav_read_open(const char* filename);
+void dep_wav_read_close(void* obj);
+int dep_wav_get_header(void* obj, int* format, int* channels, int* sample_rate,
+                   int* bits_per_sample, int* endianness,
+                   unsigned int* data_length);
+int dep_wav_read_data(void* obj, unsigned char* data, unsigned int length);
 
 #ifdef __cplusplus
 }

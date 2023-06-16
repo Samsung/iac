@@ -18,14 +18,14 @@ There are 2 parts to build: iamf(iamf_dec&iamf_enc) tools(iamfpackager&iamfplaye
 ```sh
 % BUILD_LIBS=$PWD/build_libs
 % cmake ./ -DCMAKE_INSTALL_PREFIX=${BUILD_LIBS}
-% make 
+% make
 % make install
 ```
 
 2. build tools in "test/tools/iamfpackager" and "test/tools/iamfplayer" directory separately
 ```sh
 % cmake ./-DCMAKE_INSTALL_PREFIX=${BUILD_LIBS}
-% make 
+% make
 ```
 
 Remark: please ensure that they have same CMAKE_INSTALL_PREFIX.
@@ -35,22 +35,25 @@ Remark: please ensure that they have same CMAKE_INSTALL_PREFIX.
 This tool aims to encode PCM data to IA bitstream and encapsulate to Mp4/Fmp4
 
 ```sh
--profile : <0/1(simpe/base)>
+-profile   : <0/1(simpe/base)>
 -codec     : <codec name/frame size(opus,aac,flac,pcm/1024)>
--mode      : <audio element type(0:channle-based,1:scene-based(Mono),2:scene-based(Projection))/input channel layout/channel layout combinations>
+-mode      : <audio element type(0:channle-based,1:scene-based(Mono),2:scene-based(Projection)/config>
+             <0/channel layout/channel layout combinations>
+             <1/output channel count/substream count/channel mapping>
+             <2/output channel count/substream count/coupled substream count/demixing matrix>
 -i         : <input wav file>
 -o         : <0/1/2(bitstream/mp4/fmp4)> <output file>
 Example:
 iamfpackager -profile 0 -codec opus -mode 0/7.1.4/2.0.0+3.1.2+5.1.2 -i input.wav -o 0 simple_profile.iamf
 or
-iamfpackager -profile 1 -codec opus -mode 0/7.1.4/3.1.2+5.1.2 -i input1.wav -mode 1 -i input2.wav -o 0 base_profile.iamf
+iamfpackager -profile 1 -codec opus -mode 0/7.1.4/3.1.2+5.1.2 -i input1.wav -mode 1/4/4/0,1,2,3 -i input2.wav -o 1 base_profile.mp4
 
 Before exacuting, please modify mix_config.json to set mix presentation.
 ```
 
 1. encode scalable channel layout input format for simple profile.
 ```sh
-Example:  
+Example:
 ./iamfpackager -profile 0 -codec opus -mode 0/7.1.4/2.0.0+3.1.2+5.1.2 -i input.wav -o 0 simple_profile.iamf
 ```
 Remark: "estimator_model.tflite" and "feature_model.tflite" are required in exacuting directory.
@@ -63,13 +66,13 @@ Example:  ./iamfpackager -profile 0 -codec opus -mode 0/7.1.4 -i input.wav -o 0 
 3. encode ambisonics input format for simple profile.
 ```sh
 Example:
-./iamfpackager -profile 0 -codec opus -mode 1 -i input.wav -o 0 simple_profile.iamf
+./iamfpackager -profile 0 -codec opus -mode 1/4/4/0,1,2,3 -i input.wav -o 0 simple_profile.iamf
 ```
 
 4. encode for base profile.
 ```sh
 Example:
-./iamfpackager -profile 1 -codec opus -mode 0/7.1.4/3.1.2+5.1.2 -i input1.wav -mode 1 -i input2.wav -o 0 base_profile.iamf
+./iamfpackager -profile 1 -codec opus -mode 0/7.1.4/3.1.2+5.1.2 -i input1.wav -mode 1/4/4/0,1,2,3 -i input2.wav -o 0 base_profile.iamf
 ```
 
 ### Tools(iamfplayer)
@@ -95,10 +98,12 @@ options:
            9 : Sound system J (4+7+0)
           10 : Sound system extension 712 (2+7+0)
           11 : Sound system extension 312 (2+3+0)
+          12 : Sound system mono (0+1+0)
            b : Binaural.
 -p [dB]      : Peak threshold in dB.
 -l [LKFS]    : Normalization loudness in LKFS.
 -d [bit]     : Bit depth of pcm output.
+-mp [id]     : Set mix presentation id.
 -m           : Generate a metadata file with the suffix .met.
 
 Example:  ./iamfplayer -o2 -s9 simple_profile.iamf

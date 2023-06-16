@@ -656,8 +656,7 @@ static creator_t g_factorsmooth[] = {
     {CHANNEL_LAYOUT_312, smooth_to312}, {-1}};
 
 UpMixer *upmix_create(int recon_gain_flag,
-                      const unsigned char *channel_layout_map, int frame_size,
-                      int preskip_size) {
+                      const unsigned char *channel_layout_map, int frame_size) {
   UpMixer *um = (UpMixer *)malloc(sizeof(UpMixer));
   if (!um) return NULL;
   memset(um, 0x00, sizeof(UpMixer));
@@ -665,7 +664,6 @@ UpMixer *upmix_create(int recon_gain_flag,
   um->pre_layout = CHANNEL_LAYOUT_MAX;
   memcpy(um->channel_layout_map, channel_layout_map, CHANNEL_LAYOUT_MAX);
   um->frame_size = frame_size;
-  um->preskip_size = preskip_size;
 
   for (int i = 0; i < CHANNEL_LAYOUT_MAX; i++) {
     int layout = um->channel_layout_map[i];
@@ -688,19 +686,6 @@ UpMixer *upmix_create(int recon_gain_flag,
   // create hanning window
   for (int i = 0; i < frameLen; i++) {
     um->hanning[i] = 0.5 * (1.0 - cos(2 * M_PI * i / den));
-  }
-  int overlapLen = frameLen / 2;
-  for (int i = 0; i < um->frame_size; i++) {
-    if (i < um->preskip_size - overlapLen) {
-      um->startWin[i] = 0.0f;
-      um->stopWin[i] = 1.0f;
-    } else if (i >= (um->preskip_size - overlapLen) && i < um->preskip_size) {
-      um->startWin[i] = um->hanning[i - (um->preskip_size - overlapLen)];
-      um->stopWin[i] = um->hanning[i - um->preskip_size + 2 * overlapLen];
-    } else {
-      um->startWin[i] = 1.0f;
-      um->stopWin[i] = 0.0f;
-    }
   }
 
   for (int i = 0; i < 12; i++) {
@@ -775,6 +760,48 @@ void upmix_destroy(UpMixer *um) {
     if (um->stopWin) free(um->stopWin);
     free(um);
   }
+}
+
+void upmix_set_preskip_size(UpMixer *um, int preskip_size) {
+  um->preskip_size = preskip_size;
+  int frameLen = um->frame_size / 8;
+  float den = (float)(frameLen - 1);
+  // create hanning window
+  for (int i = 0; i < frameLen; i++) {
+    um->hanning[i] = 0.5 * (1.0 - cos(2 * M_PI * i / den));
+  }
+  int overlapLen = frameLen / 2;
+#if 1
+  for (int i = 0; i < um->frame_size; i++) {
+    if (i < um->preskip_size) {
+      um->startWin[i] = 0.0f;
+      um->stopWin[i] = 1.0f;
+    }
+    else if (i >= (um->preskip_size) && i < um->preskip_size + overlapLen) {
+      um->startWin[i] = um->hanning[i - um->preskip_size];
+      um->stopWin[i] = um->hanning[i - um->preskip_size + overlapLen];
+    }
+    else {
+      um->startWin[i] = 1.0f;
+      um->stopWin[i] = 0.0f;
+    }
+  }
+#else
+  for (int i = 0; i < um->frame_size; i++) {
+    if (i < um->preskip_size - overlapLen) {
+      um->startWin[i] = 0.0f;
+      um->stopWin[i] = 1.0f;
+    }
+    else if (i >= (um->preskip_size - overlapLen) && i < um->preskip_size) {
+      um->startWin[i] = um->hanning[i - (um->preskip_size - overlapLen)];
+      um->stopWin[i] = um->hanning[i - um->preskip_size + 2 * overlapLen];
+    }
+    else {
+      um->startWin[i] = 1.0f;
+      um->stopWin[i] = 0.0f;
+    }
+  }
+#endif
 }
 
 void upmix_gain_up(UpMixer *um, float *pcmbuf[], int nch,

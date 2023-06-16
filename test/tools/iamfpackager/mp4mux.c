@@ -623,7 +623,8 @@ static int mov_write_stsc_tag(MOVMuxContext *movm) {
     return size;
   }
 
-  uint32_t *samples_per_chunk = (uint32_t *)_dmalloc(1, __FILE__, __LINE__);
+  uint32_t *samples_per_chunk =
+      (uint32_t *)_dmalloc(1 * sizeof(uint32_t), __FILE__, __LINE__);
 
   int cnt = 0;
   int entry_count = 1;
@@ -633,8 +634,9 @@ static int mov_write_stsc_tag(MOVMuxContext *movm) {
     if (sample_chunk != audio_t->frame.first_chunk[cnt]) {
       entry_count++;
       sample_chunk = audio_t->frame.first_chunk[cnt];
-      samples_per_chunk = (uint32_t *)_drealloc(
-          (char *)samples_per_chunk, entry_count, __FILE__, __LINE__);
+      samples_per_chunk = (uint32_t *)_drealloc((char *)samples_per_chunk,
+                                                entry_count * sizeof(uint32_t),
+                                                __FILE__, __LINE__);
       samples_per_chunk[entry_count - 1] = 1;
     } else {
       samples_per_chunk[entry_count - 1]++;
@@ -678,7 +680,8 @@ static int mov_write_stco_tag(MOVMuxContext *movm) {
     return size;
   }
 
-  uint32_t *chunk_offset = (uint32_t *)_dmalloc(1, __FILE__, __LINE__);
+  uint32_t *chunk_offset =
+      (uint32_t *)_dmalloc(1 * sizeof(uint32_t), __FILE__, __LINE__);
 
   int entry_count = 1;
   chunk_offset[0] = audio_t->frame.offsets[0];
@@ -687,7 +690,8 @@ static int mov_write_stco_tag(MOVMuxContext *movm) {
     if (sample_chunk != audio_t->frame.first_chunk[cnt]) {
       entry_count++;
       sample_chunk = audio_t->frame.first_chunk[cnt];
-      chunk_offset = (uint32_t *)_drealloc((char *)chunk_offset, entry_count,
+      chunk_offset = (uint32_t *)_drealloc((char *)chunk_offset,
+                                           entry_count * sizeof(uint32_t),
                                            __FILE__, __LINE__);
       chunk_offset[entry_count - 1] = audio_t->frame.offsets[cnt];
     }
@@ -1118,18 +1122,18 @@ int mov_write_audio(MOVMuxContext *movm, int trak, uint8_t *buf, int size,
     if (((audio_t->frame.entries + 1) * sizeof(*(audio_t->frame.sizes))) >
         audio_t->frame.buffersize) {
       audio_t->frame.buffersize += BUFSTEP;
-      audio_t->frame.sizes =
-          (uint32_t *)_drealloc((char *)audio_t->frame.sizes,
-                                audio_t->frame.buffersize, __FILE__, __LINE__);
-      audio_t->frame.offsets =
-          (uint32_t *)_drealloc((char *)audio_t->frame.offsets,
-                                audio_t->frame.buffersize, __FILE__, __LINE__);
-      audio_t->frame.deltas =
-          (uint32_t *)_drealloc((char *)audio_t->frame.deltas,
-                                audio_t->frame.buffersize, __FILE__, __LINE__);
-      audio_t->frame.first_chunk =
-          (uint32_t *)_drealloc((char *)audio_t->frame.first_chunk,
-                                audio_t->frame.buffersize, __FILE__, __LINE__);
+      audio_t->frame.sizes = (uint32_t *)_drealloc(
+          (char *)audio_t->frame.sizes,
+          audio_t->frame.buffersize * sizeof(uint32_t), __FILE__, __LINE__);
+      audio_t->frame.offsets = (uint32_t *)_drealloc(
+          (char *)audio_t->frame.offsets,
+          audio_t->frame.buffersize * sizeof(uint32_t), __FILE__, __LINE__);
+      audio_t->frame.deltas = (uint32_t *)_drealloc(
+          (char *)audio_t->frame.deltas,
+          audio_t->frame.buffersize * sizeof(uint32_t), __FILE__, __LINE__);
+      audio_t->frame.first_chunk = (uint32_t *)_drealloc(
+          (char *)audio_t->frame.first_chunk,
+          audio_t->frame.buffersize * sizeof(uint32_t), __FILE__, __LINE__);
     }
     audio_t->frame.offsets[audio_t->frame.entries] = movm->mdatoffset + pos;
     audio_t->frame.sizes[audio_t->frame.entries] = size;
@@ -1149,9 +1153,9 @@ int mov_write_audio(MOVMuxContext *movm, int trak, uint8_t *buf, int size,
     if (((audio_t->frame.entries + 1) * sizeof(*(audio_t->frame.sizes))) >
         audio_t->frame.buffersize) {
       audio_t->frame.buffersize += BUFSTEP;
-      audio_t->frame.sizes =
-          (uint32_t *)_drealloc((char *)audio_t->frame.sizes,
-                                audio_t->frame.buffersize, __FILE__, __LINE__);
+      audio_t->frame.sizes = (uint32_t *)_drealloc(
+          (char *)audio_t->frame.sizes,
+          audio_t->frame.buffersize * sizeof(uint32_t), __FILE__, __LINE__);
     }
     audio_t->frame.sizes[audio_t->frame.entries++] = size;
     if (f_duration(audio_t) >= movm->max_fragment_duration) {
@@ -1193,18 +1197,18 @@ int mov_write_audio2(MOVMuxContext *movm, int trak, AVPacket *pkt) {
     if (((audio_t->frame.entries + 1) * sizeof(*(audio_t->frame.sizes))) >
         audio_t->frame.buffersize) {
       audio_t->frame.buffersize += BUFSTEP;
-      audio_t->frame.sizes =
-          (uint32_t *)_drealloc((char *)audio_t->frame.sizes,
-                                audio_t->frame.buffersize, __FILE__, __LINE__);
-      audio_t->frame.offsets =
-          (uint32_t *)_drealloc((char *)audio_t->frame.offsets,
-                                audio_t->frame.buffersize, __FILE__, __LINE__);
-      audio_t->frame.deltas =
-          (uint32_t *)_drealloc((char *)audio_t->frame.deltas,
-                                audio_t->frame.buffersize, __FILE__, __LINE__);
-      audio_t->frame.first_chunk =
-          (uint32_t *)_drealloc((char *)audio_t->frame.first_chunk,
-                                audio_t->frame.buffersize, __FILE__, __LINE__);
+      audio_t->frame.sizes = (uint32_t *)_drealloc(
+          (char *)audio_t->frame.sizes,
+          audio_t->frame.buffersize * sizeof(uint32_t), __FILE__, __LINE__);
+      audio_t->frame.offsets = (uint32_t *)_drealloc(
+          (char *)audio_t->frame.offsets,
+          audio_t->frame.buffersize * sizeof(uint32_t), __FILE__, __LINE__);
+      audio_t->frame.deltas = (uint32_t *)_drealloc(
+          (char *)audio_t->frame.deltas,
+          audio_t->frame.buffersize * sizeof(uint32_t), __FILE__, __LINE__);
+      audio_t->frame.first_chunk = (uint32_t *)_drealloc(
+          (char *)audio_t->frame.first_chunk,
+          audio_t->frame.buffersize * sizeof(uint32_t), __FILE__, __LINE__);
     }
     audio_t->frame.offsets[audio_t->frame.entries] = movm->mdatoffset + pos;
     audio_t->frame.sizes[audio_t->frame.entries] = pkt->size;
@@ -1225,12 +1229,12 @@ int mov_write_audio2(MOVMuxContext *movm, int trak, AVPacket *pkt) {
     if (((audio_t->frame.entries + 1) * sizeof(*(audio_t->frame.sizes))) >
         audio_t->frame.buffersize) {
       audio_t->frame.buffersize += BUFSTEP;
-      audio_t->frame.sizes =
-          (uint32_t *)_drealloc((char *)audio_t->frame.sizes,
-                                audio_t->frame.buffersize, __FILE__, __LINE__);
-      audio_t->frame.deltas =
-          (uint32_t *)_drealloc((char *)audio_t->frame.deltas,
-                                audio_t->frame.buffersize, __FILE__, __LINE__);
+      audio_t->frame.sizes = (uint32_t *)_drealloc(
+          (char *)audio_t->frame.sizes,
+          audio_t->frame.buffersize * sizeof(uint32_t), __FILE__, __LINE__);
+      audio_t->frame.deltas = (uint32_t *)_drealloc(
+          (char *)audio_t->frame.deltas,
+          audio_t->frame.buffersize * sizeof(uint32_t), __FILE__, __LINE__);
     }
     audio_t->frame.sizes[audio_t->frame.entries] = pkt->size;
     audio_t->frame.deltas[audio_t->frame.entries++] = pkt->samples;
@@ -1410,14 +1414,14 @@ int mov_write_trak(MOVMuxContext *movm, int num_video_traks,
     mov_audio_track *audio_t = movm->audio_trak;
     for (int i = 0; i < num_audio_traks; i++) {
       audio_t[i].frame.buffersize = BUFSTEP;
-      audio_t[i].frame.sizes =
-          (uint32_t *)_dmalloc(audio_t[i].frame.buffersize, __FILE__, __LINE__);
-      audio_t[i].frame.offsets =
-          (uint32_t *)_dmalloc(audio_t[i].frame.buffersize, __FILE__, __LINE__);
-      audio_t[i].frame.deltas =
-          (uint32_t *)_dmalloc(audio_t[i].frame.buffersize, __FILE__, __LINE__);
-      audio_t[i].frame.first_chunk =
-          (uint32_t *)_dmalloc(audio_t[i].frame.buffersize, __FILE__, __LINE__);
+      audio_t[i].frame.sizes = (uint32_t *)_dmalloc(
+          audio_t[i].frame.buffersize * sizeof(uint32_t), __FILE__, __LINE__);
+      audio_t[i].frame.offsets = (uint32_t *)_dmalloc(
+          audio_t[i].frame.buffersize * sizeof(uint32_t), __FILE__, __LINE__);
+      audio_t[i].frame.deltas = (uint32_t *)_dmalloc(
+          audio_t[i].frame.buffersize * sizeof(uint32_t), __FILE__, __LINE__);
+      audio_t[i].frame.first_chunk = (uint32_t *)_dmalloc(
+          audio_t[i].frame.buffersize * sizeof(uint32_t), __FILE__, __LINE__);
       if (IS_FRAGMENT_MP4) {
         audio_t[i].frame.fmdat_size = 2 * 1024 * 1024;  // 2M Bytes
         audio_t[i].frame.fmdat = (unsigned char *)_dmalloc(

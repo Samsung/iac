@@ -984,6 +984,7 @@ static int aac_decode_frame(AudioElementEncoder *ae, int cg, int stream,
   int ret;
   AAC_DECODER_ERROR err;
   UINT valid = encoded_size;
+  CStreamInfo *info = 0;
   err = aacDecoder_Fill(ae->ia_core_decoder[cg].dep_decoder[stream],
                         &encoded_frame, &encoded_size, &valid);
   if (err != AAC_DEC_OK) {
@@ -995,6 +996,11 @@ static int aac_decode_frame(AudioElementEncoder *ae, int cg, int stream,
   if (err != AAC_DEC_OK) {
     ia_loge("aacDecoder_DecodeFrame() failed: %x\n", err);
     return -1;
+  }
+
+  info = aacDecoder_GetStreamInfo(ae->ia_core_decoder[cg].dep_decoder[stream]);
+  if (info) {
+    ae->dec_delay_size = info->outputDelay;
   }
   ret = decoded_size;
   return ret;

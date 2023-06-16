@@ -30,12 +30,6 @@
     <ClCompile Include="..\..\..\test\tools\iamfpackager\progressbar.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\test\tools\iamfpackager\wavreader.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\test\tools\iamfpackager\wavwriter.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\test\tools\iamfpackager\cJSON.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -54,12 +48,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\test\tools\iamfpackager\progressbar.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\test\tools\iamfpackager\wavreader.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\test\tools\iamfpackager\wavwriter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\test\tools\iamfpackager\cJSON.h">

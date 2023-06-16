@@ -39,8 +39,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "audio_defines.h"
 #include "stdint.h"
 #include "stdio.h"
-#include "wavreader2.h"
-#include "wavwriter2.h"
+#include "wav/dep_wavreader.h"
+#include "wav/dep_wavwriter.h"
 
 typedef struct ChannelBasedEnc ChannelBasedEnc;
 

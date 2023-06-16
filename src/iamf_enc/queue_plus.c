@@ -57,6 +57,7 @@ int QueueDestroy(QueuePlus *pq) {
     cur = next;
   }
   pq->_head = pq->_tail = NULL;
+  pq->_length = 0;
   return 0;
 }
 
@@ -103,6 +104,52 @@ int QueuePush(QueuePlus *pq, void *input) {
   return 0;
 }
 
+int QueuePush2(QueuePlus *pq, void *input, int size) {
+  QueueNode *newnode = (QueueNode *)malloc(sizeof(QueueNode));
+  if (newnode == NULL) {
+    printf("newnode alloate failed\n");
+    return -1;
+  }
+  memset(newnode, 0x00, sizeof(QueueNode));
+  switch (pq->_type) {
+  case kUInt8:
+    newnode->_data =
+      (void *)malloc(sizeof(uint8_t) * pq->_coeffs * pq->_size);
+    memset(newnode->_data, 0x00, sizeof(uint8_t) * pq->_coeffs * pq->_size);
+    memcpy(newnode->_data, input, sizeof(uint8_t) * pq->_coeffs * size);
+    break;
+  case kInt16:
+    newnode->_data =
+      (void *)malloc(sizeof(int16_t) * pq->_coeffs * pq->_size);
+    memset(newnode->_data, 0x00, sizeof(int16_t) * pq->_coeffs * pq->_size);
+    memcpy(newnode->_data, input, sizeof(int16_t) * pq->_coeffs * size);
+    break;
+  case kInt32:
+    newnode->_data =
+      (void *)malloc(sizeof(int32_t) * pq->_coeffs * pq->_size);
+    memset(newnode->_data, 0x00, sizeof(int32_t) * pq->_coeffs * pq->_size);
+    memcpy(newnode->_data, input, sizeof(int32_t) * pq->_coeffs * size);
+    break;
+  case kFloat:
+    newnode->_data = (void *)malloc(sizeof(float) * pq->_coeffs * pq->_size);
+    memset(newnode->_data, 0x00, sizeof(float) * pq->_coeffs * pq->_size);
+    memcpy(newnode->_data, input, sizeof(float) * pq->_coeffs * size);
+    break;
+  default:
+    printf("wrong value type!!!\n");
+    break;
+  }
+  if (pq->_head == NULL) {
+    pq->_head = pq->_tail = newnode;
+  }
+  else {
+    pq->_tail->_next = newnode;
+    pq->_tail = newnode;
+  }
+  pq->_length++;
+  return 0;
+}
+
 int QueuePop(QueuePlus *pq, void *output, int size) {
   if (size > pq->_size) {
     printf("pop size is illegal, should not be more than pq->_size\n");
@@ -111,7 +158,8 @@ int QueuePop(QueuePlus *pq, void *output, int size) {
   if (pq->_head == NULL) {
     return 0;
   }
-
+  if (size <= 0)
+    return 0;
   QueueNode *next = pq->_head->_next;
 
   if (pq->_size - pq->_head->_offset > size) {
@@ -138,6 +186,7 @@ int QueuePop(QueuePlus *pq, void *output, int size) {
         break;
     }
     pq->_head->_offset += size;
+    return size;
   } else if (pq->_size - pq->_head->_offset == size) {
     int offset = pq->_head->_offset;
     switch (pq->_type) {
@@ -168,6 +217,7 @@ int QueuePop(QueuePlus *pq, void *output, int size) {
       pq->_tail = NULL;
     }
     pq->_length--;
+    return size;
   } else if (pq->_size - pq->_head->_offset < size) {
     int offset = pq->_head->_offset;
     int copy_size = pq->_size - pq->_head->_offset;
@@ -197,7 +247,7 @@ int QueuePop(QueuePlus *pq, void *output, int size) {
     pq->_head = next;
     if (pq->_head == NULL) {
       pq->_tail = NULL;
-      return 0;
+      return copy_size;
     }
     pq->_length--;
 
@@ -229,6 +279,7 @@ int QueuePop(QueuePlus *pq, void *output, int size) {
         printf("wrong value type!!!\n");
         break;
     }
+    return size;
   }
   return 0;
 }

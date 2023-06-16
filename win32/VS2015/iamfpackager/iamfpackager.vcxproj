@@ -74,7 +74,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>..\..\..\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\..\include\;..\..\..\dep_external\include\wav\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>HAVE_CONFIG_H;WIN32;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
     </ClCompile>
     <Link>
@@ -89,7 +89,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>..\..\..\include\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\..\include\;..\..\..\dep_external\include\wav\</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>HAVE_CONFIG_H;WIN32;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
     </ClCompile>
     <Link>
@@ -134,8 +134,6 @@
     <ClCompile Include="..\..\..\test\tools\iamfpackager\main.c" />
     <ClCompile Include="..\..\..\test\tools\iamfpackager\mp4mux.c" />
     <ClCompile Include="..\..\..\test\tools\iamfpackager\progressbar.c" />
-    <ClCompile Include="..\..\..\test\tools\iamfpackager\wavreader.c" />
-    <ClCompile Include="..\..\..\test\tools\iamfpackager\wavwriter.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\test\tools\iamfpackager\a2b_endian.h" />
@@ -144,8 +142,6 @@
     <ClInclude Include="..\..\..\test\tools\iamfpackager\dmemory.h" />
     <ClInclude Include="..\..\..\test\tools\iamfpackager\mp4mux.h" />
     <ClInclude Include="..\..\..\test\tools\iamfpackager\progressbar.h" />
-    <ClInclude Include="..\..\..\test\tools\iamfpackager\wavreader.h" />
-    <ClInclude Include="..\..\..\test\tools\iamfpackager\wavwriter.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\iamf.vcxproj">
