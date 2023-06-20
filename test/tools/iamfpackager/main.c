@@ -40,10 +40,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "IAMF_encoder.h"
 #include "cJSON.h"
-#include "mp4mux.h"
-#include "progressbar.h"
 #include "dep_wavreader.h"
 #include "dep_wavwriter.h"
+#include "mp4mux.h"
+#include "progressbar.h"
 #ifndef MAX_OUTPUT_CHANNELS
 #define MAX_OUTPUT_CHANNELS 24
 #endif
@@ -80,6 +80,9 @@ void print_usage(char *argv[]) {
       "             <1/output channel count/substream count/channel mapping>\n"
       "             <2/output channel count/substream count/coupled substream "
       "count/demixing matrix>\n");
+  fprintf(stderr,
+          "-demix     : <default demix mode value(0~2 or 4~6)/default demix "
+          "weight value(0~10); e.g. 0/5>\n");
   fprintf(stderr, "-i         : <input wav file>\n");
   fprintf(stderr, "-o         : <0/1/2(bitstream/mp4/fmp4)> <output file>\n");
   fprintf(stderr,
@@ -461,6 +464,9 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
 
   int is_standalone = 0;
   int profile = 0;
+  int default_demix_mode = 0;
+  int default_demix_weight = 5;
+  int defauilt_demix_is_set = 0;
   int codec_id = IAMF_CODEC_UNKNOWN;
   AudioElementType audio_element_type = AUDIO_ELEMENT_INVALID;
   int ambisonics_mode = 0;
@@ -620,6 +626,15 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
           return (0);
         }
 
+      } else if (strcmp(argv[args], "-demix") == 0) {
+        args++;
+        char argv_string[1024];
+        strcpy(argv_string, argv[args]);
+        char *default_demix = strtok(argv_string, "/");
+        default_demix_mode = atoi(default_demix);
+        default_demix = strtok(NULL, "/");
+        default_demix_weight = atoi(default_demix);
+        defauilt_demix_is_set = 1;
       } else if (argv[args][1] == 'p') {
         args++;
         profile = atoi(argv[args]);
@@ -646,9 +661,9 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
   }
 
   // mix config json parse
-  FILE *fp = fopen("mix_config.json", "r");
+  FILE *fp = fopen("mix_config_s.json", "r");
   if (fp == NULL) {
-    printf("Error opening file: mix_config.json\n");
+    printf("Error opening file: mix_config_s.json\n");
     return 1;
   }
   fseek(fp, 0, SEEK_END);
@@ -725,8 +740,8 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
   int endianness;
   unsigned int data_length;
 
-  dep_wav_get_header(in_wavf, &format, &channels, &sample_rate, &bits_per_sample,
-                 &endianness, &data_length);
+  dep_wav_get_header(in_wavf, &format, &channels, &sample_rate,
+                     &bits_per_sample, &endianness, &data_length);
   if (in_wavf) dep_wav_read_close(in_wavf);
   fprintf(stderr,
           "input wav: format[%d] channels[%d] sample_rate[%d] "
@@ -773,6 +788,13 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
   IAMF_encoder_ctl(ia_enc, element_id,
                    IA_SET_STANDALONE_REPRESENTATION((int)is_standalone));
   IAMF_encoder_ctl(ia_enc, element_id, IA_SET_IAMF_PROFILE((int)profile));
+  if (defauilt_demix_is_set) {
+    IAMF_encoder_ctl(ia_enc, element_id,
+                     IA_SET_IAMF_DEFAULT_DEMIX_MODE((int)default_demix_mode));
+    IAMF_encoder_ctl(
+        ia_enc, element_id,
+        IA_SET_IAMF_DEFAULT_DEMIX_WEIGHT((int)default_demix_weight));
+  }
   int preskip = 0;
   IAMF_encoder_ctl(ia_enc, element_id, IA_GET_LOOKAHEAD(&preskip));
 
@@ -787,7 +809,7 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
     in_wavf = dep_wav_read_open(in_wav);
     if (mixp_t[i].mixp.num_layouts > 0) {
       int pcm_frames = dep_wav_read_data(in_wavf, (unsigned char *)wav_samples,
-                                     bsize_of_samples);
+                                         bsize_of_samples);
       int count = 0;
       IAMF_encoder_target_loudness_measure_start(ia_enc, &mixp_t[i].mixp);
       while (pcm_frames) {
@@ -802,7 +824,7 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
         IAMF_encoder_target_loudness_measure(ia_enc, &mixp_t[i].mixp,
                                              &ia_frame);
         pcm_frames = dep_wav_read_data(in_wavf, (unsigned char *)wav_samples,
-                                   bsize_of_samples);
+                                       bsize_of_samples);
       }
       IAMF_encoder_target_loudness_measure_stop(ia_enc, &mixp_t[i].mixp);
     }
@@ -832,17 +854,17 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
    * 3. ASC and HEQ pre-process.
    * */
   in_wavf = dep_wav_read_open(in_wav);
-  if (index > 0)  // non-scalable
+  if (index > 0 && !defauilt_demix_is_set)  // non-scalable
   {
     start_t = clock();
-    int pcm_frames =
-        dep_wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
+    int pcm_frames = dep_wav_read_data(in_wavf, (unsigned char *)wav_samples,
+                                       bsize_of_samples);
     IAMF_encoder_dmpd_start(ia_enc, element_id);
     while (pcm_frames) {
       IAMF_encoder_dmpd_process(ia_enc, element_id, wav_samples,
                                 pcm_frames / bsize_of_1sample);
       pcm_frames = dep_wav_read_data(in_wavf, (unsigned char *)wav_samples,
-                                 bsize_of_samples);
+                                     bsize_of_samples);
     }
     IAMF_encoder_dmpd_stop(ia_enc, element_id);
     stop_t = clock();
@@ -857,8 +879,8 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
    * 4. loudness and gain pre-process.
    * */
   in_wavf = dep_wav_read_open(in_wav);
-  int pcm_frames =
-      dep_wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
+  int pcm_frames = dep_wav_read_data(in_wavf, (unsigned char *)wav_samples,
+                                     bsize_of_samples);
   ProgressBar bar;
   ProgressBarInit(&bar);
   int total, current;
@@ -872,8 +894,8 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
     IAMF_encoder_scalable_loudnessgain_measure(ia_enc, element_id, wav_samples,
                                                pcm_frames / bsize_of_1sample);
 
-    pcm_frames =
-        dep_wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
+    pcm_frames = dep_wav_read_data(in_wavf, (unsigned char *)wav_samples,
+                                   bsize_of_samples);
     wr = (wav_reader_s *)in_wavf;
     current = total - wr->data_length;
     float pct = ((float)current / 1000) / ((float)total / 1000) * 100;
@@ -888,14 +910,14 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
    * 5. calculate recon gain.
    * */
   in_wavf = dep_wav_read_open(in_wav);
-  pcm_frames =
-      dep_wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
+  pcm_frames = dep_wav_read_data(in_wavf, (unsigned char *)wav_samples,
+                                 bsize_of_samples);
   IAMF_encoder_reconstruct_gain_start(ia_enc, element_id);
   while (pcm_frames) {
     IAMF_encoder_reconstruct_gain(ia_enc, element_id, wav_samples,
                                   pcm_frames / bsize_of_1sample);
-    pcm_frames =
-        dep_wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
+    pcm_frames = dep_wav_read_data(in_wavf, (unsigned char *)wav_samples,
+                                   bsize_of_samples);
   }
 
   if (in_wavf) dep_wav_read_close(in_wavf);
@@ -947,8 +969,8 @@ ENCODING:
                              MAX_BITS_PER_SAMPLE * 2;  // one audio elements
   unsigned char *encode_ia = malloc(max_packet_size);
   in_wavf = dep_wav_read_open(in_wav);
-  pcm_frames =
-      dep_wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
+  pcm_frames = dep_wav_read_data(in_wavf, (unsigned char *)wav_samples,
+                                 bsize_of_samples);
   int demix_mode = 0;
   while (1) {
     IAFrame ia_frame;
@@ -985,8 +1007,8 @@ ENCODING:
       fwrite(ia_packet.data, ia_packet.packet_size, 1, iamf_file);
     }
 
-    pcm_frames =
-        dep_wav_read_data(in_wavf, (unsigned char *)wav_samples, bsize_of_samples);
+    pcm_frames = dep_wav_read_data(in_wavf, (unsigned char *)wav_samples,
+                                   bsize_of_samples);
     frame_count++;
   }
 
@@ -1024,6 +1046,9 @@ typedef struct {
   AudioElementConfig element_config[2];
   int element_id[2];
   float default_mix_gain[2];
+  int default_demix_mode[2];
+  int default_demix_weight[2];
+  int defauilt_demix_is_set[2];
 
   char *in_file[2];
   void *in_wavf[2];
@@ -1049,38 +1074,41 @@ void iamf_pre_process(BaseProfileHandler *handler, int element_index) {
     /**
      * 4. ASC and HEQ pre-process.
      * */
-    handler->in_wavf[element_index] =
-        dep_wav_read_open(handler->in_file[element_index]);
+    if (!handler->defauilt_demix_is_set[element_index]) {
+      handler->in_wavf[element_index] =
+          dep_wav_read_open(handler->in_file[element_index]);
 
-    IAMF_encoder_dmpd_start(handler->ia_enc,
-                            handler->element_id[element_index]);
-    int pcm_frames =
-        dep_wav_read_data(handler->in_wavf[element_index],
-                      (unsigned char *)handler->wav_samples[element_index],
-                      handler->bsize_of_samples[element_index]);
-    while (pcm_frames) {
-      IAMF_encoder_dmpd_process(
-          handler->ia_enc, handler->element_id[element_index],
-          handler->wav_samples[element_index],
-          pcm_frames / handler->bsize_of_1sample[element_index]);
-      pcm_frames =
-          dep_wav_read_data(handler->in_wavf[element_index],
-                        (unsigned char *)handler->wav_samples[element_index],
-                        handler->bsize_of_samples[element_index]);
+      IAMF_encoder_dmpd_start(handler->ia_enc,
+                              handler->element_id[element_index]);
+      int pcm_frames = dep_wav_read_data(
+          handler->in_wavf[element_index],
+          (unsigned char *)handler->wav_samples[element_index],
+          handler->bsize_of_samples[element_index]);
+      while (pcm_frames) {
+        IAMF_encoder_dmpd_process(
+            handler->ia_enc, handler->element_id[element_index],
+            handler->wav_samples[element_index],
+            pcm_frames / handler->bsize_of_1sample[element_index]);
+        pcm_frames = dep_wav_read_data(
+            handler->in_wavf[element_index],
+            (unsigned char *)handler->wav_samples[element_index],
+            handler->bsize_of_samples[element_index]);
+      }
+      IAMF_encoder_dmpd_stop(handler->ia_enc,
+                             handler->element_id[element_index]);
+
+      dep_wav_read_close(handler->in_wavf[element_index]);
     }
-    IAMF_encoder_dmpd_stop(handler->ia_enc, handler->element_id[element_index]);
-
-    dep_wav_read_close(handler->in_wavf[element_index]);
 
     /**
      * 4. loudness and gain pre-process.
      * */
     handler->in_wavf[element_index] =
         dep_wav_read_open(handler->in_file[element_index]);
-    pcm_frames =
+    int pcm_frames =
         dep_wav_read_data(handler->in_wavf[element_index],
-                      (unsigned char *)handler->wav_samples[element_index],
-                      handler->bsize_of_samples[element_index]);
+                          (unsigned char *)handler->wav_samples[element_index],
+                          handler->bsize_of_samples[element_index]);
     ProgressBar bar;
     ProgressBarInit(&bar);
     int total, current;
@@ -1097,10 +1125,10 @@ void iamf_pre_process(BaseProfileHandler *handler, int element_index) {
           handler->wav_samples[element_index],
           pcm_frames / handler->bsize_of_1sample[element_index]);
 
-      pcm_frames =
-          dep_wav_read_data(handler->in_wavf[element_index],
-                        (unsigned char *)handler->wav_samples[element_index],
-                        handler->bsize_of_samples[element_index]);
+      pcm_frames = dep_wav_read_data(
+          handler->in_wavf[element_index],
+          (unsigned char *)handler->wav_samples[element_index],
+          handler->bsize_of_samples[element_index]);
       wr = (wav_reader_s *)handler->in_wavf[element_index];
       current = total - wr->data_length;
       float pct = ((float)current / 1000) / ((float)total / 1000) * 100;
@@ -1121,8 +1149,8 @@ void iamf_pre_process(BaseProfileHandler *handler, int element_index) {
 
     pcm_frames =
         dep_wav_read_data(handler->in_wavf[element_index],
-                      (unsigned char *)handler->wav_samples[element_index],
-                      handler->bsize_of_samples[element_index]);
+                          (unsigned char *)handler->wav_samples[element_index],
+                          handler->bsize_of_samples[element_index]);
     IAMF_encoder_reconstruct_gain_start(handler->ia_enc,
                                         handler->element_id[element_index]);
     while (pcm_frames) {
@@ -1130,10 +1158,10 @@ void iamf_pre_process(BaseProfileHandler *handler, int element_index) {
           handler->ia_enc, handler->element_id[element_index],
           handler->wav_samples[element_index],
           pcm_frames / handler->bsize_of_1sample[element_index]);
-      pcm_frames =
-          dep_wav_read_data(handler->in_wavf[element_index],
-                        (unsigned char *)handler->wav_samples[element_index],
-                        handler->bsize_of_samples[element_index]);
+      pcm_frames = dep_wav_read_data(
+          handler->in_wavf[element_index],
+          (unsigned char *)handler->wav_samples[element_index],
+          handler->bsize_of_samples[element_index]);
     }
 
     dep_wav_read_close(handler->in_wavf[element_index]);
@@ -1341,6 +1369,15 @@ int iamf_base_profile_test(int argc, char *argv[]) {
       } else if (strcmp(argv[args], "-profile") == 0) {
         args++;
         profile = atoi(argv[args]);
+      } else if (strcmp(argv[args], "-demix") == 0) {
+        args++;
+        char argv_string[1024];
+        strcpy(argv_string, argv[args]);
+        char *default_demix = strtok(argv_string, "/");
+        handler.default_demix_mode[element_id] = atoi(default_demix);
+        default_demix = strtok(NULL, "/");
+        handler.default_demix_weight[element_id] = atoi(default_demix);
+        handler.defauilt_demix_is_set[element_id] = 1;
       } else if (argv[args][1] == 'o') {
         args++;
         if (!strncmp("0", argv[args], 1))
@@ -1362,9 +1399,9 @@ int iamf_base_profile_test(int argc, char *argv[]) {
   handler.num_of_elements = element_id;
 
   // mix config json parse
-  FILE *fp = fopen("mix_config.json", "r");
+  FILE *fp = fopen("mix_config_b.json", "r");
   if (fp == NULL) {
-    printf("Error opening file\n");
+    printf("Error opening file: mix_config_b.json\n");
     return 1;
   }
   fseek(fp, 0, SEEK_END);
@@ -1443,9 +1480,9 @@ int iamf_base_profile_test(int argc, char *argv[]) {
     }
 
     dep_wav_get_header(handler.in_wavf[i], &(handler.format[i]),
-                   &(handler.channels[i]), &(handler.sample_rate[i]),
-                   &(handler.bits_per_sample[i]), &(handler.endianness[i]),
-                   &(handler.data_length[i]));
+                       &(handler.channels[i]), &(handler.sample_rate[i]),
+                       &(handler.bits_per_sample[i]), &(handler.endianness[i]),
+                       &(handler.data_length[i]));
     fprintf(stderr,
             "input wav: format[%d] channels[%d] sample_rate[%d] "
             "bits_per_sample[%d] endianness[%s] data_length[%d]\n",
@@ -1489,6 +1526,14 @@ int iamf_base_profile_test(int argc, char *argv[]) {
                      IA_SET_STANDALONE_REPRESENTATION((int)is_standalone));
     IAMF_encoder_ctl(handler.ia_enc, handler.element_id[i],
                      IA_SET_IAMF_PROFILE((int)profile));
+    if (handler.defauilt_demix_is_set[i]) {
+      IAMF_encoder_ctl(
+          handler.ia_enc, handler.element_id[i],
+          IA_SET_IAMF_DEFAULT_DEMIX_MODE((int)handler.default_demix_mode[i]));
+      IAMF_encoder_ctl(
+          handler.ia_enc, handler.element_id[i],
+          IA_SET_IAMF_DEFAULT_DEMIX_WEIGHT((int)handler.default_demix_weight));
+    }
     IAMF_encoder_ctl(handler.ia_enc, handler.element_id[i],
                      IA_GET_LOOKAHEAD(&preskip));
   }
@@ -1508,11 +1553,11 @@ int iamf_base_profile_test(int argc, char *argv[]) {
       }
       int pcm_frames[2] = {0, 0};
       pcm_frames[0] = dep_wav_read_data(handler.in_wavf[0],
-                                    (unsigned char *)handler.wav_samples[0],
-                                    handler.bsize_of_samples[0]);
+                                        (unsigned char *)handler.wav_samples[0],
+                                        handler.bsize_of_samples[0]);
       pcm_frames[1] = dep_wav_read_data(handler.in_wavf[1],
-                                    (unsigned char *)handler.wav_samples[1],
-                                    handler.bsize_of_samples[1]);
+                                        (unsigned char *)handler.wav_samples[1],
+                                        handler.bsize_of_samples[1]);
       int count = 0;
       IAMF_encoder_target_loudness_measure_start(handler.ia_enc,
                                                  &mixp_t[i].mixp);
@@ -1541,12 +1586,12 @@ int iamf_base_profile_test(int argc, char *argv[]) {
 
         IAMF_encoder_target_loudness_measure(handler.ia_enc, &mixp_t[i].mixp,
                                              &ia_frame);
-        pcm_frames[0] = dep_wav_read_data(handler.in_wavf[0],
-                                      (unsigned char *)handler.wav_samples[0],
-                                      handler.bsize_of_samples[0]);
-        pcm_frames[1] = dep_wav_read_data(handler.in_wavf[1],
-                                      (unsigned char *)handler.wav_samples[1],
-                                      handler.bsize_of_samples[1]);
+        pcm_frames[0] = dep_wav_read_data(
+            handler.in_wavf[0], (unsigned char *)handler.wav_samples[0],
+            handler.bsize_of_samples[0]);
+        pcm_frames[1] = dep_wav_read_data(
+            handler.in_wavf[1], (unsigned char *)handler.wav_samples[1],
+            handler.bsize_of_samples[1]);
       }
       IAMF_encoder_target_loudness_measure_stop(handler.ia_enc,
                                                 &mixp_t[i].mixp);
@@ -1635,12 +1680,12 @@ int iamf_base_profile_test(int argc, char *argv[]) {
       (MAX_OUTPUT_CHANNELS * chunk_size * MAX_BITS_PER_SAMPLE) *
       3;  // two audio elements
   unsigned char *encode_ia = malloc(max_packet_size);
-  int pcm_frames =
-      dep_wav_read_data(handler.in_wavf[0], (unsigned char *)handler.wav_samples[0],
-                    handler.bsize_of_samples[0]);
-  int pcm_frames2 =
-      dep_wav_read_data(handler.in_wavf[1], (unsigned char *)handler.wav_samples[1],
-                    handler.bsize_of_samples[1]);
+  int pcm_frames = dep_wav_read_data(handler.in_wavf[0],
+                                     (unsigned char *)handler.wav_samples[0],
+                                     handler.bsize_of_samples[0]);
+  int pcm_frames2 = dep_wav_read_data(handler.in_wavf[1],
+                                      (unsigned char *)handler.wav_samples[1],
+                                      handler.bsize_of_samples[1]);
 
   while (1) {
     if (pcm_frames <= 0 || pcm_frames2 <= 0) break;
@@ -1675,11 +1720,11 @@ int iamf_base_profile_test(int argc, char *argv[]) {
       fwrite(ia_packet.data, ia_packet.packet_size, 1, iamf_file);
     }
     pcm_frames = dep_wav_read_data(handler.in_wavf[0],
-                               (unsigned char *)handler.wav_samples[0],
-                               handler.bsize_of_samples[0]);
+                                   (unsigned char *)handler.wav_samples[0],
+                                   handler.bsize_of_samples[0]);
     pcm_frames2 = dep_wav_read_data(handler.in_wavf[1],
-                                (unsigned char *)handler.wav_samples[1],
-                                handler.bsize_of_samples[1]);
+                                    (unsigned char *)handler.wav_samples[1],
+                                    handler.bsize_of_samples[1]);
     frame_count++;
   }
 

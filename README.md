@@ -41,6 +41,7 @@ This tool aims to encode PCM data to IA bitstream and encapsulate to Mp4/Fmp4
              <0/channel layout/channel layout combinations>
              <1/output channel count/substream count/channel mapping>
              <2/output channel count/substream count/coupled substream count/demixing matrix>
+-demix     : <default demix mode value(0~2 or 4~6)/default demix weight value(0~10); e.g. 0/5>
 -i         : <input wav file>
 -o         : <0/1/2(bitstream/mp4/fmp4)> <output file>
 Example:

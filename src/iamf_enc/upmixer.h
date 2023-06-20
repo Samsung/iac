@@ -30,7 +30,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @brief upmix the audio to generate target layout
  * @version 0.1
  * @date Created 3/3/2023
-**/
+ **/
 
 #ifndef _UPMIXER_H
 #define _UPMIXER_H
@@ -44,7 +44,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "metadata_write.h"
 #include "scalable_format.h"
 
-typedef struct {
+typedef struct UpMixer {
   int16_t *up_input[CHANNEL_LAYOUT_MAX];
   float *upmix[CHANNEL_LAYOUT_MAX];
   int recon_gain_flag;
@@ -77,12 +77,15 @@ typedef struct {
   float *hanning;
   float *startWin;
   float *stopWin;
+
+  int default_demix_mode;
+  int default_demix_weight;
+  int default_demix_is_set;
 } UpMixer;
 
 UpMixer *upmix_create(int recon_gain_flag,
                       const unsigned char *channel_layout_map, int frame_size);
-// void upmix_push_buffer(UpMixer *um, unsigned char *ab2ch, unsigned char
-// *tpq4ch, unsigned char *suv6ch);
+int upmix_set_default_demix(UpMixer *um, int demix_mode, int demix_weight);
 void upmix(UpMixer *um, const unsigned char *gain_down_map);
 void upmix_set_preskip_size(UpMixer *um, int preskip_size);
 void upmix_destroy(UpMixer *um);

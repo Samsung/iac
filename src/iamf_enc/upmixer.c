@@ -30,7 +30,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @brief upmix the audio to generate target layout
  * @version 0.1
  * @date Created 3/3/2023
-**/
+ **/
 
 #include "upmixer.h"
 #define _USE_MATH_DEFINES
@@ -277,13 +277,19 @@ static int upmix_s7(UpMixer *um, int *w_x) {
 static int upmix_hf2toh2(UpMixer *um, int *w_x) {
   Mdhr current = um->mdhr_c, last = um->mdhr_l;
   int last_Typeid = last.dmix_matrix_type - 1;
-  float last_w_z =
-      calc_w(last.weight_type, um->last_weight_state_value_x_prev2_int, w_x);
+  float last_w_z = 0.0, w_z = 0.0;
+  if (um->default_demix_is_set)
+    last_w_z = get_w(um->default_demix_weight);
+  else
+    last_w_z =
+        calc_w(last.weight_type, um->last_weight_state_value_x_prev2_int, w_x);
   int DmixTypeNum = current.dmix_matrix_type;
   int WeightTypeNum = current.weight_type;
   int Typeid = DmixTypeNum - 1;
-  float w_z =
-      calc_w(WeightTypeNum, um->last_weight_state_value_x_prev_int, w_x);
+  if (um->default_demix_is_set)
+    w_z = get_w(um->default_demix_weight);
+  else
+    w_z = calc_w(WeightTypeNum, um->last_weight_state_value_x_prev_int, w_x);
 
   for (int i = 0; i < um->frame_size; i++) {
     if (i < um->preskip_size)  // 0-311
@@ -326,13 +332,9 @@ static int upmix_h2(UpMixer *um, int *w_x) { return upmix_hf2toh2(um, w_x); }
 static int upmix_h2toh4(UpMixer *um, int *w_x) {
   Mdhr current = um->mdhr_c, last = um->mdhr_l;
   int last_Typeid = last.dmix_matrix_type - 1;
-  float last_w_z =
-      calc_w(last.weight_type, um->last_weight_state_value_x_prev2_int, w_x);
   int DmixTypeNum = current.dmix_matrix_type;
   int WeightTypeNum = current.weight_type;
   int Typeid = DmixTypeNum - 1;
-  float w_z =
-      calc_w(WeightTypeNum, um->last_weight_state_value_x_prev_int, w_x);
 
   for (int i = 0; i < um->frame_size; i++) {
     if (i < um->preskip_size)  // 0-311
@@ -776,12 +778,10 @@ void upmix_set_preskip_size(UpMixer *um, int preskip_size) {
     if (i < um->preskip_size) {
       um->startWin[i] = 0.0f;
       um->stopWin[i] = 1.0f;
-    }
-    else if (i >= (um->preskip_size) && i < um->preskip_size + overlapLen) {
+    } else if (i >= (um->preskip_size) && i < um->preskip_size + overlapLen) {
       um->startWin[i] = um->hanning[i - um->preskip_size];
       um->stopWin[i] = um->hanning[i - um->preskip_size + overlapLen];
-    }
-    else {
+    } else {
       um->startWin[i] = 1.0f;
       um->stopWin[i] = 0.0f;
     }
@@ -791,12 +791,10 @@ void upmix_set_preskip_size(UpMixer *um, int preskip_size) {
     if (i < um->preskip_size - overlapLen) {
       um->startWin[i] = 0.0f;
       um->stopWin[i] = 1.0f;
-    }
-    else if (i >= (um->preskip_size - overlapLen) && i < um->preskip_size) {
+    } else if (i >= (um->preskip_size - overlapLen) && i < um->preskip_size) {
       um->startWin[i] = um->hanning[i - (um->preskip_size - overlapLen)];
       um->stopWin[i] = um->hanning[i - um->preskip_size + 2 * overlapLen];
-    }
-    else {
+    } else {
       um->startWin[i] = 1.0f;
       um->stopWin[i] = 0.0f;
     }
@@ -832,7 +830,17 @@ void upmix_gain_up(UpMixer *um, float *pcmbuf[], int nch,
   }
 }
 
+int upmix_set_default_demix(UpMixer *um, int demix_mode, int demix_weight) {
+  if (demix_mode > -1) um->default_demix_mode = demix_mode;
+  if (demix_weight > -1) um->default_demix_weight = demix_weight;
+  um->default_demix_is_set = 1;
+  return 0;
+}
+
 void upmix(UpMixer *um, const unsigned char *gain_down_map) {
+  if (um->default_demix_is_set) {
+    um->mdhr_c.dmix_matrix_type = (um->default_demix_mode % 4) + 1;  // 0~3, 4~5
+  }
   // float weight_state_value_x_curr = 0.0;
   int weight_state_value_x_curr_int = 0;
 

@@ -437,11 +437,30 @@ int immersive_audio_encoder_ctl_va_list(IAMF_Encoder *ie, int element_id,
     case IA_SET_IAMF_PROFILE_REQUEST: {
       uint32_t profile;
       profile = va_arg(ap, uint32_t);
-      if (profile < 0) {
-        goto bad_arg;
-      }
       ie->profile = profile;
       ia_logw("profile: %d\n", ie->profile);
+    } break;
+    case IA_SET_IAMF_DEFAULT_DEMIX_MODE_REQUEST: {
+      uint32_t default_demix_mode;
+      default_demix_mode = va_arg(ap, uint32_t);
+      ae->default_demix_mode = default_demix_mode;
+      ae->default_demix_is_set = 1;
+      downmix_set_default_demix(ce->downmixer_ld, default_demix_mode, -1);
+      downmix_set_default_demix(ce->downmixer_rg, default_demix_mode, -1);
+      downmix_set_default_demix(ce->downmixer_enc, default_demix_mode, -1);
+      upmix_set_default_demix(ce->upmixer, default_demix_mode, -1);
+      ia_logw("default demix mode: %d\n", ae->default_demix_mode);
+    } break;
+    case IA_SET_IAMF_DEFAULT_DEMIX_WEIGHT_REQUEST: {
+      uint32_t default_demix_weight;
+      default_demix_weight = va_arg(ap, uint32_t);
+      ae->default_demix_weight = default_demix_weight;
+      ae->default_demix_is_set = 1;
+      downmix_set_default_demix(ce->downmixer_ld, -1, default_demix_weight);
+      downmix_set_default_demix(ce->downmixer_rg, -1, default_demix_weight);
+      downmix_set_default_demix(ce->downmixer_enc, -1, default_demix_weight);
+      upmix_set_default_demix(ce->upmixer, -1, default_demix_weight);
+      ia_logw("default demix weight: %d\n", ae->default_demix_weight);
     } break;
     case IA_SET_OUTPUT_GAIN_FLAG_REQUEST: {
       uint32_t output_gain_flag;
@@ -1190,6 +1209,8 @@ static void update_ia_descriptor(IAMF_Encoder *ie) {
       audio_element->param_definition_type[i] = ae->param_definition_type[i];
       audio_element->param_definition[i] = ae->param_definition[i];
     }
+    audio_element->default_demix_mode = ae->default_demix_mode;
+    audio_element->default_demix_weight = ae->default_demix_weight;
     if (ae->element_type == AUDIO_ELEMENT_CHANNEL_BASED) {
       int pre_ch = 0;
       int cl_index = 0;
@@ -2090,7 +2111,7 @@ static int ret_sound_system_valid(IAMF_SoundSystem ss) {
 }
 
 static int get_sound_system_channels_count_without_lfe(IAMF_SoundSystem ss) {
-  static int ss_channels[] = { 2, 5, 7, 9, 10, 10, 13, 22, 7, 11, 9, 5, 1 };
+  static int ss_channels[] = {2, 5, 7, 9, 10, 10, 13, 22, 7, 11, 9, 5, 1};
   return ss_channels[ss];
 }
 
@@ -2121,7 +2142,7 @@ static channelLayout iamflayout2channellayout(IAMFLayout *layout) {
                            CHANNEL514,     CHANNELUNKNOWN, CHANNELUNKNOWN,
                            CHANNELUNKNOWN, CHANNELUNKNOWN, CHANNEL71,
                            CHANNEL714,     CHANNEL712,     CHANNEL312,
-                           CHANNELMONO };
+                           CHANNELMONO};
     return ret[layout->sound_system];
   } else if (layout->layout_type == IAMF_LAYOUT_TYPE_BINAURAL) {
     return CHANNELSTEREO;
@@ -2130,10 +2151,9 @@ static channelLayout iamflayout2channellayout(IAMFLayout *layout) {
 }
 
 static uint32_t get_sound_system_get_rendering_id(IAMF_SoundSystem ss) {
-  static IAMF_SOUND_SYSTEM ss_rids[] = {BS2051_A, BS2051_B, BS2051_C, BS2051_D,
-                                        BS2051_E, BS2051_F, BS2051_G, BS2051_H,
-                                        BS2051_I, BS2051_J, IAMF_712, IAMF_312,
-                                        IAMF_MONO };
+  static IAMF_SOUND_SYSTEM ss_rids[] = {
+      BS2051_A, BS2051_B, BS2051_C, BS2051_D, BS2051_E, BS2051_F, BS2051_G,
+      BS2051_H, BS2051_I, BS2051_J, IAMF_712, IAMF_312, IAMF_MONO};
   return ss_rids[ss];
 }
 
@@ -3110,7 +3130,7 @@ static int audio_element_encode(AudioElementEncoder *ae, IAFrame *frame) {
         }
         pre_ch = enc_get_layout_channel_count(lay_out);
       }
-      write_demixing_obu(ae, demix_mode);
+      if (!ae->default_demix_is_set) write_demixing_obu(ae, demix_mode);
     } else {
       int substreams = 0;
       int lay_out = ce->channel_layout_map[0];
@@ -3322,9 +3342,9 @@ static int write_audio_elements_obu(IAMF_Encoder *ie, unsigned char *dst) {
       if (audio_element->param_definition_type[j] ==
           PARAMETER_DEFINITION_DEMIXING_INFO) {
         // write default demix
-        bs_setbits(&bs, 0, 3);  // demix mode
-        bs_setbits(&bs, 0, 5);  // default_w
-        bs_setbits(&bs, 1, 4);
+        bs_setbits(&bs, audio_element->default_demix_mode, 3);  // demix mode
+        bs_setbits(&bs, 0, 5);
+        bs_setbits(&bs, audio_element->default_demix_weight, 4);  // default_w
         bs_setbits(&bs, 0, 4);
       }
     }
@@ -3671,7 +3691,7 @@ static void data_obu_swap(IamfDataObu *data_obu[], int i, int j) {
 static void data_obu_sort(IamfDataObu *data_obu[], int n) {
   for (int i = 0; i < n; i++) {
     for (int j = 0; j + 1 < n - i; j++) {
-      if (data_obu[j]->timestamp > data_obu[j + 1]->timestamp) {
+      if (data_obu[j]->start_timestamp > data_obu[j + 1]->start_timestamp) {
         data_obu_swap(data_obu, j, j + 1);
       }
     }
@@ -4013,10 +4033,12 @@ static int obu_packets_sort_mix(IAMF_Encoder *ie, IAPacket *iapkt) {
   int idx = 0;
   while (ae) {
     for (int i = 0; i < ae->num_parameters; i++) {
-      if (ae->param_definition_type[i] == PARAMETER_DEFINITION_DEMIXING_INFO) {
+      if (ae->param_definition_type[i] == PARAMETER_DEFINITION_DEMIXING_INFO &&
+          ae->parameter_demixing_data_obu.size_of_data_obu > 0) {
         data_obu[idx++] = &(ae->parameter_demixing_data_obu);
       } else if (ae->param_definition_type[i] ==
-                 PARAMETER_DEFINITION_RECON_GAIN_INFO) {
+                     PARAMETER_DEFINITION_RECON_GAIN_INFO &&
+                 ae->parameter_recon_gain_data_obu.size_of_data_obu > 0) {
         data_obu[idx++] = &(ae->parameter_recon_gain_data_obu);
       }
     }

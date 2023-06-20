@@ -73,7 +73,7 @@ typedef struct GlobalTimming {
   uint32_t time_rate;
 } GlobalTimming;
 
-typedef struct {
+typedef struct IASequenceHeader {
   uint32_t ia_code;
   uint32_t profile_name;
   uint32_t profile_compatible;
@@ -81,7 +81,7 @@ typedef struct {
   int obu_redundant_copy;
 } IASequenceHeader;
 
-typedef struct {
+typedef struct CodecConfig {
   uint32_t codec_config_id;
   uint32_t codec_id;
 
@@ -93,7 +93,7 @@ typedef struct {
   int obu_redundant_copy;
 } CodecConfig;
 
-typedef struct {
+typedef struct ChannelAudioLayerConfig {
   int loudspeaker_layout;
   int output_gain_is_present_flag;
   int recon_gain_is_present_flag;
@@ -105,13 +105,13 @@ typedef struct {
   int output_gain;
 } ChannelAudioLayerConfig;
 
-typedef struct {
+typedef struct ScalableChannelLayoutConfig {
   uint32_t num_layers;
   uint32_t reserved;
   ChannelAudioLayerConfig channel_audio_layer_config[IA_CHANNEL_LAYOUT_COUNT];
 } ScalableChannelLayoutConfig;
 
-typedef struct {
+typedef struct AmbisonicsConfig {
   uint32_t ambisonics_mode;
   union {
     AmbisonicsMonoConfig ambisonics_mono_config;
@@ -119,7 +119,7 @@ typedef struct {
   };
 } AmbisonicsConfig;
 
-typedef struct {
+typedef struct ParamDefinition {
   uint32_t parameter_id;
   uint32_t parameter_rate;
   uint32_t param_definition_mode;
@@ -131,7 +131,7 @@ typedef struct {
   uint32_t *subblock_duration;
 } ParamDefinition;
 
-typedef struct {
+typedef struct AudioElement {
   uint32_t audio_element_id;    // leb128()
   uint32_t audio_element_type;  // 3
   uint32_t resevered;           // 5
@@ -144,6 +144,10 @@ typedef struct {
   uint32_t num_parameters;
   uint32_t param_definition_type[22];
   ParamDefinition param_definition[22];
+
+  uint32_t default_demix_mode;
+  uint32_t default_demix_weight;
+
   union {
     ScalableChannelLayoutConfig scalable_channel_layout_config;
     AmbisonicsConfig ambisonics_config;
@@ -152,7 +156,7 @@ typedef struct {
   int obu_redundant_copy;
 } AudioElement;
 
-typedef struct {
+typedef struct LoudnessTarget {
   AudioLoudMeter loudmeter;
   int frame_size;
   int msize25pct;
@@ -258,7 +262,7 @@ typedef enum {
   PARAMETER_DEFINITION_RECON_GAIN_INFO
 } ParameterDefinitionType;
 
-typedef struct {
+typedef struct LoudGainMeasure {
   AudioLoudMeter loudmeter[MAX_CHANNELS];
   AudioTruePeakMeter peakmeter[MAX_CHANNELS];   // for loudness measure
   AudioTruePeakMeter peakmeter2[MAX_CHANNELS];  // for gain measure.
@@ -286,7 +290,7 @@ typedef struct {
                                                          // have gain value.
 } LoudGainMeasure;
 
-typedef struct {
+typedef struct encode_creator_t {
   int opcode;
   int (*init)(AudioElementEncoder *st);
   int (*control)(AudioElementEncoder *, int, va_list);
@@ -294,7 +298,7 @@ typedef struct {
   int (*close)(AudioElementEncoder *st);
 } encode_creator_t;
 
-typedef struct {
+typedef struct decode_creator_t {
   int opcode;
   int (*init)(AudioElementEncoder *st);
   int (*decode)(AudioElementEncoder *, int, int, int, unsigned char *, int,
@@ -304,7 +308,7 @@ typedef struct {
 
 #define ENTRY_COUNT 16
 
-typedef struct {
+typedef struct IA_CORE_ENCODER {
   void *dep_encoder[ENTRY_COUNT];
   void *dep_encoder2[ENTRY_COUNT];
   IAPacket ia_packet[ENTRY_COUNT];
@@ -314,7 +318,7 @@ typedef struct {
   unsigned char enc_stream_map[255];
 } IA_CORE_ENCODER;
 
-typedef struct {
+typedef struct IA_CORE_DECODER {
   void *dep_decoder[ENTRY_COUNT];
   int channel;
   int stream_count;
@@ -389,6 +393,10 @@ typedef struct AudioElementEncoder {
   uint32_t num_parameters;
   uint32_t param_definition_type[MAX_SUBSTREAMS];
   ParamDefinition param_definition[MAX_SUBSTREAMS];
+
+  uint32_t default_demix_mode;
+  uint32_t default_demix_weight;
+  int default_demix_is_set;
 
   uint32_t input_sample_rate;
   int bits_per_sample;

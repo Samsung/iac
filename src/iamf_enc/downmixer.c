@@ -30,7 +30,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @brief Audio scalable downmix function
  * @version 0.1
  * @date Created 3/3/2023
-**/
+ **/
 
 #include "downmixer.h"
 
@@ -170,7 +170,11 @@ static int downmix_h4to2(DownMixer *dm, int dmix_type, int weight_type,
 static int downmix_h2tofh2(DownMixer *dm, int dmix_type, int weight_type,
                            int *w_x) {
   int type_id = dmix_type - 1;
-  float w_z = calc_w(weight_type, dm->weight_state_value_x_prev_int, w_x);
+  float w_z = 0.0;
+  if (dm->default_demix_is_set)
+    w_z = get_w(dm->default_demix_weight);
+  else
+    w_z = calc_w(weight_type, dm->weight_state_value_x_prev_int, w_x);
 
   for (int i = 0; i < dm->frame_size; i++) {
     dm->buffer[enc_channel_mixed_t_l][i] =
@@ -363,8 +367,18 @@ static creator_t g_downmix[] = {{CHANNEL_LAYOUT_100, downmix_to100},
                                 {CHANNEL_LAYOUT_BINAURAL, downmix_to200},
                                 {-1}};
 
+int downmix_set_default_demix(DownMixer *dm, int demix_mode, int demix_weight) {
+  if (demix_mode > -1) dm->default_demix_mode = demix_mode;
+  if (demix_weight > -1) dm->default_demix_weight = demix_weight;
+  dm->default_demix_is_set = 1;
+  return 0;
+}
+
 int downmix(DownMixer *dm, unsigned char *inbuffer, int size, int dmix_type,
             int weight_type) {
+  if (dm->default_demix_is_set) {
+    dmix_type = (dm->default_demix_mode % 4) + 1;
+  }
   int ret = 0;
   float *dspInBuf[MAX_CHANNELS];
   float *tmp[MAX_CHANNELS];
@@ -468,6 +482,9 @@ int downmix(DownMixer *dm, unsigned char *inbuffer, int size, int dmix_type,
 
 int downmix2(DownMixer *dm, float *inbuffer, int size, int dmix_type,
              int weight_type) {
+  if (dm->default_demix_is_set) {
+    dmix_type = (dm->default_demix_mode % 4) + 1;  // 0~3, 4~5
+  }
   int ret = 0;
   float *dspInBuf[MAX_CHANNELS];
   float *tmp[MAX_CHANNELS];
