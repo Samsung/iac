@@ -30,7 +30,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @brief Write different OBU
  * @version 0.1
  * @date Created 3/3/2023
-**/
+ **/
 
 #include "obuwrite.h"
 
@@ -57,18 +57,20 @@ static const uint64_t kMaximumLeb128Value = UINT32_MAX;
 
 const char *obu_type_to_string(AUDIO_OBU_TYPE type) {
   switch (type) {
-    case OBU_IA_STREAM_INDICATOR:
-      return "OBU_IA_STREAM_INDICATOR";
-    case OBU_CODEC_SPECIFIC_INFO:
-      return "OBU_CODEC_SPECIFIC_INFO";
-    case OBU_IA_STATIC_META:
-      return "OBU_IA_STATIC_META";
-    case OBU_TEMPORAL_DELIMITOR:
-      return "OBU_TEMPORAL_DELIMITOR";
-    case OBU_DEMIXING_INFO:
-      return "OBU_DEMIXING_INFO";
-    case OBU_SUBSTREAM:
-      return "OBU_SUBSTREAM";
+    case OBU_IA_Codec_Config:
+      return "OBU_IA_Codec_Config";
+    case OBU_IA_Audio_Element:
+      return "OBU_IA_Audio_Element";
+    case OBU_IA_Mix_Presentation:
+      return "OBU_IA_Mix_Presentation";
+    case OBU_IA_Parameter_Block:
+      return "OBU_IA_Parameter_Block";
+    case OBU_IA_Temporal_Delimiter:
+      return "OBU_IA_Temporal_Delimiter";
+    case OBU_IA_Audio_Frame:
+      return "OBU_IA_Audio_Frame";
+    case OBU_IA_Sequence_Header:
+      return "OBU_IA_Sequence_Header";
     default:
       break;
   }
@@ -114,7 +116,7 @@ uint32_t iamf_obu_memmove(uint32_t obu_header_size, uint32_t obu_payload_size,
   return length_field_size;
 }
 
-static int bs_setbits_leb128(bitstream_t *bs, uint32_t num) {
+static int bs_setbits_leb128(bitstream_t *bs, uint64_t num) {
   unsigned char coded_data_leb[128];
   int coded_size = 0;
   if (uleb_encode(num, sizeof(num), coded_data_leb, &coded_size) != 0) {
@@ -124,6 +126,14 @@ static int bs_setbits_leb128(bitstream_t *bs, uint32_t num) {
     bs_setbits(bs, coded_data_leb[i], 8);  // leb128()
   }
   return coded_size;
+}
+
+static int bs_setbits_buffer(bitstream_t *bs, unsigned char *str, int size) {
+  if (!str) return 0;
+  for (int i = 0; i < size; i++) {
+    bs_setbits(bs, str[i], 8);
+  }
+  return size * 8;
 }
 
 uint32_t iamf_write_obu_header(AUDIO_OBU_TYPE obu_type, int playload_size,
@@ -155,8 +165,11 @@ uint32_t iamf_write_obu_header(AUDIO_OBU_TYPE obu_type, int playload_size,
     bs_setbits_leb128(&bs, num_samples_to_trim_at_end);
     bs_setbits_leb128(&bs, num_samples_to_trim_at_start);
   }
-  if (obu_extension) {
+  if (obu_extension) {  // This flag SHALL be set to 0 for this version of the
+                        // specification
     bs_setbits_leb128(&bs, extension_header_size);
+    unsigned char extension_header_bytes[] = {0};
+    bs_setbits_buffer(&bs, extension_header_bytes, extension_header_size);
   }
   size = bs.m_posBase;
   return size;

@@ -32,6 +32,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @date Created 3/3/2023
  **/
 
+#include <inttypes.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -71,28 +72,19 @@ void print_usage(char *argv[]) {
   fprintf(stderr, "-profile   : <0/1(simpe/base)>\n");
   fprintf(stderr,
           "-codec     : <codec name/frame size(opus,aac,flac,pcm/1024)>\n");
-  fprintf(
-      stderr,
-      "-mode      : <audio element "
-      "type(0:channle-based,1:scene-based(Mono),2:scene-based(Projection)/"
-      "config> \n"
-      "             <0/channel layout/channel layout combinations>\n"
-      "             <1/output channel count/substream count/channel mapping>\n"
-      "             <2/output channel count/substream count/coupled substream "
-      "count/demixing matrix>\n");
-  fprintf(stderr,
-          "-demix     : <default demix mode value(0~2 or 4~6)/default demix "
-          "weight value(0~10); e.g. 0/5>\n");
   fprintf(stderr, "-i         : <input wav file>\n");
+  fprintf(stderr,
+          "-config    : <iamf config file(simple profile: iamf_config_s.json, "
+          "base profile: iamf_config_b.json)>\n");
   fprintf(stderr, "-o         : <0/1/2(bitstream/mp4/fmp4)> <output file>\n");
   fprintf(stderr,
-          "Example:\niamfpackager -profile 0 -codec opus -mode "
-          "0/7.1.4/2.0.0+3.1.2+5.1.2 -i input.wav -o 0 "
+          "Example:\niamfpackager -profile 0 -codec opus -i input.wav -config "
+          "iamf_config_s.json -o 0 "
           "simple_profile.iamf\n");
   fprintf(stderr,
-          "or\niamfpackager -profile 1 -codec opus -mode 0/7.1.4/3.1.2+5.1.2 "
-          "-i input1.wav -mode 1/4/4/0,1,2,3 -i "
-          "input2.wav -o 1 base_profile.mp4\n");
+          "or\niamfpackager -profile 1 -codec opus -i input1.wav -i input2.wav "
+          "-config iamf_config_b.json "
+          "-o 1 base_profile.mp4\n");
 }
 
 static void mix_presentation_free(MixPresentation *mixp) {
@@ -137,95 +129,206 @@ static void mix_presentation_free(MixPresentation *mixp) {
   }
 }
 
-static void parameter_block_split(MixGainConfig *mix_gain,
-                                  AnimatedParameterData animated_par,
-                                  uint64_t frame_size, uint64_t start,
-                                  uint64_t end, uint64_t total_duration) {
-  uint64_t period = end - start;
-  mix_gain->num_parameter_blks =
-      (period % frame_size) ? (period / frame_size + 1) : (period / frame_size);
-  mix_gain->duration =
-      (uint64_t *)malloc(mix_gain->num_parameter_blks * sizeof(uint64_t));
-  mix_gain->num_subblocks =
-      (uint64_t *)malloc(mix_gain->num_parameter_blks * sizeof(uint64_t));
-  mix_gain->constant_subblock_duration =
-      (uint64_t *)malloc(mix_gain->num_parameter_blks * sizeof(uint64_t));
-  mix_gain->subblock_duration =
-      (uint64_t **)malloc(mix_gain->num_parameter_blks * sizeof(uint64_t *));
-  mix_gain->animated_parameter_data = (AnimatedParameterData **)malloc(
-      mix_gain->num_parameter_blks * sizeof(AnimatedParameterData *));
-  for (int i = 0; i < mix_gain->num_parameter_blks; i++) {
-    mix_gain->duration[i] = frame_size;
-    mix_gain->num_subblocks[i] = 1;
-    mix_gain->constant_subblock_duration[i] = frame_size;
-    mix_gain->subblock_duration[i] =
-        (uint64_t *)malloc(mix_gain->num_subblocks[i] * sizeof(uint64_t));
-    mix_gain->animated_parameter_data[i] = (AnimatedParameterData *)malloc(
-        mix_gain->num_subblocks[i] * sizeof(AnimatedParameterData));
-    mix_gain->animated_parameter_data[i]->animation_type =
-        animated_par.animation_type;
-  }
-  if (frame_size == total_duration) {
-    memcpy(mix_gain->animated_parameter_data[0], &animated_par,
-           sizeof(animated_par));
-    return;
-  }
-  if (animated_par.animation_type == ANIMATION_TYPE_STEP) {
-    for (int i = 0; i < mix_gain->num_parameter_blks; i++) {
-      memcpy(mix_gain->animated_parameter_data[i], &animated_par,
-             sizeof(animated_par));
+static void mix_gain_config_free(MixGainConfig *mix_gain) {
+  if (mix_gain->num_parameter_blks > 0) {
+    for (int j = 0; j < mix_gain->num_parameter_blks; j++) {
+      if (mix_gain->subblock_duration[j]) free(mix_gain->subblock_duration[j]);
+      if (mix_gain->animated_parameter_data[j])
+        free(mix_gain->animated_parameter_data[j]);
     }
-  } else if (animated_par.animation_type == ANIMATION_TYPE_LINEAR) {
-    float n2 = total_duration, n = 0;
-    float p0 = animated_par.linear_parameter_data.start_point_value;
-    float p1 = animated_par.linear_parameter_data.end_point_value;
-    float a = 0.0f;
-    for (int i = 0; i < mix_gain->num_parameter_blks; i++) {
-      n = (float)(i) * (float)(frame_size) + start;
-      a = n / n2;
-      if (a > 1.0f) a = 1.0f;
-      mix_gain->animated_parameter_data[i][0]
-          .linear_parameter_data.start_point_value = (1 - a) * p0 + a * p1;
+    if (mix_gain->duration) free(mix_gain->duration);
+    if (mix_gain->num_subblocks) free(mix_gain->num_subblocks);
+    if (mix_gain->constant_subblock_duration)
+      free(mix_gain->constant_subblock_duration);
+    if (mix_gain->subblock_duration) free(mix_gain->subblock_duration);
+    if (mix_gain->animated_parameter_data)
+      free(mix_gain->animated_parameter_data);
+  }
+}
 
-      n = (float)(i + 1) * (float)(frame_size) + start;
-      a = n / n2;
-      if (a > 1.0f) a = 1.0f;
-      mix_gain->animated_parameter_data[i][0]
-          .linear_parameter_data.end_point_value = (1 - a) * p0 + a * p1;
+static void parameter_block_split2(MixGainConfig *mix_gain,
+                                   MixGainConfig *mix_gain_src,
+                                   uint64_t frame_size, int input_sample_r) {
+  mix_gain->default_mix_gain = mix_gain_src->default_mix_gain;
+  mix_gain->parameter_rate = mix_gain_src->parameter_rate;
+  if (mix_gain_src->num_parameter_blks > 0) {
+    int blk_index = 0;
+    frame_size = mix_gain_src->parameter_rate * frame_size / input_sample_r;
+    uint64_t total_duration = 0;
+    for (int i = 0; i < mix_gain_src->num_subblocks[blk_index]; i++) {
+      total_duration += mix_gain_src->subblock_duration[blk_index][i];
     }
-  } else if (animated_par.animation_type == ANIMATION_TYPE_BEZIER) {
-    int64_t alpha, beta, gamma, n0, n1, n2;
-    n0 = 0;
-    n1 = animated_par.bezier_parameter_data.control_point_relative_time *
-         total_duration;
-    n2 = total_duration;
-    alpha = n0 - 2 * n1 + n2;
-    beta = 2 * (n1 - n0);
+    mix_gain->num_parameter_blks = total_duration / frame_size;
+    if (total_duration % frame_size > 0) mix_gain->num_parameter_blks++;
 
-    float p0 = animated_par.bezier_parameter_data.start_point_value;
-    float p1 = animated_par.bezier_parameter_data.control_point_value;
-    float p2 = animated_par.bezier_parameter_data.end_point_value;
-    float a = 0.0f;
-    for (int i = 0; i < mix_gain->num_parameter_blks; i++) {
-      mix_gain->animated_parameter_data[i][0].animation_type =
-          ANIMATION_TYPE_LINEAR;
-      if ((i * frame_size + start) > total_duration)
-        gamma = n0 - total_duration;
-      else
-        gamma = n0 - i * frame_size + start;
-      a = (-beta + sqrt(beta * beta - 4 * alpha * gamma)) / (2 * alpha);
-      mix_gain->animated_parameter_data[i][0]
-          .linear_parameter_data.start_point_value =
-          (1 - a) * (1 - a) * p0 + 2 * (1 - a) * a * p1 + a * a * p2;
+    mix_gain->duration =
+        (uint64_t *)malloc(mix_gain->num_parameter_blks * sizeof(uint64_t));
+    mix_gain->num_subblocks =
+        (uint64_t *)malloc(mix_gain->num_parameter_blks * sizeof(uint64_t));
+    mix_gain->constant_subblock_duration =
+        (uint64_t *)malloc(mix_gain->num_parameter_blks * sizeof(uint64_t));
+    mix_gain->subblock_duration =
+        (uint64_t **)malloc(mix_gain->num_parameter_blks * sizeof(uint64_t *));
+    mix_gain->animated_parameter_data = (AnimatedParameterData **)malloc(
+        mix_gain->num_parameter_blks * sizeof(AnimatedParameterData *));
 
-      if (((i + 1) * frame_size + start) > total_duration)
-        gamma = n0 - total_duration;
-      else
-        gamma = n0 - (i + 1) * frame_size + start;
-      a = (-beta + sqrt(beta * beta - 4 * alpha * gamma)) / (2 * alpha);
-      mix_gain->animated_parameter_data[i][0]
-          .linear_parameter_data.end_point_value =
-          (1 - a) * (1 - a) * p0 + 2 * (1 - a) * a * p1 + a * a * p2;
+    if (mix_gain_src->animated_parameter_data[blk_index][0].animation_type ==
+        ANIMATION_TYPE_STEP) {
+      for (int i = 0; i < mix_gain->num_parameter_blks; i++) {
+        mix_gain->num_subblocks[i] = 1;
+        mix_gain->subblock_duration[i] =
+            (uint64_t *)malloc(mix_gain->num_subblocks[i] * sizeof(uint64_t));
+        mix_gain->animated_parameter_data[i] = (AnimatedParameterData *)malloc(
+            mix_gain->num_subblocks[i] * sizeof(AnimatedParameterData));
+        for (int j = 0; j < mix_gain->num_subblocks[i]; j++)
+          memcpy(&mix_gain->animated_parameter_data[i][j],
+                 &mix_gain_src->animated_parameter_data[blk_index][0],
+                 sizeof(mix_gain_src->animated_parameter_data[blk_index][0]));
+      }
+    } else if (mix_gain_src->animated_parameter_data[blk_index][0]
+                   .animation_type == ANIMATION_TYPE_LINEAR) {
+      uint64_t start = 0, stop = 0, duration = 0;
+      int parameter_blk = 0;
+      int num_subblocks = 1;
+      int subblocks = 0;
+      uint64_t pre_sub_duration = 0;
+      for (int i = 0; i < mix_gain_src->num_subblocks[blk_index]; i++) {
+        duration = mix_gain_src->subblock_duration[blk_index][i];
+        float n = 0.0f;
+        float n2 = duration;
+        float p0 = mix_gain_src->animated_parameter_data[blk_index][i]
+                       .linear_parameter_data.start_point_value;
+        float p1 = mix_gain_src->animated_parameter_data[blk_index][i]
+                       .linear_parameter_data.end_point_value;
+        float a = 0.0f;
+        while (duration > 0) {
+          float start_point_value = 0.0f;
+          float end_point_value = 0.0f;
+          if (duration < frame_size &&
+              i < mix_gain_src->num_subblocks[blk_index] - 1) {
+            num_subblocks = 2;
+            mix_gain->subblock_duration[parameter_blk] =
+                (uint64_t *)malloc(num_subblocks * sizeof(uint64_t));
+            mix_gain->animated_parameter_data[parameter_blk] =
+                (AnimatedParameterData *)malloc(num_subblocks *
+                                                sizeof(AnimatedParameterData));
+
+            mix_gain->duration[parameter_blk] = frame_size;
+            mix_gain->num_subblocks[parameter_blk] = num_subblocks;
+            mix_gain->constant_subblock_duration[parameter_blk] = 0;
+            stop += duration;
+
+            mix_gain->subblock_duration[parameter_blk][subblocks] =
+                pre_sub_duration = duration;
+          } else {
+            mix_gain->duration[parameter_blk] = frame_size;
+            mix_gain->num_subblocks[parameter_blk] = num_subblocks;
+
+            if (num_subblocks > 1) {
+              mix_gain->constant_subblock_duration[parameter_blk] = 0;
+              mix_gain->subblock_duration[parameter_blk][subblocks] =
+                  frame_size - pre_sub_duration;
+              stop += frame_size - pre_sub_duration;
+            } else {
+              mix_gain->subblock_duration[parameter_blk] =
+                  (uint64_t *)malloc(num_subblocks * sizeof(uint64_t));
+              mix_gain->animated_parameter_data[parameter_blk] =
+                  (AnimatedParameterData *)malloc(
+                      num_subblocks * sizeof(AnimatedParameterData));
+              mix_gain->constant_subblock_duration[parameter_blk] = frame_size;
+              mix_gain->subblock_duration[parameter_blk][subblocks] =
+                  frame_size;
+              stop += frame_size;
+              pre_sub_duration = 0;
+            }
+          }
+
+          mix_gain->animated_parameter_data[parameter_blk][subblocks]
+              .animation_type = ANIMATION_TYPE_LINEAR;
+          n = start;
+          a = n / n2;
+          if (a > 1.0f) a = 1.0f;
+          mix_gain->animated_parameter_data[parameter_blk][subblocks]
+              .linear_parameter_data.start_point_value = (1 - a) * p0 + a * p1;
+
+          n = stop;
+          a = n / n2;
+          if (a > 1.0f) a = 1.0f;
+          mix_gain->animated_parameter_data[parameter_blk][subblocks]
+              .linear_parameter_data.end_point_value = (1 - a) * p0 + a * p1;
+
+          start = stop;
+          if (duration < frame_size)
+            duration = 0;
+          else
+            duration -= (frame_size - pre_sub_duration);
+
+          subblocks++;
+          if (subblocks == num_subblocks) {
+            parameter_blk++;
+            num_subblocks = 1;
+            subblocks = 0;
+          }
+        }
+      }
+    } else if (mix_gain_src->animated_parameter_data[blk_index][0]
+                   .animation_type == ANIMATION_TYPE_BEZIER) {
+      for (int i = 0; i < mix_gain->num_parameter_blks; i++) {
+        mix_gain->duration[i] = frame_size;
+        mix_gain->num_subblocks[i] = 1;
+        mix_gain->constant_subblock_duration[i] = frame_size;
+        mix_gain->subblock_duration[i] =
+            (uint64_t *)malloc(mix_gain->num_subblocks[i] * sizeof(uint64_t));
+        mix_gain->animated_parameter_data[i] = (AnimatedParameterData *)malloc(
+            mix_gain->num_subblocks[i] * sizeof(AnimatedParameterData));
+      }
+      int64_t alpha, beta, gamma, n0, n1, n2;
+      n0 = 0;
+      n1 = mix_gain_src->animated_parameter_data[blk_index][0]
+               .bezier_parameter_data.control_point_relative_time *
+           total_duration;
+      n2 = total_duration;
+      alpha = n0 - 2 * n1 + n2;
+      beta = 2 * (n1 - n0);
+
+      float p0 = mix_gain_src->animated_parameter_data[blk_index][0]
+                     .bezier_parameter_data.start_point_value;
+      float p1 = mix_gain_src->animated_parameter_data[blk_index][0]
+                     .bezier_parameter_data.control_point_value;
+      float p2 = mix_gain_src->animated_parameter_data[blk_index][0]
+                     .bezier_parameter_data.end_point_value;
+      float a = 0.0f;
+      uint64_t start_m = 0;
+      uint64_t sub_duration = 0;
+      for (int i = 0; i < mix_gain->num_parameter_blks; i++) {
+        for (int j = 0; j < mix_gain->num_subblocks[i]; j++) {
+          mix_gain->animated_parameter_data[i][j].animation_type =
+              ANIMATION_TYPE_LINEAR;
+          gamma = n0 - (mix_gain->constant_subblock_duration[i] * j + start_m);
+          if (alpha == 0) {
+            a = -gamma;
+            a /= beta;
+          } else
+            a = (-beta + sqrt(beta * beta - 4 * alpha * gamma)) / (2 * alpha);
+          mix_gain->animated_parameter_data[i][j]
+              .linear_parameter_data.start_point_value =
+              (1 - a) * (1 - a) * p0 + 2 * (1 - a) * a * p1 + a * a * p2;
+
+          gamma = n0 -
+                  (mix_gain->constant_subblock_duration[i] * (j + 1) + start_m);
+
+          if (alpha == 0) {
+            a = -gamma;
+            a /= beta;
+          } else
+            a = (-beta + sqrt(beta * beta - 4 * alpha * gamma)) / (2 * alpha);
+          mix_gain->animated_parameter_data[i][j]
+              .linear_parameter_data.end_point_value =
+              (1 - a) * (1 - a) * p0 + 2 * (1 - a) * a * p1 + a * a * p2;
+          sub_duration += mix_gain->constant_subblock_duration[i];
+        }
+        start_m += sub_duration;
+      }
     }
   }
 }
@@ -234,9 +337,18 @@ typedef struct MixPresentation_t {
   MixPresentation mixp;
   int num_audio_elements;
   int element_index[2];
-  AnimatedParameterData element_para_data[2];
-  AnimatedParameterData out_para_data;
+
+  MixGainConfig element_mix[2];
+  MixGainConfig output_mix;
 } MixPresentation_t;
+
+typedef struct UserInputOption {
+  int mix_num;
+  MixPresentation_t mixp_t[10];
+  int elem_num;
+  AudioElementConfig element_config[2];
+
+} UserInputOption;
 
 static char *sound_system_str[] = {
     {"SOUND_SYSTEM_A"},        // 0+2+0, 0
@@ -260,197 +372,361 @@ static int get_sound_system_by_string(char *sound_system) {
   }
   return -1;
 }
-static int parse_mix_repsentation(cJSON *json, MixPresentation_t *mixp_t) {
-  int mix_num = cJSON_GetArraySize(json);
-  for (int mix = 0; mix < mix_num; mix++) {
-    MixPresentation *mixp = &(mixp_t[mix].mixp);
-    cJSON *json_mix = cJSON_GetArrayItem(json, mix);
-    mixp->count_label = cJSON_GetObjectItem(json_mix, "count_label")->valueint;
-    cJSON *json_languages = cJSON_GetObjectItem(json_mix, "language_labels");
+
+static void parse_mix_repsentation(cJSON *json, MixPresentation_t *mixp_t) {
+  MixPresentation *mixp = &(mixp_t->mixp);
+  cJSON *json_mix = json;
+  mixp->count_label = cJSON_GetObjectItem(json_mix, "count_label")->valueint;
+  cJSON *json_languages = cJSON_GetObjectItem(json_mix, "language_labels");
+  for (int label = 0; label < mixp->count_label; label++) {
+    cJSON *json_language = cJSON_GetArrayItem(json_languages, label);
+    mixp->language_label[label] = json_language->valuestring;
+  }
+  cJSON *json_presentation_annotations =
+      cJSON_GetObjectItem(json_mix, "presentation_annotations");
+  for (int label = 0; label < mixp->count_label; label++) {
+    cJSON *json_mix_presentation_anotation =
+        cJSON_GetArrayItem(json_presentation_annotations, label);
+    mixp->mix_presentation_annotations[label].mix_presentation_friendly_label =
+        cJSON_GetObjectItem(json_mix_presentation_anotation,
+                            "mix_presentation_friendly_label")
+            ->valuestring;
+  }
+  mixp->num_sub_mixes =
+      cJSON_GetObjectItem(json_mix, "num_sub_mixes")->valueint;
+  cJSON *json_mix_submix = cJSON_GetObjectItem(json_mix, "sub_mixes");
+  mixp->num_audio_elements =
+      cJSON_GetObjectItem(json_mix_submix, "num_audio_elements")->valueint;
+  mixp_t->num_audio_elements = mixp->num_audio_elements;
+
+  cJSON *json_elements = cJSON_GetObjectItem(json_mix_submix, "audio_elements");
+  for (int ele = 0; ele < mixp->num_audio_elements; ele++) {
+    cJSON *json_element = cJSON_GetArrayItem(json_elements, ele);
+    int element_index =
+        cJSON_GetObjectItem(json_element, "element_index")->valueint;
+    mixp_t->element_index[ele] = element_index;
+    cJSON *json_element_annotations =
+        cJSON_GetObjectItem(json_element, "element_annotations");
     for (int label = 0; label < mixp->count_label; label++) {
-      cJSON *json_language = cJSON_GetArrayItem(json_languages, label);
-      mixp->language_label[label] = json_language->valuestring;
-    }
-    cJSON *json_presentation_annotations =
-        cJSON_GetObjectItem(json_mix, "presentation_annotations");
-    for (int label = 0; label < mixp->count_label; label++) {
-      cJSON *json_mix_presentation_anotation =
-          cJSON_GetArrayItem(json_presentation_annotations, label);
-      mixp->mix_presentation_annotations[label]
-          .mix_presentation_friendly_label =
-          cJSON_GetObjectItem(json_mix_presentation_anotation,
-                              "mix_presentation_friendly_label")
+      cJSON *json_mix_element_anotation =
+          cJSON_GetArrayItem(json_element_annotations, label);
+      mixp->mix_presentation_element_annotations[ele][label]
+          .audio_element_friendly_label =
+          cJSON_GetObjectItem(json_mix_element_anotation,
+                              "audio_element_friendly_label")
               ->valuestring;
     }
-    mixp->num_sub_mixes =
-        cJSON_GetObjectItem(json_mix, "num_sub_mixes")->valueint;
-    cJSON *json_mix_submix = cJSON_GetObjectItem(json_mix, "sub_mixes");
-    mixp->num_audio_elements =
-        cJSON_GetObjectItem(json_mix_submix, "num_audio_elements")->valueint;
-    mixp_t[mix].num_audio_elements = mixp->num_audio_elements;
+    cJSON *json_element_config =
+        cJSON_GetObjectItem(json_element, "element_mix_config");
+    cJSON *json_element_mix_gain =
+        cJSON_GetObjectItem(json_element_config, "element_mix_gain");
+    cJSON *json_element_para =
+        cJSON_GetObjectItem(json_element_mix_gain, "param_definition");
+    mixp_t->element_mix[element_index].parameter_rate =
+        cJSON_GetObjectItem(json_element_para, "parameter_rate")->valueint;
 
-    cJSON *json_elements =
-        cJSON_GetObjectItem(json_mix_submix, "audio_elements");
-    for (int ele = 0; ele < mixp->num_audio_elements; ele++) {
-      cJSON *json_element = cJSON_GetArrayItem(json_elements, ele);
-      int element_index =
-          cJSON_GetObjectItem(json_element, "element_index")->valueint;
-      mixp_t[mix].element_index[ele] = element_index;
-      cJSON *json_element_annotations =
-          cJSON_GetObjectItem(json_element, "element_annotations");
-      for (int label = 0; label < mixp->count_label; label++) {
-        cJSON *json_mix_element_anotation =
-            cJSON_GetArrayItem(json_element_annotations, label);
-        mixp->mix_presentation_element_annotations[ele][label]
-            .audio_element_friendly_label =
-            cJSON_GetObjectItem(json_mix_element_anotation,
-                                "audio_element_friendly_label")
-                ->valuestring;
-      }
-      cJSON *json_element_config =
-          cJSON_GetObjectItem(json_element, "element_mix_config");
-      cJSON *json_element_mix_gain =
-          cJSON_GetObjectItem(json_element_config, "element_mix_gain");
-      cJSON *json_element_para =
-          cJSON_GetObjectItem(json_element_mix_gain, "param_definition");
-      mixp->element_mix_config[ele].parameter_rate =
-          cJSON_GetObjectItem(json_element_para, "parameter_rate")->valueint;
-      cJSON *json_element_anim =
-          cJSON_GetObjectItem(json_element_mix_gain, "animation");
-      if (json_element_anim) {
-        printf("animation_type: %s\n",
-               cJSON_GetObjectItem(json_element_anim, "animation_type")
-                   ->valuestring);
-        if (!strcmp(cJSON_GetObjectItem(json_element_anim, "animation_type")
+    cJSON *json_element_parameter_blk =
+        cJSON_GetObjectItem(json_element_mix_gain, "parameter_block_metadata");
+    if (json_element_parameter_blk) {
+      int num_parameter_blks = 1;
+      mixp_t->element_mix[element_index].num_parameter_blks = 1;
+      mixp_t->element_mix[element_index].duration =
+          (uint64_t *)malloc(num_parameter_blks * sizeof(uint64_t));
+      mixp_t->element_mix[element_index].num_subblocks =
+          (uint64_t *)malloc(num_parameter_blks * sizeof(uint64_t));
+      mixp_t->element_mix[element_index].constant_subblock_duration =
+          (uint64_t *)malloc(num_parameter_blks * sizeof(uint64_t));
+      mixp_t->element_mix[element_index].subblock_duration =
+          (uint64_t **)malloc(num_parameter_blks * sizeof(uint64_t *));
+      mixp_t->element_mix[element_index].animated_parameter_data =
+          (AnimatedParameterData **)malloc(num_parameter_blks *
+                                           sizeof(AnimatedParameterData *));
+
+      cJSON *json_subblocks =
+          cJSON_GetObjectItem(json_element_parameter_blk, "subblocks");
+      uint64_t num_subblocks = cJSON_GetArraySize(json_subblocks);
+      mixp_t->element_mix[element_index].num_subblocks[0] = num_subblocks;
+      mixp_t->element_mix[element_index].subblock_duration[0] =
+          (uint64_t *)malloc(num_subblocks * sizeof(uint64_t));
+      mixp_t->element_mix[element_index].animated_parameter_data[0] =
+          (AnimatedParameterData *)malloc(num_subblocks *
+                                          sizeof(AnimatedParameterData));
+      for (int block = 0; block < num_subblocks; block++) {
+        cJSON *json_subblock = cJSON_GetArrayItem(json_subblocks, block);
+        mixp_t->element_mix[element_index].subblock_duration[0][block] =
+            cJSON_GetObjectItem(json_subblock, "subblock_duration")->valueint;
+        printf(
+            "animation_type: %s\n",
+            cJSON_GetObjectItem(json_subblock, "animation_type")->valuestring);
+        if (!strcmp(cJSON_GetObjectItem(json_subblock, "animation_type")
                         ->valuestring,
                     "STEP")) {
-          mixp_t[mix].element_para_data[element_index].animation_type =
-              ANIMATION_TYPE_STEP;
-          mixp_t[mix]
-              .element_para_data[element_index]
-              .step_parameter_data.start_point_value =
-              cJSON_GetObjectItem(json_element_anim, "start_point_value")
-                  ->valuedouble;
-        } else if (!strcmp(
-                       cJSON_GetObjectItem(json_element_anim, "animation_type")
-                           ->valuestring,
-                       "LINEAR")) {
-          mixp_t[mix].element_para_data[element_index].animation_type =
-              ANIMATION_TYPE_LINEAR;
-          mixp_t[mix]
-              .element_para_data[element_index]
-              .linear_parameter_data.start_point_value =
-              cJSON_GetObjectItem(json_element_anim, "start_point_value")
-                  ->valuedouble;
-          mixp_t[mix]
-              .element_para_data[element_index]
-              .linear_parameter_data.end_point_value =
-              cJSON_GetObjectItem(json_element_anim, "end_point_value")
-                  ->valuedouble;
-        } else if (!strcmp(
-                       cJSON_GetObjectItem(json_element_anim, "animation_type")
-                           ->valuestring,
-                       "BEZIER")) {
-          mixp_t[mix].element_para_data[element_index].animation_type =
-              ANIMATION_TYPE_BEZIER;
-          mixp_t[mix]
-              .element_para_data[element_index]
-              .bezier_parameter_data.start_point_value =
-              cJSON_GetObjectItem(json_element_anim, "start_point_value")
-                  ->valuedouble;
-          mixp_t[mix]
-              .element_para_data[element_index]
-              .bezier_parameter_data.end_point_value =
-              cJSON_GetObjectItem(json_element_anim, "end_point_value")
-                  ->valuedouble;
-          mixp_t[mix]
-              .element_para_data[element_index]
-              .bezier_parameter_data.control_point_value =
-              cJSON_GetObjectItem(json_element_anim, "control_point_value")
-                  ->valuedouble;
-          mixp_t[mix]
-              .element_para_data[element_index]
-              .bezier_parameter_data.control_point_relative_time =
-              cJSON_GetObjectItem(json_element_anim,
-                                  "control_point_relative_time")
-                  ->valuedouble;
-        }
+          mixp_t->element_mix[element_index]
+              .animated_parameter_data[0][block]
+              .animation_type = ANIMATION_TYPE_STEP;
+        } else if (!strcmp(cJSON_GetObjectItem(json_subblock, "animation_type")
+                               ->valuestring,
+                           "LINEAR"))
+          mixp_t->element_mix[element_index]
+              .animated_parameter_data[0][block]
+              .animation_type = ANIMATION_TYPE_LINEAR;
+        else if (!strcmp(cJSON_GetObjectItem(json_subblock, "animation_type")
+                             ->valuestring,
+                         "BEZIER"))
+          mixp_t->element_mix[element_index]
+              .animated_parameter_data[0][block]
+              .animation_type = ANIMATION_TYPE_BEZIER;
+
+        mixp_t->element_mix[element_index]
+            .animated_parameter_data[0][block]
+            .bezier_parameter_data.start_point_value =
+            cJSON_GetObjectItem(json_subblock, "start_point_value")
+                ->valuedouble;
+        mixp_t->element_mix[element_index]
+            .animated_parameter_data[0][block]
+            .bezier_parameter_data.end_point_value =
+            cJSON_GetObjectItem(json_subblock, "end_point_value")->valuedouble;
+        mixp_t->element_mix[element_index]
+            .animated_parameter_data[0][block]
+            .bezier_parameter_data.control_point_value =
+            cJSON_GetObjectItem(json_subblock, "control_point_value")
+                ->valuedouble;
+        mixp_t->element_mix[element_index]
+            .animated_parameter_data[0][block]
+            .bezier_parameter_data.control_point_relative_time =
+            cJSON_GetObjectItem(json_subblock, "control_point_relative_time")
+                ->valuedouble;
       }
-      mixp->element_mix_config[ele].default_mix_gain =
-          cJSON_GetObjectItem(json_element_mix_gain, "default_mix_gain")
+    }
+    mixp_t->element_mix[element_index].default_mix_gain =
+        cJSON_GetObjectItem(json_element_mix_gain, "default_mix_gain")
+            ->valuedouble;
+  }
+  cJSON *json_output_mix_config =
+      cJSON_GetObjectItem(json_mix_submix, "output_mix_config");
+  cJSON *json_out_mix_gain =
+      cJSON_GetObjectItem(json_output_mix_config, "output_mix_gain");
+  cJSON *json_out_mix_para =
+      cJSON_GetObjectItem(json_out_mix_gain, "param_definition");
+  mixp_t->output_mix.parameter_rate =
+      cJSON_GetObjectItem(json_out_mix_para, "parameter_rate")->valueint;
+
+  cJSON *json_output_parameter_blk =
+      cJSON_GetObjectItem(json_out_mix_gain, "parameter_block_metadata");
+  if (json_output_parameter_blk) {
+    int num_parameter_blks = 1;
+    mixp_t->output_mix.num_parameter_blks = 1;
+    mixp_t->output_mix.duration =
+        (uint64_t *)malloc(num_parameter_blks * sizeof(uint64_t));
+    mixp_t->output_mix.num_subblocks =
+        (uint64_t *)malloc(num_parameter_blks * sizeof(uint64_t));
+    mixp_t->output_mix.constant_subblock_duration =
+        (uint64_t *)malloc(num_parameter_blks * sizeof(uint64_t));
+    mixp_t->output_mix.subblock_duration =
+        (uint64_t **)malloc(num_parameter_blks * sizeof(uint64_t *));
+    mixp_t->output_mix.animated_parameter_data =
+        (AnimatedParameterData **)malloc(num_parameter_blks *
+                                         sizeof(AnimatedParameterData *));
+
+    cJSON *json_subblocks =
+        cJSON_GetObjectItem(json_output_parameter_blk, "subblocks");
+    uint64_t num_subblocks = cJSON_GetArraySize(json_subblocks);
+    mixp_t->output_mix.num_subblocks[0] = num_subblocks;
+    mixp_t->output_mix.subblock_duration[0] =
+        (uint64_t *)malloc(num_subblocks * sizeof(uint64_t));
+    mixp_t->output_mix.animated_parameter_data[0] =
+        (AnimatedParameterData *)malloc(num_subblocks *
+                                        sizeof(AnimatedParameterData));
+    for (int block = 0; block < num_subblocks; block++) {
+      cJSON *json_subblock = cJSON_GetArrayItem(json_subblocks, block);
+      mixp_t->output_mix.subblock_duration[0][block] =
+          cJSON_GetObjectItem(json_subblock, "subblock_duration")->valueint;
+      printf("animation_type: %s\n",
+             cJSON_GetObjectItem(json_subblock, "animation_type")->valuestring);
+      if (!strcmp(
+              cJSON_GetObjectItem(json_subblock, "animation_type")->valuestring,
+              "STEP")) {
+        mixp_t->output_mix.animated_parameter_data[0][block].animation_type =
+            ANIMATION_TYPE_STEP;
+      } else if (!strcmp(cJSON_GetObjectItem(json_subblock, "animation_type")
+                             ->valuestring,
+                         "LINEAR"))
+        mixp_t->output_mix.animated_parameter_data[0][block].animation_type =
+            ANIMATION_TYPE_LINEAR;
+      else if (!strcmp(cJSON_GetObjectItem(json_subblock, "animation_type")
+                           ->valuestring,
+                       "BEZIER"))
+        mixp_t->output_mix.animated_parameter_data[0][block].animation_type =
+            ANIMATION_TYPE_BEZIER;
+
+      mixp_t->output_mix.animated_parameter_data[0][block]
+          .bezier_parameter_data.start_point_value =
+          cJSON_GetObjectItem(json_subblock, "start_point_value")->valuedouble;
+      mixp_t->output_mix.animated_parameter_data[0][block]
+          .bezier_parameter_data.end_point_value =
+          cJSON_GetObjectItem(json_subblock, "end_point_value")->valuedouble;
+      mixp_t->output_mix.animated_parameter_data[0][block]
+          .bezier_parameter_data.control_point_value =
+          cJSON_GetObjectItem(json_subblock, "control_point_value")
+              ->valuedouble;
+      mixp_t->output_mix.animated_parameter_data[0][block]
+          .bezier_parameter_data.control_point_relative_time =
+          cJSON_GetObjectItem(json_subblock, "control_point_relative_time")
               ->valuedouble;
     }
-    cJSON *json_output_mix_config =
-        cJSON_GetObjectItem(json_mix_submix, "output_mix_config");
-    cJSON *json_out_mix_gain =
-        cJSON_GetObjectItem(json_output_mix_config, "output_mix_gain");
-    cJSON *json_out_mix_para =
-        cJSON_GetObjectItem(json_out_mix_gain, "param_definition");
-    mixp->output_mix_config.parameter_rate =
-        cJSON_GetObjectItem(json_out_mix_para, "parameter_rate")->valueint;
-    cJSON *json_out_mix_anim =
-        cJSON_GetObjectItem(json_out_mix_gain, "animation");
-    if (json_out_mix_anim) {
-      if (!strcmp(cJSON_GetObjectItem(json_out_mix_anim, "animation_type")
-                      ->valuestring,
-                  "STEP")) {
-        mixp_t[mix].out_para_data.animation_type = ANIMATION_TYPE_STEP;
-        mixp_t[mix].out_para_data.step_parameter_data.start_point_value =
-            cJSON_GetObjectItem(json_out_mix_anim, "start_point_value")
-                ->valuedouble;
-      } else if (!strcmp(
-                     cJSON_GetObjectItem(json_out_mix_anim, "animation_type")
+  }
+  mixp_t->output_mix.default_mix_gain =
+      cJSON_GetObjectItem(json_out_mix_gain, "default_mix_gain")->valuedouble;
+
+  mixp->num_layouts =
+      cJSON_GetObjectItem(json_mix_submix, "num_layouts")->valueint;
+  cJSON *json_layouts = cJSON_GetObjectItem(json_mix_submix, "layouts");
+  for (int layouts = 0; layouts < mixp->num_layouts; layouts++) {
+    cJSON *json_loudness_layout = cJSON_GetArrayItem(json_layouts, layouts);
+    ;
+    cJSON *json_ss_layout =
+        cJSON_GetObjectItem(json_loudness_layout, "ss_layout");
+    mixp->loudness_layout[layouts].layout_type =
+        IAMF_LAYOUT_TYPE_LOUDSPEAKERS_SS_CONVENTION;
+    mixp->loudness_layout[layouts].sound_system = get_sound_system_by_string(
+        cJSON_GetObjectItem(json_ss_layout, "sound_system")->valuestring);
+  }
+}
+
+static void parse_audio_element(cJSON *json, AudioElementConfig *ae_conf) {
+  cJSON *json_ae = json;
+  if (!strcmp(cJSON_GetObjectItem(json_ae, "audio_element_type")->valuestring,
+              "AUDIO_ELEMENT_CHANNEL_BASED")) {
+    ae_conf->element_type = AUDIO_ELEMENT_CHANNEL_BASED;
+  } else if (!strcmp(cJSON_GetObjectItem(json_ae, "audio_element_type")
                          ->valuestring,
-                     "LINEAR")) {
-        mixp_t[mix].out_para_data.animation_type = ANIMATION_TYPE_LINEAR;
-        mixp_t[mix].out_para_data.linear_parameter_data.start_point_value =
-            cJSON_GetObjectItem(json_out_mix_anim, "start_point_value")
-                ->valuedouble;
-        mixp_t[mix].out_para_data.linear_parameter_data.end_point_value =
-            cJSON_GetObjectItem(json_out_mix_anim, "end_point_value")
-                ->valuedouble;
-      } else if (!strcmp(
-                     cJSON_GetObjectItem(json_out_mix_anim, "animation_type")
-                         ->valuestring,
-                     "BEZIER")) {
-        mixp_t[mix].out_para_data.animation_type = ANIMATION_TYPE_BEZIER;
-        mixp_t[mix].out_para_data.bezier_parameter_data.start_point_value =
-            cJSON_GetObjectItem(json_out_mix_anim, "start_point_value")
-                ->valuedouble;
-        mixp_t[mix].out_para_data.bezier_parameter_data.end_point_value =
-            cJSON_GetObjectItem(json_out_mix_anim, "end_point_value")
-                ->valuedouble;
-        mixp_t[mix].out_para_data.bezier_parameter_data.control_point_value =
-            cJSON_GetObjectItem(json_out_mix_anim, "control_point_value")
-                ->valuedouble;
-        mixp_t[mix]
-            .out_para_data.bezier_parameter_data.control_point_relative_time =
-            cJSON_GetObjectItem(json_out_mix_anim,
-                                "control_point_relative_time")
-                ->valuedouble;
+                     "AUDIO_ELEMENT_SCENE_BASED")) {
+    ae_conf->element_type = AUDIO_ELEMENT_SCENE_BASED;
+  }
+  if (ae_conf->element_type == AUDIO_ELEMENT_CHANNEL_BASED) {
+    cJSON *json_channel_base =
+        cJSON_GetObjectItem(json_ae, "scalable_channel_layout_config");
+    int index = 0;
+    char *channel_layout_string[] = {"1.0.0", "2.0.0",   "5.1.0", "5.1.2",
+                                     "5.1.4", "7.1.0",   "7.1.2", "7.1.4",
+                                     "3.1.2", "binaural"};
+    char mode[128];
+    strcpy(mode, cJSON_GetObjectItem(json_channel_base, "mode")->valuestring);
+    char *p_start = mode;
+    ae_conf->layout_in = IA_CHANNEL_LAYOUT_COUNT;
+    for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
+      if (!strncmp(channel_layout_string[i], p_start,
+                   strlen(channel_layout_string[i]))) {
+        fprintf(stderr, "\nInput channel layout:%s\n",
+                channel_layout_string[i]);
+        ae_conf->layout_in = i;
+        break;
       }
     }
-    mixp->output_mix_config.default_mix_gain =
-        cJSON_GetObjectItem(json_out_mix_gain, "default_mix_gain")->valuedouble;
+    if (ae_conf->layout_in == IA_CHANNEL_LAYOUT_COUNT) {
+      fprintf(stderr, stderr, "Please check input channel layout format\n");
+      return 0;
+    }
 
-    mixp->num_layouts =
-        cJSON_GetObjectItem(json_mix_submix, "num_layouts")->valueint;
-    cJSON *json_layouts = cJSON_GetObjectItem(json_mix_submix, "layouts");
-    for (int layouts = 0; layouts < mixp->num_layouts; layouts++) {
-      cJSON *json_loudness_layout = cJSON_GetArrayItem(json_layouts, layouts);
-      ;
-      cJSON *json_ss_layout =
-          cJSON_GetObjectItem(json_loudness_layout, "ss_layout");
-      mixp->loudness_layout[layouts].layout_type =
-          IAMF_LAYOUT_TYPE_LOUDSPEAKERS_SS_CONVENTION;
-      mixp->loudness_layout[layouts].sound_system = get_sound_system_by_string(
-          cJSON_GetObjectItem(json_ss_layout, "sound_system")->valuestring);
+    int channel_cb_ptr = 0;
+    fprintf(stderr, "Channel layout combinations: ");
+    while (
+        channel_cb_ptr <
+        strlen(p_start + strlen(channel_layout_string[ae_conf->layout_in]))) {
+      for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
+        if (!strncmp(channel_layout_string[i], p_start + 6 + channel_cb_ptr,
+                     5)) {
+          fprintf(stderr, "%s ", channel_layout_string[i]);
+          ae_conf->layout_cb[index] = i;
+          index++;
+        }
+      }
+      channel_cb_ptr += 6;
+    }
+    fprintf(stderr, "\n \n");
+
+    ae_conf->layout_cb[index] = IA_CHANNEL_LAYOUT_COUNT;
+
+    cJSON *json_demix = cJSON_GetObjectItem(json_channel_base, "demix");
+    if (json_demix) {
+      ae_conf->demix.set_mode =
+          cJSON_GetObjectItem(json_demix, "set_mode")->valueint;
+      ae_conf->demix.default_mode =
+          cJSON_GetObjectItem(json_demix, "default_mode")->valueint;
+      ae_conf->demix.default_weight =
+          cJSON_GetObjectItem(json_demix, "default_weight")->valueint;
+    }
+  } else if (ae_conf->element_type == AUDIO_ELEMENT_SCENE_BASED) {
+    cJSON *json_scene_base = cJSON_GetObjectItem(json_ae, "ambisonics_config");
+    if (!strcmp(cJSON_GetObjectItem(json_scene_base, "ambisonics_mode")
+                    ->valuestring,
+                "AMBISONICS_MODE_MONO"))
+      ae_conf->ambisonics_mode = 0;
+    else if (!strcmp(cJSON_GetObjectItem(json_scene_base, "ambisonics_mode")
+                         ->valuestring,
+                     "AMBISONICS_MODE_PROJECTION"))
+      ae_conf->ambisonics_mode = 1;
+
+    if (ae_conf->ambisonics_mode == 0) {
+      cJSON *json_mono =
+          cJSON_GetObjectItem(json_scene_base, "ambisonics_mono_config");
+      ae_conf->ambisonics_mono_config.output_channel_count =
+          cJSON_GetObjectItem(json_mono, "output_channel_count")->valueint;
+      ae_conf->ambisonics_mono_config.substream_count =
+          cJSON_GetObjectItem(json_mono, "substream_count")->valueint;
+      cJSON *json_channel_mapping =
+          cJSON_GetObjectItem(json_mono, "channel_mapping");
+      if (json_channel_mapping) {
+        int child_num = cJSON_GetArraySize(json_channel_mapping);
+        // printf("child_num: %d\n", child_num);
+        for (int i = 0; i < child_num; i++) {
+          ae_conf->ambisonics_mono_config.channel_mapping[i] =
+              cJSON_GetArrayItem(json_channel_mapping, i)->valueint;
+        }
+      }
+    } else if (ae_conf->ambisonics_mode == 1) {
+      cJSON *json_projection =
+          cJSON_GetObjectItem(json_scene_base, "ambisonics_projection_config");
+      ae_conf->ambisonics_projection_config.output_channel_count =
+          cJSON_GetObjectItem(json_projection, "output_channel_count")
+              ->valueint;
+      ae_conf->ambisonics_projection_config.substream_count =
+          cJSON_GetObjectItem(json_projection, "substream_count")->valueint;
+      ae_conf->ambisonics_projection_config.coupled_substream_count =
+          cJSON_GetObjectItem(json_projection, "coupled_substream_count")
+              ->valueint;
+      cJSON *json_demixing_matrix =
+          cJSON_GetObjectItem(json_projection, "demixing_matrix");
+      if (json_demixing_matrix) {
+        int child_num = cJSON_GetArraySize(json_demixing_matrix);
+        // printf("child_num: %d\n", child_num);
+        for (int i = 0; i < child_num; i++) {
+          ae_conf->ambisonics_projection_config.demixing_matrix[i] =
+              cJSON_GetArrayItem(json_demixing_matrix, i)->valueint;
+        }
+      }
     }
   }
-  return mix_num;
 }
+
+static void paser_user_input_option(cJSON *json, UserInputOption *user_in) {
+  int child_num = cJSON_GetArraySize(json);
+  for (int i = 0; i < child_num; i++) {
+    cJSON *json_c = cJSON_GetArrayItem(json, i);
+    // printf("parsed child json: %d\n", i);
+    if (!strcmp(json_c->string, "audio_element_metadata")) {
+      parse_audio_element(json_c,
+                          &(user_in->element_config[user_in->elem_num]));
+      user_in->elem_num++;
+    } else if (!strcmp(json_c->string, "mix_presentation_metadata")) {
+      parse_mix_repsentation(json_c, &(user_in->mixp_t[user_in->mix_num]));
+      user_in->mix_num++;
+    }
+  }
+}
+
 int iamf_simple_profile_test(int argc, char *argv[]) {
-  if (argc < 12) {
+  if (argc < 10) {
     print_usage(argv);
     return 0;
   }
@@ -464,9 +740,6 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
 
   int is_standalone = 0;
   int profile = 0;
-  int default_demix_mode = 0;
-  int default_demix_weight = 5;
-  int defauilt_demix_is_set = 0;
   int codec_id = IAMF_CODEC_UNKNOWN;
   AudioElementType audio_element_type = AUDIO_ELEMENT_INVALID;
   int ambisonics_mode = 0;
@@ -479,10 +752,11 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
   int measured_target[10];
   int num_layouts = 0;
   AudioElementConfig element_config;
+  char *config_file = NULL;
 
   while (args < argc) {
     if (argv[args][0] == '-') {
-      if (argv[args][1] == 'c') {
+      if (strcmp(argv[args], "-codec") == 0) {
         args++;
         if (!strncmp(argv[args], "opus", 4)) {
           codec_id = IAMF_CODEC_OPUS;
@@ -497,145 +771,10 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
           codec_id = IAMF_CODEC_PCM;
           if (strlen(argv[args]) > 3) chunk_size = atoi(argv[args] + 4);
         }
-      } else if (argv[args][1] == 'm') {
+      } else if (strcmp(argv[args], "-config") == 0) {
         args++;
-        if (argv[args][0] == '0') {
-          audio_element_type = AUDIO_ELEMENT_CHANNEL_BASED;
-          fprintf(stderr, "\nAudio Element Type:%s\n",
-                  audio_element_type == AUDIO_ELEMENT_CHANNEL_BASED
-                      ? "Channel-Base"
-                      : "Scene-Base");
-          char *p_start = &(argv[args][2]);
-          for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
-            if (!strncmp(channel_layout_string[i], p_start,
-                         strlen(channel_layout_string[i]))) {
-              fprintf(stderr, "\nInput channel layout:%s\n",
-                      channel_layout_string[i]);
-              channel_layout_in = i;
-              break;
-            }
-          }
-          if (channel_layout_in == IA_CHANNEL_LAYOUT_COUNT) {
-            fprintf(stderr, stderr,
-                    "Please check input channel layout format\n");
-            return 0;
-          }
-
-          int channel_cb_ptr = 0;
-          fprintf(stderr, "Channel layout combinations: ");
-          while (channel_cb_ptr <
-                 strlen(p_start +
-                        strlen(channel_layout_string[channel_layout_in]))) {
-            for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
-              if (!strncmp(channel_layout_string[i],
-                           p_start + 6 + channel_cb_ptr, 5)) {
-                fprintf(stderr, "%s ", channel_layout_string[i]);
-                channel_layout_cb[index] = i;
-                index++;
-              }
-            }
-            channel_cb_ptr += 6;
-          }
-          fprintf(stderr, "\n \n");
-
-          channel_layout_cb[index] = IA_CHANNEL_LAYOUT_COUNT;
-
-          element_config.layout_in = channel_layout_in;
-          element_config.layout_cb = channel_layout_cb;
-        } else if (argv[args][0] == '1') {
-          audio_element_type = AUDIO_ELEMENT_SCENE_BASED;
-          element_config.ambisonics_mode = 0;
-          char argv_string[1024];
-          strcpy(argv_string, argv[args]);
-          char *amb_conf = strtok(argv_string, "/");
-          amb_conf = strtok(NULL, "/");
-          if (amb_conf) {
-            element_config.ambisonics_mono_config.output_channel_count =
-                atoi(amb_conf);
-          }
-          amb_conf = strtok(NULL, "/");
-          if (amb_conf) {
-            element_config.ambisonics_mono_config.substream_count =
-                atoi(amb_conf);
-          }
-          amb_conf = strtok(NULL, "/");
-          if (amb_conf) {
-            char *mapping_s = strtok(amb_conf, ",");
-            int mapping_i = 0;
-            while (mapping_s) {
-              element_config.ambisonics_mono_config
-                  .channel_mapping[mapping_i++] = atoi(mapping_s);
-              mapping_s = strtok(NULL, ",");
-            }
-            if (mapping_i !=
-                element_config.ambisonics_mono_config.output_channel_count) {
-              fprintf(stderr, "wrong mapping\n");
-              return (0);
-            }
-          }
-          fprintf(stderr, "\nAudio Element Type:%s\n",
-                  audio_element_type == AUDIO_ELEMENT_CHANNEL_BASED
-                      ? "Channel-Base"
-                      : "Scene-Base");
-        } else if (argv[args][0] == '2') {
-          audio_element_type = AUDIO_ELEMENT_SCENE_BASED;
-          element_config.ambisonics_mode = 1;
-          char argv_string[1024];
-          strcpy(argv_string, argv[args]);
-          char *amb_conf = strtok(argv_string, "/");
-          amb_conf = strtok(NULL, "/");
-          if (amb_conf) {
-            element_config.ambisonics_projection_config.output_channel_count =
-                atoi(amb_conf);
-          }
-          amb_conf = strtok(NULL, "/");
-          if (amb_conf) {
-            element_config.ambisonics_projection_config.substream_count =
-                atoi(amb_conf);
-          }
-          amb_conf = strtok(NULL, "/");
-          if (amb_conf) {
-            element_config.ambisonics_projection_config
-                .coupled_substream_count = atoi(amb_conf);
-          }
-          amb_conf = strtok(NULL, "/");
-          if (amb_conf) {
-            char *demix_s = strtok(amb_conf, ",");
-            int mapping_i = 0;
-            while (demix_s) {
-              element_config.ambisonics_projection_config
-                  .demixing_matrix[mapping_i++] = atoi(demix_s);
-              demix_s = strtok(NULL, ",");
-            }
-            if (mapping_i != element_config.ambisonics_projection_config
-                                     .output_channel_count *
-                                 (element_config.ambisonics_projection_config
-                                      .substream_count +
-                                  element_config.ambisonics_projection_config
-                                      .coupled_substream_count)) {
-              fprintf(stderr, "wrong demixing_matrix\n");
-              return (0);
-            }
-          }
-          fprintf(stderr, "\nAudio Element Type:%s\n",
-                  audio_element_type == AUDIO_ELEMENT_CHANNEL_BASED
-                      ? "Channel-Base"
-                      : "Scene-Base");
-        } else {
-          fprintf(stderr, "wrong mode:%c\n", argv[args][1]);
-          return (0);
-        }
-
-      } else if (strcmp(argv[args], "-demix") == 0) {
-        args++;
-        char argv_string[1024];
-        strcpy(argv_string, argv[args]);
-        char *default_demix = strtok(argv_string, "/");
-        default_demix_mode = atoi(default_demix);
-        default_demix = strtok(NULL, "/");
-        default_demix_weight = atoi(default_demix);
-        defauilt_demix_is_set = 1;
-      } else if (argv[args][1] == 'p') {
+        config_file = argv[args];
+      } else if (strcmp(argv[args], "-profile") == 0) {
         args++;
         profile = atoi(argv[args]);
       } else if (argv[args][1] == 'i') {
@@ -661,9 +800,9 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
   }
 
   // mix config json parse
-  FILE *fp = fopen("mix_config_s.json", "r");
+  FILE *fp = fopen(config_file, "r");
   if (fp == NULL) {
-    printf("Error opening file: mix_config_s.json\n");
+    printf("Error opening file: %s\n", config_file);
     return 1;
   }
   fseek(fp, 0, SEEK_END);
@@ -681,15 +820,9 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
     return 1;
   }
   free(json_string);
-  MixPresentation_t mixp_t[10];
-  for (int i = 0; i < 10; i++) {
-    memset(&mixp_t[i], 0x00, sizeof(MixPresentation_t));
-    mixp_t[i].element_para_data[0].animation_type = ANIMATION_TYPE_INVALID;
-    mixp_t[i].element_para_data[1].animation_type = ANIMATION_TYPE_INVALID;
-    mixp_t[i].out_para_data.animation_type = ANIMATION_TYPE_INVALID;
-  }
-
-  int mix_num = parse_mix_repsentation(json, mixp_t);
+  UserInputOption user_in;
+  memset(&user_in, 0x00, sizeof(UserInputOption));
+  paser_user_input_option(json, &user_in);
 
   MOVMuxContext *movm = NULL;
   FILE *iamf_file = NULL;
@@ -776,8 +909,7 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
       IAMF_encoder_create(sample_rate, bits_per_sample, endianness,
                           codec_id,  // 1:opus, 2:aac
                           chunk_size, &error);
-  int element_id =
-      IAMF_audio_element_add(ia_enc, audio_element_type, element_config);
+  int element_id = IAMF_audio_element_add(ia_enc, user_in.element_config[0]);
 
   /**
    * 2. immersive encoder control.
@@ -788,12 +920,15 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
   IAMF_encoder_ctl(ia_enc, element_id,
                    IA_SET_STANDALONE_REPRESENTATION((int)is_standalone));
   IAMF_encoder_ctl(ia_enc, element_id, IA_SET_IAMF_PROFILE((int)profile));
-  if (defauilt_demix_is_set) {
+  if (user_in.element_config[0].demix.set_mode == 1) {
     IAMF_encoder_ctl(ia_enc, element_id,
-                     IA_SET_IAMF_DEFAULT_DEMIX_MODE((int)default_demix_mode));
-    IAMF_encoder_ctl(
-        ia_enc, element_id,
-        IA_SET_IAMF_DEFAULT_DEMIX_WEIGHT((int)default_demix_weight));
+                     IA_SET_IAMF_DEFAULT_DEMIX_MODE(
+                         (int)user_in.element_config[0].demix.default_mode));
+    IAMF_encoder_ctl(ia_enc, element_id,
+                     IA_SET_IAMF_DEFAULT_DEMIX_WEIGHT(
+                         (int)user_in.element_config[0].demix.default_weight));
+  } else if (user_in.element_config[0].demix.set_mode == 2) {
+    IAMF_encoder_ctl(ia_enc, element_id, IA_SET_IAMF_DISABLE_DEMIX((int)1));
   }
   int preskip = 0;
   IAMF_encoder_ctl(ia_enc, element_id, IA_GET_LOOKAHEAD(&preskip));
@@ -804,14 +939,15 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
   // Calculate the loudness for preset target layout, if there is no seteo
   // scalable laylout for channel-based case, please set target with s0 at
   // least.
-  for (int i = 0; i < mix_num; i++) {
-    mixp_t[i].mixp.audio_element_id[0] = element_id;
+  for (int i = 0; i < user_in.mix_num; i++) {
+    user_in.mixp_t[i].mixp.audio_element_id[0] = element_id;
     in_wavf = dep_wav_read_open(in_wav);
-    if (mixp_t[i].mixp.num_layouts > 0) {
+    if (user_in.mixp_t[i].mixp.num_layouts > 0) {
       int pcm_frames = dep_wav_read_data(in_wavf, (unsigned char *)wav_samples,
                                          bsize_of_samples);
       int count = 0;
-      IAMF_encoder_target_loudness_measure_start(ia_enc, &mixp_t[i].mixp);
+      IAMF_encoder_target_loudness_measure_start(ia_enc,
+                                                 &(user_in.mixp_t[i].mixp));
       while (pcm_frames) {
         if (pcm_frames <= 0) break;
         count++;
@@ -821,56 +957,48 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
         ia_frame.element_id = element_id;
         ia_frame.samples = pcm_frames / bsize_of_1sample;
         ia_frame.pcm = wav_samples;
-        IAMF_encoder_target_loudness_measure(ia_enc, &mixp_t[i].mixp,
+        IAMF_encoder_target_loudness_measure(ia_enc, &(user_in.mixp_t[i].mixp),
                                              &ia_frame);
         pcm_frames = dep_wav_read_data(in_wavf, (unsigned char *)wav_samples,
                                        bsize_of_samples);
       }
-      IAMF_encoder_target_loudness_measure_stop(ia_enc, &mixp_t[i].mixp);
+      IAMF_encoder_target_loudness_measure_stop(ia_enc,
+                                                &(user_in.mixp_t[i].mixp));
     }
     if (in_wavf) dep_wav_read_close(in_wavf);
-    if (mixp_t[i].element_para_data[0].animation_type >
-        ANIMATION_TYPE_INVALID) {
-      uint64_t total_samples = data_length / bsize_of_1sample;
-      parameter_block_split(&mixp_t[i].mixp.element_mix_config[0],
-                            mixp_t[i].element_para_data[0],
-                            is_standalone ? total_samples : chunk_size, 0,
-                            total_samples, total_samples);
-    }
-    if (mixp_t[i].out_para_data.animation_type > ANIMATION_TYPE_INVALID) {
-      uint64_t total_samples = data_length / bsize_of_1sample;
-      parameter_block_split(&mixp_t[i].mixp.output_mix_config,
-                            mixp_t[i].out_para_data,
-                            is_standalone ? total_samples : chunk_size, 0,
-                            total_samples, total_samples);
-    }
+    parameter_block_split2(&user_in.mixp_t[i].mixp.element_mix_config[0],
+                           &user_in.mixp_t[i].element_mix[0], chunk_size,
+                           sample_rate);
+    parameter_block_split2(&user_in.mixp_t[i].mixp.output_mix_config,
+                           &user_in.mixp_t[i].output_mix, chunk_size,
+                           sample_rate);
 
-    IAMF_encoder_set_mix_presentation(ia_enc, mixp_t[i].mixp);
-    mix_presentation_free(&mixp_t[i].mixp);
+    IAMF_encoder_set_mix_presentation(ia_enc, user_in.mixp_t[i].mixp);
+    mix_presentation_free(&(user_in.mixp_t[i].mixp));
+    mix_gain_config_free(&user_in.mixp_t[i].element_mix[0]);
+    mix_gain_config_free(&user_in.mixp_t[i].output_mix);
   }
 
-  if (audio_element_type == AUDIO_ELEMENT_SCENE_BASED) goto ENCODING;
+  if (user_in.element_config[0].element_type == AUDIO_ELEMENT_SCENE_BASED)
+    goto ENCODING;
   /**
    * 3. ASC and HEQ pre-process.
    * */
   in_wavf = dep_wav_read_open(in_wav);
-  if (index > 0 && !defauilt_demix_is_set)  // non-scalable
-  {
-    start_t = clock();
-    int pcm_frames = dep_wav_read_data(in_wavf, (unsigned char *)wav_samples,
-                                       bsize_of_samples);
-    IAMF_encoder_dmpd_start(ia_enc, element_id);
-    while (pcm_frames) {
-      IAMF_encoder_dmpd_process(ia_enc, element_id, wav_samples,
-                                pcm_frames / bsize_of_1sample);
-      pcm_frames = dep_wav_read_data(in_wavf, (unsigned char *)wav_samples,
+  start_t = clock();
+  int pcm_frames = dep_wav_read_data(in_wavf, (unsigned char *)wav_samples,
                                      bsize_of_samples);
-    }
-    IAMF_encoder_dmpd_stop(ia_enc, element_id);
-    stop_t = clock();
-    fprintf(stderr, "dmpd total time %f(s)\n",
-            (float)(stop_t - start_t) / CLOCKS_PER_SEC);
+  IAMF_encoder_dmpd_start(ia_enc, element_id);
+  while (pcm_frames) {
+    IAMF_encoder_dmpd_process(ia_enc, element_id, wav_samples,
+                              pcm_frames / bsize_of_1sample);
+    pcm_frames = dep_wav_read_data(in_wavf, (unsigned char *)wav_samples,
+                                   bsize_of_samples);
   }
+  IAMF_encoder_dmpd_stop(ia_enc, element_id);
+  stop_t = clock();
+  fprintf(stderr, "dmpd total time %f(s)\n",
+          (float)(stop_t - start_t) / CLOCKS_PER_SEC);
 
   if (in_wavf) dep_wav_read_close(in_wavf);
 
@@ -879,8 +1007,8 @@ int iamf_simple_profile_test(int argc, char *argv[]) {
    * 4. loudness and gain pre-process.
    * */
   in_wavf = dep_wav_read_open(in_wav);
-  int pcm_frames = dep_wav_read_data(in_wavf, (unsigned char *)wav_samples,
-                                     bsize_of_samples);
+  pcm_frames = dep_wav_read_data(in_wavf, (unsigned char *)wav_samples,
+                                 bsize_of_samples);
   ProgressBar bar;
   ProgressBarInit(&bar);
   int total, current;
@@ -1013,7 +1141,7 @@ ENCODING:
   }
 
   stop_t = clock();
-  fprintf(stderr, "encoding total time %f(s), total count: %ld\n",
+  fprintf(stderr, "encoding total time %f(s), total count: %" PRId64 "\n",
           (float)(stop_t - start_t) / CLOCKS_PER_SEC, frame_count);
 
   if (is_standalone == 0) {
@@ -1041,14 +1169,7 @@ failure:
 typedef struct {
   IAMF_Encoder *ia_enc;
   int num_of_elements;
-
-  AudioElementType audio_element_type[2];
-  AudioElementConfig element_config[2];
   int element_id[2];
-  float default_mix_gain[2];
-  int default_demix_mode[2];
-  int default_demix_weight[2];
-  int defauilt_demix_is_set[2];
 
   char *in_file[2];
   void *in_wavf[2];
@@ -1068,44 +1189,41 @@ typedef struct {
   AnimatedParameterData animated_parameter[2];
 } BaseProfileHandler;
 
-void iamf_pre_process(BaseProfileHandler *handler, int element_index) {
-  if (handler->audio_element_type[element_index] ==
-      AUDIO_ELEMENT_CHANNEL_BASED) {
+void iamf_pre_process(BaseProfileHandler *handler, int element_index,
+                      int element_type) {
+  if (element_type == AUDIO_ELEMENT_CHANNEL_BASED) {
     /**
      * 4. ASC and HEQ pre-process.
      * */
-    if (!handler->defauilt_demix_is_set[element_index]) {
-      handler->in_wavf[element_index] =
-          dep_wav_read_open(handler->in_file[element_index]);
+    handler->in_wavf[element_index] =
+        dep_wav_read_open(handler->in_file[element_index]);
 
-      IAMF_encoder_dmpd_start(handler->ia_enc,
-                              handler->element_id[element_index]);
-      int pcm_frames = dep_wav_read_data(
+    IAMF_encoder_dmpd_start(handler->ia_enc,
+                            handler->element_id[element_index]);
+    int pcm_frames =
+        dep_wav_read_data(handler->in_wavf[element_index],
+                          (unsigned char *)handler->wav_samples[element_index],
+                          handler->bsize_of_samples[element_index]);
+    while (pcm_frames) {
+      IAMF_encoder_dmpd_process(
+          handler->ia_enc, handler->element_id[element_index],
+          handler->wav_samples[element_index],
+          pcm_frames / handler->bsize_of_1sample[element_index]);
+      pcm_frames = dep_wav_read_data(
           handler->in_wavf[element_index],
           (unsigned char *)handler->wav_samples[element_index],
           handler->bsize_of_samples[element_index]);
-      while (pcm_frames) {
-        IAMF_encoder_dmpd_process(
-            handler->ia_enc, handler->element_id[element_index],
-            handler->wav_samples[element_index],
-            pcm_frames / handler->bsize_of_1sample[element_index]);
-        pcm_frames = dep_wav_read_data(
-            handler->in_wavf[element_index],
-            (unsigned char *)handler->wav_samples[element_index],
-            handler->bsize_of_samples[element_index]);
-      }
-      IAMF_encoder_dmpd_stop(handler->ia_enc,
-                             handler->element_id[element_index]);
-
-      dep_wav_read_close(handler->in_wavf[element_index]);
     }
+    IAMF_encoder_dmpd_stop(handler->ia_enc, handler->element_id[element_index]);
+
+    dep_wav_read_close(handler->in_wavf[element_index]);
 
     /**
      * 4. loudness and gain pre-process.
      * */
     handler->in_wavf[element_index] =
         dep_wav_read_open(handler->in_file[element_index]);
-    int pcm_frames =
+    pcm_frames =
         dep_wav_read_data(handler->in_wavf[element_index],
                           (unsigned char *)handler->wav_samples[element_index],
                           handler->bsize_of_samples[element_index]);
@@ -1165,13 +1283,12 @@ void iamf_pre_process(BaseProfileHandler *handler, int element_index) {
     }
 
     dep_wav_read_close(handler->in_wavf[element_index]);
-  } else if (handler->audio_element_type[element_index] ==
-             AUDIO_ELEMENT_SCENE_BASED) {
+  } else if (element_type == AUDIO_ELEMENT_SCENE_BASED) {
   }
 }
 
 int iamf_base_profile_test(int argc, char *argv[]) {
-  if (argc < 16) {
+  if (argc < 12) {
     print_usage(argv);
     return 0;
   }
@@ -1179,10 +1296,6 @@ int iamf_base_profile_test(int argc, char *argv[]) {
   memset(&handler, 0x00, sizeof(handler));
   handler.animated_parameter[0].animation_type =
       handler.animated_parameter[1].animation_type = ANIMATION_TYPE_INVALID;
-
-  char *channel_layout_string[] = {"1.0.0", "2.0.0",   "5.1.0", "5.1.2",
-                                   "5.1.4", "7.1.0",   "7.1.2", "7.1.4",
-                                   "3.1.2", "binaural"};
 
   IAChannelLayoutType channel_layout_in[2] = {
       IA_CHANNEL_LAYOUT_COUNT,
@@ -1202,6 +1315,8 @@ int iamf_base_profile_test(int argc, char *argv[]) {
   int index = 0;
   int element_id = 0;
   int chunk_size = 0;
+  char *config_file = NULL;
+
   while (args < argc) {
     if (argv[args][0] == '-') {
       if ((strcmp(argv[args], "-codec") == 0)) {
@@ -1219,149 +1334,6 @@ int iamf_base_profile_test(int argc, char *argv[]) {
           codec_id = IAMF_CODEC_PCM;
           if (strlen(argv[args]) > 3) chunk_size = atoi(argv[args] + 4);
         }
-      } else if (strcmp(argv[args], "-mode") == 0) {
-        args++;
-        if (argv[args][0] == '0') {
-          index = 0;
-          audio_element_type = AUDIO_ELEMENT_CHANNEL_BASED;
-          fprintf(stderr, "\nAudio Element Type:%s\n",
-                  audio_element_type == AUDIO_ELEMENT_CHANNEL_BASED
-                      ? "Channel-Base"
-                      : "Scene-Base");
-          char *p_start = &(argv[args][2]);
-          for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
-            if (!strncmp(channel_layout_string[i], p_start,
-                         strlen(channel_layout_string[i]))) {
-              fprintf(stderr, "\nInput channel layout:%s\n",
-                      channel_layout_string[i]);
-              channel_layout_in[element_id] = i;
-              break;
-            }
-          }
-          if (channel_layout_in == IA_CHANNEL_LAYOUT_COUNT) {
-            fprintf(stderr, stderr,
-                    "Please check input channel layout format\n");
-            return 0;
-          }
-
-          int channel_cb_ptr = 0;
-          fprintf(stderr, "Channel layout combinations: ");
-          while (
-              channel_cb_ptr <
-              strlen(
-                  p_start +
-                  strlen(
-                      channel_layout_string[channel_layout_in[element_id]]))) {
-            for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
-              if (!strncmp(channel_layout_string[i],
-                           p_start + 6 + channel_cb_ptr, 5)) {
-                fprintf(stderr, "%s ", channel_layout_string[i]);
-                channel_layout_cb[element_id][index] = i;
-                index++;
-              }
-            }
-            channel_cb_ptr += 6;
-          }
-          fprintf(stderr, "\n \n");
-
-          channel_layout_cb[element_id][index] = IA_CHANNEL_LAYOUT_COUNT;
-
-          handler.element_config[element_id].layout_in =
-              channel_layout_in[element_id];
-          handler.element_config[element_id].layout_cb =
-              channel_layout_cb[element_id];
-        } else if (argv[args][0] == '1') {
-          audio_element_type = AUDIO_ELEMENT_SCENE_BASED;
-          handler.element_config[element_id].ambisonics_mode = 0;
-          char argv_string[1024];
-          strcpy(argv_string, argv[args]);
-          char *amb_conf = strtok(argv_string, "/");
-          amb_conf = strtok(NULL, "/");
-          if (amb_conf) {
-            handler.element_config[element_id]
-                .ambisonics_mono_config.output_channel_count = atoi(amb_conf);
-          }
-          amb_conf = strtok(NULL, "/");
-          if (amb_conf) {
-            handler.element_config[element_id]
-                .ambisonics_mono_config.substream_count = atoi(amb_conf);
-          }
-          amb_conf = strtok(NULL, "/");
-          if (amb_conf) {
-            char *mapping_s = strtok(amb_conf, ",");
-            int mapping_i = 0;
-            while (mapping_s) {
-              handler.element_config[element_id]
-                  .ambisonics_mono_config.channel_mapping[mapping_i++] =
-                  atoi(mapping_s);
-              mapping_s = strtok(NULL, ",");
-            }
-            if (mapping_i != handler.element_config[element_id]
-                                 .ambisonics_mono_config.output_channel_count) {
-              fprintf(stderr, "wrong mapping\n");
-              return (0);
-            }
-          }
-          fprintf(stderr, "\nAudio Element Type:%s\n",
-                  audio_element_type == AUDIO_ELEMENT_CHANNEL_BASED
-                      ? "Channel-Base"
-                      : "Scene-Base");
-        } else if (argv[args][0] == '2') {
-          audio_element_type = AUDIO_ELEMENT_SCENE_BASED;
-          handler.element_config[element_id].ambisonics_mode = 1;
-
-          char argv_string[1024];
-          strcpy(argv_string, argv[args]);
-          char *amb_conf = strtok(argv_string, "/");
-          amb_conf = strtok(NULL, "/");
-          if (amb_conf) {
-            handler.element_config[element_id]
-                .ambisonics_projection_config.output_channel_count =
-                atoi(amb_conf);
-          }
-          amb_conf = strtok(NULL, "/");
-          if (amb_conf) {
-            handler.element_config[element_id]
-                .ambisonics_projection_config.substream_count = atoi(amb_conf);
-          }
-          amb_conf = strtok(NULL, "/");
-          if (amb_conf) {
-            handler.element_config[element_id]
-                .ambisonics_projection_config.coupled_substream_count =
-                atoi(amb_conf);
-          }
-          amb_conf = strtok(NULL, "/");
-          if (amb_conf) {
-            char *demix_s = strtok(amb_conf, ",");
-            int mapping_i = 0;
-            while (demix_s) {
-              handler.element_config[element_id]
-                  .ambisonics_projection_config.demixing_matrix[mapping_i++] =
-                  atoi(demix_s);
-              demix_s = strtok(NULL, ",");
-            }
-            if (mapping_i !=
-                handler.element_config[element_id]
-                        .ambisonics_projection_config.output_channel_count *
-                    (handler.element_config[element_id]
-                         .ambisonics_projection_config.substream_count +
-                     handler.element_config[element_id]
-                         .ambisonics_projection_config
-                         .coupled_substream_count)) {
-              fprintf(stderr, "wrong demixing_matrix\n");
-              return (0);
-            }
-          }
-          fprintf(stderr, "\nAudio Element Type:%s\n",
-                  audio_element_type == AUDIO_ELEMENT_CHANNEL_BASED
-                      ? "Channel-Base"
-                      : "Scene-Base");
-        } else {
-          fprintf(stderr, "wrong mode:%c\n", argv[args][1]);
-          return (0);
-        }
-
-        handler.audio_element_type[element_id] = audio_element_type;
       } else if (argv[args][1] == 'i') {
         args++;
         handler.in_file[element_id] = argv[args];
@@ -1369,15 +1341,9 @@ int iamf_base_profile_test(int argc, char *argv[]) {
       } else if (strcmp(argv[args], "-profile") == 0) {
         args++;
         profile = atoi(argv[args]);
-      } else if (strcmp(argv[args], "-demix") == 0) {
+      } else if (strcmp(argv[args], "-config") == 0) {
         args++;
-        char argv_string[1024];
-        strcpy(argv_string, argv[args]);
-        char *default_demix = strtok(argv_string, "/");
-        handler.default_demix_mode[element_id] = atoi(default_demix);
-        default_demix = strtok(NULL, "/");
-        handler.default_demix_weight[element_id] = atoi(default_demix);
-        handler.defauilt_demix_is_set[element_id] = 1;
+        config_file = argv[args];
       } else if (argv[args][1] == 'o') {
         args++;
         if (!strncmp("0", argv[args], 1))
@@ -1399,9 +1365,9 @@ int iamf_base_profile_test(int argc, char *argv[]) {
   handler.num_of_elements = element_id;
 
   // mix config json parse
-  FILE *fp = fopen("mix_config_b.json", "r");
+  FILE *fp = fopen(config_file, "r");
   if (fp == NULL) {
-    printf("Error opening file: mix_config_b.json\n");
+    printf("Error opening file: %s\n", config_file);
     return 1;
   }
   fseek(fp, 0, SEEK_END);
@@ -1419,15 +1385,9 @@ int iamf_base_profile_test(int argc, char *argv[]) {
     return 1;
   }
   free(json_string);
-  MixPresentation_t mixp_t[10];
-  for (int i = 0; i < 10; i++) {
-    memset(&mixp_t[i], 0x00, sizeof(MixPresentation_t));
-    mixp_t[i].element_para_data[0].animation_type = ANIMATION_TYPE_INVALID;
-    mixp_t[i].element_para_data[1].animation_type = ANIMATION_TYPE_INVALID;
-    mixp_t[i].out_para_data.animation_type = ANIMATION_TYPE_INVALID;
-  }
-
-  int mix_num = parse_mix_repsentation(json, mixp_t);
+  UserInputOption user_in;
+  memset(&user_in, 0x00, sizeof(UserInputOption));
+  paser_user_input_option(json, &user_in);
 
   MOVMuxContext *movm = NULL;
   FILE *iamf_file = NULL;
@@ -1513,8 +1473,7 @@ int iamf_base_profile_test(int argc, char *argv[]) {
 
   for (int i = 0; i < handler.num_of_elements; i++) {
     handler.element_id[i] =
-        IAMF_audio_element_add(handler.ia_enc, handler.audio_element_type[i],
-                               handler.element_config[i]);
+        IAMF_audio_element_add(handler.ia_enc, user_in.element_config[i]);
   }
 
   /**
@@ -1526,13 +1485,17 @@ int iamf_base_profile_test(int argc, char *argv[]) {
                      IA_SET_STANDALONE_REPRESENTATION((int)is_standalone));
     IAMF_encoder_ctl(handler.ia_enc, handler.element_id[i],
                      IA_SET_IAMF_PROFILE((int)profile));
-    if (handler.defauilt_demix_is_set[i]) {
+    if (user_in.element_config[i].demix.set_mode == 1) {
+      IAMF_encoder_ctl(handler.ia_enc, handler.element_id[i],
+                       IA_SET_IAMF_DEFAULT_DEMIX_MODE(
+                           (int)user_in.element_config[i].demix.default_mode));
       IAMF_encoder_ctl(
           handler.ia_enc, handler.element_id[i],
-          IA_SET_IAMF_DEFAULT_DEMIX_MODE((int)handler.default_demix_mode[i]));
-      IAMF_encoder_ctl(
-          handler.ia_enc, handler.element_id[i],
-          IA_SET_IAMF_DEFAULT_DEMIX_WEIGHT((int)handler.default_demix_weight));
+          IA_SET_IAMF_DEFAULT_DEMIX_WEIGHT(
+              (int)user_in.element_config[i].demix.default_weight));
+    } else if (user_in.element_config[i].demix.set_mode == 2) {
+      IAMF_encoder_ctl(handler.ia_enc, handler.element_id[i],
+                       IA_SET_IAMF_DISABLE_DEMIX((int)1));
     }
     IAMF_encoder_ctl(handler.ia_enc, handler.element_id[i],
                      IA_GET_LOOKAHEAD(&preskip));
@@ -1541,13 +1504,14 @@ int iamf_base_profile_test(int argc, char *argv[]) {
   /**
    * 3. set mix presentation.
    * */
-  for (int i = 0; i < mix_num; i++) {
-    for (int j = 0; j < mixp_t[i].num_audio_elements; j++) {
-      int element_index = mixp_t[i].element_index[j];
-      mixp_t[i].mixp.audio_element_id[j] = handler.element_id[element_index];
+  for (int i = 0; i < user_in.mix_num; i++) {
+    for (int j = 0; j < user_in.mixp_t[i].num_audio_elements; j++) {
+      int element_index = user_in.mixp_t[i].element_index[j];
+      user_in.mixp_t[i].mixp.audio_element_id[j] =
+          handler.element_id[element_index];
     }
 
-    if (mixp_t[i].mixp.num_layouts > 0) {
+    if (user_in.mixp_t[i].mixp.num_layouts > 0) {
       for (int j = 0; j < handler.num_of_elements; j++) {
         handler.in_wavf[j] = dep_wav_read_open(handler.in_file[j]);
       }
@@ -1560,7 +1524,7 @@ int iamf_base_profile_test(int argc, char *argv[]) {
                                         handler.bsize_of_samples[1]);
       int count = 0;
       IAMF_encoder_target_loudness_measure_start(handler.ia_enc,
-                                                 &mixp_t[i].mixp);
+                                                 &user_in.mixp_t[i].mixp);
       while (1) {
         if (pcm_frames[0] <= 0 || pcm_frames[1] <= 0) break;
         count++;
@@ -1569,14 +1533,14 @@ int iamf_base_profile_test(int argc, char *argv[]) {
         memset(&ia_frame, 0x00, sizeof(ia_frame));
         memset(&ia_frame2, 0x00, sizeof(ia_frame2));
 
-        int element_index = mixp_t[i].element_index[0];
+        int element_index = user_in.mixp_t[i].element_index[0];
         ia_frame.element_id = handler.element_id[element_index];
         ia_frame.samples =
             pcm_frames[element_index] / handler.bsize_of_1sample[element_index];
         ia_frame.pcm = handler.wav_samples[element_index];
 
-        if (mixp_t[i].num_audio_elements > 1) {
-          int element_index2 = mixp_t[i].element_index[1];
+        if (user_in.mixp_t[i].num_audio_elements > 1) {
+          int element_index2 = user_in.mixp_t[i].element_index[1];
           ia_frame2.element_id = handler.element_id[element_index2];
           ia_frame2.samples = pcm_frames[element_index2] /
                               handler.bsize_of_1sample[element_index2];
@@ -1584,8 +1548,8 @@ int iamf_base_profile_test(int argc, char *argv[]) {
           ia_frame.next = &ia_frame2;
         }
 
-        IAMF_encoder_target_loudness_measure(handler.ia_enc, &mixp_t[i].mixp,
-                                             &ia_frame);
+        IAMF_encoder_target_loudness_measure(
+            handler.ia_enc, &(user_in.mixp_t[i].mixp), &ia_frame);
         pcm_frames[0] = dep_wav_read_data(
             handler.in_wavf[0], (unsigned char *)handler.wav_samples[0],
             handler.bsize_of_samples[0]);
@@ -1594,7 +1558,7 @@ int iamf_base_profile_test(int argc, char *argv[]) {
             handler.bsize_of_samples[1]);
       }
       IAMF_encoder_target_loudness_measure_stop(handler.ia_enc,
-                                                &mixp_t[i].mixp);
+                                                &(user_in.mixp_t[i].mixp));
       for (int j = 0; j < handler.num_of_elements; j++) {
         dep_wav_read_close(handler.in_wavf[j]);
       }
@@ -1603,32 +1567,28 @@ int iamf_base_profile_test(int argc, char *argv[]) {
     duration[0] = handler.data_length[0] / handler.bsize_of_1sample[0];
     duration[1] = handler.data_length[1] / handler.bsize_of_1sample[1];
     uint64_t min_duration =
-        duration[0] < duration[1] ? duration[0] : duration[1];
-
-    for (int j = 0; j < mixp_t[i].num_audio_elements; j++) {
-      int element_index = mixp_t[i].element_index[j];
-      if (mixp_t[i].element_para_data[element_index].animation_type >
-          ANIMATION_TYPE_INVALID) {
-        parameter_block_split(&mixp_t[i].mixp.element_mix_config[j],
-                              mixp_t[i].element_para_data[element_index],
-                              is_standalone ? min_duration : chunk_size, 0,
-                              min_duration, min_duration);
-      }
+        duration[0] < duration[1] ? duration[0] : duration[1] + preskip;
+    min_duration = (min_duration / chunk_size == 0)
+                       ? 0
+                       : chunk_size + (min_duration / chunk_size) * chunk_size;
+    for (int j = 0; j < user_in.mixp_t[i].num_audio_elements; j++) {
+      int element_index = user_in.mixp_t[i].element_index[j];
+      parameter_block_split2(&user_in.mixp_t[i].mixp.element_mix_config[j],
+                             &user_in.mixp_t[i].element_mix[element_index],
+                             chunk_size, handler.sample_rate[j]);
+      mix_gain_config_free(&user_in.mixp_t[i].element_mix[element_index]);
     }
-    if (mixp_t[i].out_para_data.animation_type > ANIMATION_TYPE_INVALID) {
-      parameter_block_split(&mixp_t[i].mixp.output_mix_config,
-                            mixp_t[i].out_para_data,
-                            is_standalone ? min_duration : chunk_size, 0,
-                            min_duration, min_duration);
-    }
+    parameter_block_split2(&user_in.mixp_t[i].mixp.output_mix_config,
+                           &user_in.mixp_t[i].output_mix, chunk_size,
+                           handler.sample_rate[0]);
+    IAMF_encoder_set_mix_presentation(handler.ia_enc, user_in.mixp_t[i].mixp);
 
-    IAMF_encoder_set_mix_presentation(handler.ia_enc, mixp_t[i].mixp);
-
-    mix_presentation_free(&mixp_t[i].mixp);
+    mix_presentation_free(&(user_in.mixp_t[i].mixp));
+    mix_gain_config_free(&user_in.mixp_t[i].output_mix);
   }
 
   for (int i = 0; i < handler.num_of_elements; i++) {
-    iamf_pre_process(&handler, i);
+    iamf_pre_process(&handler, i, user_in.element_config[i].element_type);
   }
 
   /**
@@ -1688,17 +1648,23 @@ int iamf_base_profile_test(int argc, char *argv[]) {
                                       handler.bsize_of_samples[1]);
 
   while (1) {
-    if (pcm_frames <= 0 || pcm_frames2 <= 0) break;
     IAFrame ia_frame, ia_frame2;
     memset(&ia_frame, 0x00, sizeof(ia_frame));
     memset(&ia_frame2, 0x00, sizeof(ia_frame2));
     ia_frame.element_id = handler.element_id[0];
     ia_frame.samples = pcm_frames / handler.bsize_of_1sample[0];
-    ia_frame.pcm = handler.wav_samples[0];
+    if (ia_frame.samples > 0)
+      ia_frame.pcm = handler.wav_samples[0];
+    else
+      ia_frame.pcm = NULL;  // output pending encoded data
 
     ia_frame2.element_id = handler.element_id[1];
     ia_frame2.samples = pcm_frames2 / handler.bsize_of_1sample[1];
     ia_frame2.pcm = handler.wav_samples[1];
+    if (ia_frame2.samples > 0)
+      ia_frame2.pcm = handler.wav_samples[1];
+    else
+      ia_frame2.pcm = NULL;  // output pending encoded data
     ia_frame2.next = NULL;
     ia_frame.next = &ia_frame2;
 
@@ -1728,7 +1694,7 @@ int iamf_base_profile_test(int argc, char *argv[]) {
     frame_count++;
   }
 
-  fprintf(stderr, "encoding total count: %ld\n", frame_count);
+  fprintf(stderr, "encoding total count: %" PRId64 "\n", frame_count);
 
   if (is_standalone == 0) {
     mov_write_tail(movm);
@@ -1753,7 +1719,7 @@ failure:
 
 static int get_profile_num(char *argv[]) { return (atoi(argv[2])); }
 int main(int argc, char *argv[]) {
-  if (argc < 12) {
+  if (argc < 10) {
     print_usage(argv);
     return 0;
   }

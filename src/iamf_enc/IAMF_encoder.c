@@ -59,7 +59,7 @@ union trans2char {
 static void channel_based_ia_encoder_close(ChannelBasedEnc *ce);
 static void scene_based_ia_encoder_close(SceneBasedEnc *se);
 
-static int bs_setbits_leb128(bitstream_t *bs, uint32_t num) {
+static int bs_setbits_leb128(bitstream_t *bs, uint64_t num) {
   unsigned char coded_data_leb[128];
   int coded_size = 0;
   if (uleb_encode(num, sizeof(num), coded_data_leb, &coded_size) != 0) {
@@ -99,11 +99,20 @@ static int bs_setbits_sleb128(bitstream_t *bs, int64_t Value) {
 }
 
 static int bs_setbits_string(bitstream_t *bs, unsigned char *str) {
+  if (!str) return 0;
   for (int i = 0; i < strlen(str); i++) {
     bs_setbits(bs, str[i], 8);
   }
   bs_setbits(bs, '\0', 8);
   return (strlen(str) + 1) * 8;
+}
+
+static int bs_setbits_buffer(bitstream_t *bs, unsigned char *str, int size) {
+  if (!str) return 0;
+  for (int i = 0; i < size; i++) {
+    bs_setbits(bs, str[i], 8);
+  }
+  return size * 8;
 }
 
 static void mono2stereo(int16_t *in, int16_t *out, int channels,
@@ -462,6 +471,16 @@ int immersive_audio_encoder_ctl_va_list(IAMF_Encoder *ie, int element_id,
       upmix_set_default_demix(ce->upmixer, -1, default_demix_weight);
       ia_logw("default demix weight: %d\n", ae->default_demix_weight);
     } break;
+    case IA_SET_IAMF_DISABLE_DEMIX_REQUEST: {
+      uint32_t disable_demix;
+      disable_demix = va_arg(ap, uint32_t);
+      if (disable_demix != 1) {
+        goto bad_arg;
+      }
+      ae->disable_demix = disable_demix;
+      ae->num_parameters = 0;
+      ia_logw("disable_demix: %d\n", ae->disable_demix);
+    } break;
     case IA_SET_OUTPUT_GAIN_FLAG_REQUEST: {
       uint32_t output_gain_flag;
       output_gain_flag = va_arg(ap, uint32_t);
@@ -668,7 +687,7 @@ int IAMF_encoder_dmpd_start(IAMF_Encoder *ie, int element_id) {
   ce->heq = iamf_heq_start(channel_layout_in, ie->input_sample_rate,
                            &(ce->queue_wg[QUEUE_DMPD]), NULL);
 
-  add_padding_samples(ae, kInt16);
+  // add_padding_samples(ae, kInt16);
   return 0;
 }
 
@@ -1117,27 +1136,27 @@ static void update_ia_descriptor(IAMF_Encoder *ie) {
   // 1. One IA Sequence Header OBU
   if (!ie->audio_element_enc->next && ie->profile == 0) {  // simple profile
 
-    if (ie->descriptor_config.ia_sequence_header.profile_compatible == 0 &&
+    if (ie->descriptor_config.ia_sequence_header.additional_profile == 0 &&
         ie->descriptor_config.ia_sequence_header.ia_code ==
             MKTAG('i', 'a', 'm', 'f')) {
       ie->descriptor_config.ia_sequence_header.obu_redundant_copy = 1;
     }
     ie->descriptor_config.ia_sequence_header.ia_code =
         MKTAG('i', 'a', 'm', 'f');
-    ie->descriptor_config.ia_sequence_header.profile_name = 0;
+    ie->descriptor_config.ia_sequence_header.primary_profile = 0;
 
-    ie->descriptor_config.ia_sequence_header.profile_compatible = 0;
+    ie->descriptor_config.ia_sequence_header.additional_profile = 0;
   } else {  // base profile
 
-    if (ie->descriptor_config.ia_sequence_header.profile_compatible == 16 &&
+    if (ie->descriptor_config.ia_sequence_header.additional_profile == 16 &&
         ie->descriptor_config.ia_sequence_header.ia_code ==
             MKTAG('i', 'a', 'm', 'f')) {
       ie->descriptor_config.ia_sequence_header.obu_redundant_copy = 1;
     }
     ie->descriptor_config.ia_sequence_header.ia_code =
         MKTAG('i', 'a', 'm', 'f');
-    ie->descriptor_config.ia_sequence_header.profile_name = 1;
-    ie->descriptor_config.ia_sequence_header.profile_compatible = 1;
+    ie->descriptor_config.ia_sequence_header.primary_profile = 1;
+    ie->descriptor_config.ia_sequence_header.additional_profile = 1;
   }
 
   // 2. All Codec Config OBUs
@@ -1223,13 +1242,14 @@ static void update_ia_descriptor(IAMF_Encoder *ie) {
         audio_element->scalable_channel_layout_config
             .channel_audio_layer_config[i]
             .loudspeaker_layout = layout;
-        audio_element->scalable_channel_layout_config
-            .channel_audio_layer_config[i]
-            .output_gain_is_present_flag =
-            ae->channel_based_enc.output_gain_flag;
-        audio_element->scalable_channel_layout_config
-            .channel_audio_layer_config[i]
-            .recon_gain_is_present_flag = ae->channel_based_enc.recon_gain_flag;
+        // audio_element->scalable_channel_layout_config
+        //    .channel_audio_layer_config[i]
+        //    .output_gain_is_present_flag =
+        //    ae->channel_based_enc.output_gain_flag;
+        // audio_element->scalable_channel_layout_config
+        //    .channel_audio_layer_config[i]
+        //    .recon_gain_is_present_flag =
+        //    ae->channel_based_enc.recon_gain_flag;
         audio_element->scalable_channel_layout_config
             .channel_audio_layer_config[i]
             .substream_count = ae->ia_core_encoder[i].stream_count;
@@ -1263,6 +1283,9 @@ static void update_ia_descriptor(IAMF_Encoder *ie) {
              j++) {
           int cl = ae->channel_based_enc.downmixer_ld->channel_order[cl_index];
           if (ae->channel_based_enc.gaindown_map[cl_index] == 1) {
+            audio_element->scalable_channel_layout_config
+                .channel_audio_layer_config[i]
+                .output_gain_is_present_flag = 1;
             int shift = get_output_gain_flags_map[cl];
             if (shift >= 0) {
               output_gain_flags = output_gain_flags | (0x01 << shift);
@@ -1278,7 +1301,21 @@ static void update_ia_descriptor(IAMF_Encoder *ie) {
         audio_element->scalable_channel_layout_config
             .channel_audio_layer_config[i]
             .output_gain = ae->channel_based_enc.mdhr.dmixgain_db[layout];
+
+        int max_recon_gain_fields = 12;
+        for (int k = 0; k < max_recon_gain_fields; k++) {
+          int channel = get_recon_gain_flags_map[layout][k];
+          if (channel >= 0 &&
+              ae->channel_based_enc.upmixer->scalable_map[layout][channel] ==
+                  1) {
+            audio_element->scalable_channel_layout_config
+                .channel_audio_layer_config[i]
+                .recon_gain_is_present_flag = 1;
+            ae->channel_based_enc.recongain_map[layout] = 1;
+          }
+        }
       }
+
       audio_element->scalable_channel_layout_config.num_layers = num_layers;
     } else if (ae->element_type == AUDIO_ELEMENT_SCENE_BASED) {
       audio_element->ambisonics_config = ae->scene_based_enc.ambisonics_config;
@@ -1400,8 +1437,9 @@ static void update_ia_sync(IAMF_Encoder *ie) {
   // ie->sync_syntax.concatenation_rule = 0;
 }
 
-int IAMF_audio_element_add(IAMF_Encoder *ie, AudioElementType element_type,
+int IAMF_audio_element_add(IAMF_Encoder *ie,
                            AudioElementConfig element_config) {
+  int element_type = element_config.element_type;
   AudioElementEncoder *audio_element_enc =
       (AudioElementEncoder *)malloc(sizeof(AudioElementEncoder));
   memset(audio_element_enc, 0x00, sizeof(AudioElementEncoder));
@@ -1548,7 +1586,7 @@ int IAMF_audio_element_add(IAMF_Encoder *ie, AudioElementType element_type,
   }
   audio_element_enc->num_substreams = num_substreams;
 
-  if (audio_element_enc->channel_groups > 1) {
+  if (element_type == AUDIO_ELEMENT_CHANNEL_BASED) {
     int num_parameters = 0;
     audio_element_enc->param_definition[num_parameters].parameter_id =
         insert_obu_node(ie->obu_id_manager, OBU_IA_Parameter_Block,
@@ -1599,8 +1637,8 @@ int IAMF_audio_element_add(IAMF_Encoder *ie, AudioElementType element_type,
       num_parameters++;
     }
     audio_element_enc->num_parameters = num_parameters;
-    audio_element_enc->global_timming = &(ie->global_timming);
   }
+  audio_element_enc->global_timming = &(ie->global_timming);
 
   for (int i = 0; i < MAX_SUBSTREAMS; i++) {
     audio_element_enc->substream_data_obu[i].data_obu = (unsigned char *)malloc(
@@ -2909,6 +2947,8 @@ static void write_demixing_obu(AudioElementEncoder *ae, int demix_mode) {
       iamf_write_obu_unit(bitstr, bs.m_posBase, OBU_IA_Parameter_Block, 0, 0, 0,
                           0, 0, ae->parameter_demixing_data_obu.data_obu);
 
+  ae->parameter_demixing_data_obu.start_timestamp =
+      ae->parameter_demixing_data_obu.timestamp;
   ae->parameter_demixing_data_obu.timestamp += ae->samples;
 }
 
@@ -2932,16 +2972,21 @@ static void write_recon_gain_obu(AudioElementEncoder *ae) {
   for (int i = 0; i < IA_CHANNEL_LAYOUT_COUNT; i++) {
     int layout = ce->channel_layout_map[i];
     if (layout == IA_CHANNEL_LAYOUT_COUNT) break;
-    putsize_recon_gain +=
-        write_recon_gain(ce, bitstr + bs.m_posBase + putsize_recon_gain, i);
+    if (ce->recongain_map[layout])
+      putsize_recon_gain +=
+          write_recon_gain(ce, bitstr + bs.m_posBase + putsize_recon_gain, i);
   }
   putsize_recon_gain += bs.m_posBase;
   ae->parameter_recon_gain_data_obu.size_of_data_obu = iamf_write_obu_unit(
       bitstr, putsize_recon_gain, OBU_IA_Parameter_Block, 0, 0, 0, 0, 0,
       ae->parameter_recon_gain_data_obu.data_obu);
 
+  ae->parameter_recon_gain_data_obu.start_timestamp =
+      ae->parameter_recon_gain_data_obu.timestamp;
   ae->parameter_recon_gain_data_obu.timestamp += ae->samples;
 }
+
+#define MAX_IA_AUDIO_FRAME_ID 17
 
 static int write_audio_frame_obu(AudioElementEncoder *ae, uint8_t *src,
                                  uint8_t *dst, int size, int substreams,
@@ -2957,8 +3002,10 @@ static int write_audio_frame_obu(AudioElementEncoder *ae, uint8_t *src,
   int obu_trimming_status =
       (num_samples_to_trim_at_start > 0 || num_samples_to_trim_at_end > 0) ? 1
                                                                            : 0;
+  ae->substream_data_obu[substreams].start_timestamp =
+      ae->substream_data_obu[substreams].timestamp;
   ae->substream_data_obu[substreams].timestamp += ae->samples;
-  if (ae->audio_substream_id[substreams] > 21) {
+  if (ae->audio_substream_id[substreams] > MAX_IA_AUDIO_FRAME_ID) {
     unsigned char *coded_data = (unsigned char *)malloc(
         ae->channels * sizeof(int16_t) * ae->frame_size);
 
@@ -3165,6 +3212,18 @@ static int audio_element_encode(AudioElementEncoder *ae, IAFrame *frame) {
                   num_samples_to_trim_at_end);
         substreams++;
       }
+      if (!ae->disable_demix) {
+        uint8_t dmix_index = default_dmix_index, w_index = default_w_index;
+        QueuePop(&(ce->queue_dm[QUEUE_LD]), &dmix_index, 1);
+        QueuePop(&(ce->queue_wg[QUEUE_LD]), &w_index, 1);
+
+        if (w_index > 0)
+          demix_mode = dmix_index + 3;
+        else
+          demix_mode = dmix_index - 1;
+
+        if (!ae->default_demix_is_set) write_demixing_obu(ae, demix_mode);
+      }
     }
     ae->initial_padding -= ae->frame_size;
 
@@ -3212,14 +3271,14 @@ static int audio_element_encode(AudioElementEncoder *ae, IAFrame *frame) {
         if (pcm)
           extract_pcm_from_group3(
               pcm, extract_pcm, ae->ia_core_encoder[0].channel, j * 2, 0,
-              ae->frame_size, ae->bits_per_sample, ae->sample_format);
+              frame->samples, ae->bits_per_sample, ae->sample_format);
         encoded_size = ae->encode_frame(ae, 0, j, 2, extract_pcm, coded_data);
       } else {
         if (pcm)
           extract_pcm_from_group3(
               pcm, extract_pcm, ae->ia_core_encoder[0].channel,
               ae->ia_core_encoder[0].coupled_stream_count + j, 1,
-              ae->frame_size, ae->bits_per_sample, ae->sample_format);
+              frame->samples, ae->bits_per_sample, ae->sample_format);
         encoded_size = ae->encode_frame(ae, 0, j, 1, extract_pcm, coded_data);
       }
       // sub_stream_obu_size += iamf_write_obu_unit(coded_data, encoded_size,
@@ -3257,12 +3316,12 @@ static int write_ia_sequence_header_obu(IAMF_Encoder *ie, unsigned char *dst) {
   bs_init(&bs, bitstr, sizeof(bitstr));
   bs_setbits(&bs, ie->descriptor_config.ia_sequence_header.ia_code,
              32);  // ia_code
-  bs_setbits(&bs, ie->descriptor_config.ia_sequence_header.profile_name,
-             8);  // profile_name
-  bs_setbits(&bs, ie->descriptor_config.ia_sequence_header.profile_compatible,
-             8);  // profile_compatible
+  bs_setbits(&bs, ie->descriptor_config.ia_sequence_header.primary_profile,
+             8);  // primary_profile
+  bs_setbits(&bs, ie->descriptor_config.ia_sequence_header.additional_profile,
+             8);  // additional_profile
   return iamf_write_obu_unit(
-      bitstr, bs.m_posBase, OBU_IA_Magic_Code,
+      bitstr, bs.m_posBase, OBU_IA_Sequence_Header,
       ie->descriptor_config.ia_sequence_header.obu_redundant_copy, 0, 0, 0, 0,
       dst);
 }
@@ -3298,7 +3357,7 @@ static int write_audio_elements_obu(IAMF_Encoder *ie, unsigned char *dst) {
   int obu_size = 0;
   for (int i = 0; i < ie->descriptor_config.num_audio_elements; i++) {
     AudioElement *audio_element = &(ie->descriptor_config.audio_element[i]);
-    unsigned char bitstr[512] = {
+    unsigned char bitstr[4096] = {
         0,
     };
     bitstream_t bs;
@@ -3322,30 +3381,42 @@ static int write_audio_elements_obu(IAMF_Encoder *ie, unsigned char *dst) {
       bs_setbits_leb128(
           &bs,
           audio_element->param_definition_type[j]);  // param_definition_type
-      bs_setbits_leb128(
-          &bs,
-          audio_element->param_definition[j].parameter_id);  // parameter_id
-      bs_setbits_leb128(
-          &bs,
-          audio_element->param_definition[j].parameter_rate);  // parameter_rate
-      bs_setbits(&bs, audio_element->param_definition[j].param_definition_mode,
-                 1);          // reserved
-      bs_setbits(&bs, 0, 7);  // reserved
-      bs_setbits_leb128(
-          &bs, audio_element->param_definition[j].duration);  // duration
-      bs_setbits_leb128(
-          &bs,
-          audio_element->param_definition[j].num_subblocks);  // num_subblocks
-      bs_setbits_leb128(
-          &bs, audio_element->param_definition[j]
-                   .constant_subblock_duration);  // constant_subblock_duration
-      if (audio_element->param_definition_type[j] ==
-          PARAMETER_DEFINITION_DEMIXING_INFO) {
-        // write default demix
-        bs_setbits(&bs, audio_element->default_demix_mode, 3);  // demix mode
-        bs_setbits(&bs, 0, 5);
-        bs_setbits(&bs, audio_element->default_demix_weight, 4);  // default_w
-        bs_setbits(&bs, 0, 4);
+      if (audio_element->param_definition_type[j] >
+          PARAMETER_DEFINITION_RECON_GAIN_INFO) {
+        int param_definition_size = 0;
+        unsigned char param_definition_bytes[] = {0};
+        bs_setbits_leb128(&bs, param_definition_size);
+        bs_setbits_buffer(&bs, param_definition_bytes, param_definition_size);
+      } else {
+        bs_setbits_leb128(
+            &bs,
+            audio_element->param_definition[j].parameter_id);  // parameter_id
+        bs_setbits_leb128(&bs,
+                          audio_element->param_definition[j]
+                              .parameter_rate);  // parameter_rate
+        bs_setbits(&bs,
+                   audio_element->param_definition[j].param_definition_mode,
+                   1);          // reserved
+        bs_setbits(&bs, 0, 7);  // reserved
+        bs_setbits_leb128(
+            &bs, audio_element->param_definition[j].duration);  // duration
+        /*
+        duration SHALL be same as num_samples_per_frame of this Audio Element.
+        num_subblocks SHALL be set to 1.
+        constant_subblock_duration SHALL be same as duration
+        */
+        bs_setbits_leb128(
+            &bs,
+            audio_element->param_definition[j]
+                .constant_subblock_duration);  // constant_subblock_duration
+        if (audio_element->param_definition_type[j] ==
+            PARAMETER_DEFINITION_DEMIXING_INFO) {
+          // write default demix
+          bs_setbits(&bs, audio_element->default_demix_mode, 3);  // demix mode
+          bs_setbits(&bs, 0, 5);
+          bs_setbits(&bs, audio_element->default_demix_weight, 4);  // default_w
+          bs_setbits(&bs, 0, 4);
+        }
       }
     }
 
@@ -3561,15 +3632,28 @@ static int write_mix_presentations_obu(IAMF_Encoder *ie, unsigned char *dst) {
           }
         }
         mix_presentation->num_layouts = num_layouts;
-        // rendering_config(); has an empty payload.
-        // bs_setbits(&bs, 0, 1);
-        // bs_setbits(&bs, 0, 1);
-        // bs_setbits(&bs, 0, 1);
-        // bs_setbits(&bs, 0, 1);
-        // bs_setbits(&bs, 0, 4);
       } else if (ae->element_type == AUDIO_ELEMENT_SCENE_BASED) {
         // itur_bs2127_hoa_config() has an empty payload.
       }
+      // rendering_config()
+      /*
+      class rendering_config() {
+      unsigned int (2) headphones_rendering_mode;
+      unsigned int (6) reserved;
+      leb128() rendering_config_extension_size;
+      unsigned int (8*rendering_config_extension_size)
+      rendering_config_extension_bytes;
+      }*/
+      uint8_t headphones_rendering_mode = 0;
+      uint8_t rendering_config_extension_size = 0;
+      unsigned char rendering_config_extension_bytes[] = {0};
+      bs_setbits(&bs, headphones_rendering_mode, 2);
+      bs_setbits(&bs, 0, 6);
+      bs_setbits_leb128(&bs, rendering_config_extension_size);
+      bs_setbits_buffer(&bs, rendering_config_extension_bytes,
+                        rendering_config_extension_size);
+
+      // element_mix_config()
       bs_setbits_leb128(&bs, ie->descriptor_config.mix_presentation_priv[num]
                                  .element_mix_gain_para[i]
                                  .parameter_id);  // parameter_id
@@ -3588,6 +3672,8 @@ static int write_mix_presentations_obu(IAMF_Encoder *ie, unsigned char *dst) {
                      8),
           16);
     }
+
+    // output_mix_config()
     bs_setbits_leb128(&bs,
                       ie->descriptor_config.mix_presentation_priv[num]
                           .output_mix_gain_para.parameter_id);  // parameter_id
@@ -3643,6 +3729,12 @@ static int write_mix_presentations_obu(IAMF_Encoder *ie, unsigned char *dst) {
           bs_setbits(
               &bs, mix_presentation->loudness[i].anchored_loudness[anchor], 16);
         }
+      } else if (mix_presentation->loudness[i].info_type & 0b11111100 > 0) {
+        int info_type_size = 0;
+        unsigned char info_type_bytes[] = {0};
+        bs_setbits_leb128(&bs,
+                          mix_presentation->num_layouts);  // info_type_size
+        bs_setbits_buffer(&bs, info_type_bytes, info_type_size);
       }
     }
 
@@ -3747,7 +3839,7 @@ static write_element_mix_gain_obu(IAMF_Encoder *ie) {
           .size_of_data_obu = 0;
     }
   }
-  unsigned char bitstr[255] = {
+  unsigned char bitstr[4096] = {
       0,
   };
 
@@ -3797,13 +3889,23 @@ static write_element_mix_gain_obu(IAMF_Encoder *ie) {
         bs_setbits_leb128(&bs, ie->descriptor_config.mix_presentation_priv[i]
                                    .parameter_element_mix_gain_data_obu[j]
                                    .obu_id);  // parameter_id
-        int num_subblocks = element_mix_config->num_subblocks[index];
-        int constant_subblock_duration =
+        uint64_t constant_subblock_duration =
             element_mix_config->constant_subblock_duration[index];
         bs_setbits_leb128(&bs,
                           element_mix_config->duration[index]);  // duration
-        bs_setbits_leb128(&bs, num_subblocks);               // num_subblocks
-        bs_setbits_leb128(&bs, constant_subblock_duration);  // num_subblocks
+        bs_setbits_leb128(
+            &bs, constant_subblock_duration);  // constant_subblock_duration
+        uint64_t num_subblocks = 0;
+        if (constant_subblock_duration == 0) {
+          num_subblocks = element_mix_config->num_subblocks[index];
+          bs_setbits_leb128(&bs, num_subblocks);  // num_subblocks
+        } else {
+          num_subblocks =
+              element_mix_config->duration[index] / constant_subblock_duration;
+          if (element_mix_config->duration[index] % constant_subblock_duration >
+              0)
+            num_subblocks++;
+        }
 
         for (int blocks = 0; blocks < num_subblocks; blocks++) {
           if (constant_subblock_duration == 0) {
@@ -3815,8 +3917,7 @@ static write_element_mix_gain_obu(IAMF_Encoder *ie) {
           int animation_type =
               element_mix_config->animated_parameter_data[index][blocks]
                   .animation_type;
-          int start_point_value =
-              bs_setbits_leb128(&bs, animation_type);  // subblock_duration
+          int start_point_value = bs_setbits_leb128(&bs, animation_type);
           if (animation_type == ANIMATION_TYPE_STEP) {
             float start_point_value =
                 element_mix_config->animated_parameter_data[index][blocks]
@@ -3889,7 +3990,7 @@ static write_out_mix_gain_obu(IAMF_Encoder *ie) {
     ie->descriptor_config.mix_presentation_priv[i]
         .parameter_output_mix_gain_data_obu.size_of_data_obu = 0;
   }
-  unsigned char bitstr[255] = {
+  unsigned char bitstr[4096] = {
       0,
   };
 
@@ -3935,12 +4036,20 @@ static write_out_mix_gain_obu(IAMF_Encoder *ie) {
       bs_setbits_leb128(
           &bs, ie->descriptor_config.mix_presentation_priv[i]
                    .parameter_output_mix_gain_data_obu.obu_id);  // parameter_id
-      int num_subblocks = output_mix_config->num_subblocks[index];
-      int constant_subblock_duration =
+      uint64_t constant_subblock_duration =
           output_mix_config->constant_subblock_duration[index];
       bs_setbits_leb128(&bs, output_mix_config->duration[index]);  // duration
-      bs_setbits_leb128(&bs, num_subblocks);               // num_subblocks
       bs_setbits_leb128(&bs, constant_subblock_duration);  // num_subblocks
+      uint64_t num_subblocks = 0;
+      if (constant_subblock_duration == 0) {
+        num_subblocks = output_mix_config->num_subblocks[index];
+        bs_setbits_leb128(&bs, num_subblocks);  // num_subblocks
+      } else {
+        num_subblocks =
+            output_mix_config->duration[index] / constant_subblock_duration;
+        if (output_mix_config->duration[index] % constant_subblock_duration > 0)
+          num_subblocks++;
+      }
 
       for (int blocks = 0; blocks < num_subblocks; blocks++) {
         if (constant_subblock_duration == 0) {
@@ -3952,8 +4061,7 @@ static write_out_mix_gain_obu(IAMF_Encoder *ie) {
         int animation_type =
             output_mix_config->animated_parameter_data[index][blocks]
                 .animation_type;
-        int start_point_value =
-            bs_setbits_leb128(&bs, animation_type);  // subblock_duration
+        int start_point_value = bs_setbits_leb128(&bs, animation_type);
         if (animation_type == ANIMATION_TYPE_STEP) {
           float start_point_value =
               output_mix_config->animated_parameter_data[index][blocks]
@@ -4024,9 +4132,7 @@ static clear_mix_redundant_copy(IAMF_Encoder *ie) {
 static int obu_packets_sort_mix(IAMF_Encoder *ie, IAPacket *iapkt) {
   clear_mix_redundant_copy(ie);
   // int num_of_data_obu = ie->sync_syntax.num_obu_ids;
-  int num_of_data_obu = 128;
-  IamfDataObu **data_obu =
-      (IamfDataObu **)malloc(num_of_data_obu * sizeof(IamfDataObu *));
+  IamfDataObu *data_obu[256];
 
   AudioElementEncoder *ae = ie->audio_element_enc;
   int samples = 0;
@@ -4088,7 +4194,6 @@ static int obu_packets_sort_mix(IAMF_Encoder *ie, IAPacket *iapkt) {
   ie->global_timming.global_timestamp += samples;
 
 mix_end:
-  if (data_obu) free(data_obu);
   return 0;
 }
 

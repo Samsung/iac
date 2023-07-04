@@ -62,7 +62,7 @@ OBU_IA_Audio_Frame_ID21.
 */
 #ifndef SUB_STREAM_START_ID
 #define SUB_STREAM_START_ID 0
-#define SUB_STREAM_ID_SHIFT 9
+#define SUB_STREAM_ID_SHIFT 6
 #endif
 
 #ifndef MIX_RESENTATION_START_ID

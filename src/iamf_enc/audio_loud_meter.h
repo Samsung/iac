@@ -75,7 +75,7 @@ typedef struct AudioLoudMeter {
   MyVector proceedingMeanSquare;
   MyVector proceedingLoudness;
   // Store mean squares of previous sample blocks(for short - term loudness)
-  float frameMeanSquareUpdated[64];
+  float frameMeanSquareUpdated[128];
   int frameMeanSquareLength;
   MyVector stepMeanSquareUpdated;
   MyVector momentaryMeanSquareUpdated;

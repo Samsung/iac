@@ -99,6 +99,16 @@ typedef enum {
   STREAM_MODE_AMBISONICS_PROJECTION
 } IAMF_Stream_Mode;
 
+typedef struct MixFactors {
+  float alpha;
+  float beta;
+  float gamma;
+  float delta;
+  int w_idx_offset;
+} MixFactors;
+
+typedef enum { IAMF_PROFILE_SIMPLE, IAMF_PROFILE_BASE } IAMF_Profile;
+
 #define U8_MASK 0xFF
 #define U16_MASK 0xFFFF
 
@@ -112,5 +122,9 @@ typedef enum {
 #define MAX_FLAC_FRAME_SIZE 32768
 
 #define MAX_STREAMS 255
+
+#define IA_CH_CATE_SURROUND 0x100
+#define IA_CH_CATE_WEIGHT 0X200
+#define IA_CH_CATE_TOP 0X400
 
 #endif /* IAMF_TYPES_H_ */

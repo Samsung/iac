@@ -476,7 +476,8 @@ static int mov_write_iamf_tag(MOVMuxContext *movm) {
   // Vendor
   size += avio_wb32(0);
   // Number of channels
-  size += avio_wb16(audio_t->channels);
+  size += avio_wb16(0);  // audio_t->channels, The channelcount field of
+                         // AudioSampleEntry SHALL be set to 0
   // Sample size (bits)
   size += avio_wb16(audio_t->bits);
   // Compression ID
@@ -485,7 +486,8 @@ static int mov_write_iamf_tag(MOVMuxContext *movm) {
   size += avio_wb16(0);
   // Sample rate (16.16)
   // rate integer part
-  size += avio_wb16(audio_t->samplerate);
+  size += avio_wb16(0);  // audio_t->samplerate, The samplerate field of
+                         // AudioSampleEntry SHALL be set to 0
   // rate reminder part
   size += avio_wb16(0);
 

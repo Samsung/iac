@@ -75,8 +75,8 @@ typedef struct GlobalTimming {
 
 typedef struct IASequenceHeader {
   uint32_t ia_code;
-  uint32_t profile_name;
-  uint32_t profile_compatible;
+  uint32_t primary_profile;
+  uint32_t additional_profile;
 
   int obu_redundant_copy;
 } IASequenceHeader;
@@ -124,11 +124,11 @@ typedef struct ParamDefinition {
   uint32_t parameter_rate;
   uint32_t param_definition_mode;
 
-  uint32_t duration;
-  uint32_t num_subblocks;
-  uint32_t constant_subblock_duration;
+  uint64_t duration;
+  uint64_t num_subblocks;
+  uint64_t constant_subblock_duration;
 
-  uint32_t *subblock_duration;
+  uint64_t *subblock_duration;
 } ParamDefinition;
 
 typedef struct AudioElement {
@@ -346,6 +346,8 @@ typedef struct ChannelBasedEnc {
 
   unsigned char channel_layout_map[IA_CHANNEL_LAYOUT_COUNT];
   unsigned char gaindown_map[MAX_CHANNELS];  // channles that have gain value.
+  unsigned char
+      recongain_map[MAX_CHANNELS];  // layout that have recon gain value.
   DownMixer *downmixer_ld;
   DownMixer *downmixer_rg;
   DownMixer *downmixer_enc;
@@ -394,6 +396,7 @@ typedef struct AudioElementEncoder {
   uint32_t param_definition_type[MAX_SUBSTREAMS];
   ParamDefinition param_definition[MAX_SUBSTREAMS];
 
+  int disable_demix;
   uint32_t default_demix_mode;
   uint32_t default_demix_weight;
   int default_demix_is_set;

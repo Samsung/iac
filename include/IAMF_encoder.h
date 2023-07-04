@@ -56,10 +56,18 @@ typedef struct AmbisonicsProjectionConfig {
   int16_t demixing_matrix[256];
 } AmbisonicsProjectionConfig;
 
+typedef struct DemixSet {
+  int set_mode;  // 0:Both default and PBO, 1:Only default demix, 2:No demix
+  int default_mode;
+  int default_weight;
+} DemixSet;
+
 typedef struct AudioElementConfig {
+  AudioElementType element_type;
   // channel-based
   IAChannelLayoutType layout_in;
-  IAChannelLayoutType *layout_cb;
+  IAChannelLayoutType layout_cb[IA_CHANNEL_LAYOUT_COUNT];
+  DemixSet demix;
 
   // scene-baesd
   AmbisonicsMode ambisonics_mode;
@@ -273,7 +281,6 @@ IAMF_Encoder *IAMF_encoder_create(int32_t Fs, int bits_per_sample,
 /**
  * @brief     Add one audio element into stream.
  * @param     [in] ie : IAMF encoder handler.
- * @param     [in] element_type : the audio element type
  * @param     [in] element_config : the audio element configue.
  * @return    return audio element id.
  * @remark    Adjacent channel layouts of a scalable format (where CLn-1 is the
@@ -283,8 +290,7 @@ IAMF_Encoder *IAMF_encoder_create(int32_t Fs, int bits_per_sample,
  * Channel), W(Subwoofer Channel), H(Height Channel) if [in]channel_layout_cb is
  * set with IA_CHANNEL_LAYOUT_COUNT, then it is non-scalable encoding.
  */
-int IAMF_audio_element_add(IAMF_Encoder *ie, AudioElementType element_type,
-                           AudioElementConfig element_config);
+int IAMF_audio_element_add(IAMF_Encoder *ie, AudioElementConfig element_config);
 
 /**
  * @brief     Delete one audio element from stream.

@@ -368,10 +368,12 @@ int iamf_asc_process(IAMF_ASC *asc, int16_t *input, int size)
     resample_size = asc->frame_size * asc->den / asc->num;
 
     AscResamplerState * resampler = (AscResamplerState*)asc->resampler;
-    asc_resampler_process_interleaved_int(
-      resampler, (const int16_t *)input, (uint32_t *)&size,
-      (int16_t *)resampler->buffer, (uint32_t *)&resample_size);
-    pcm_data = resampler->buffer;
+    if (resampler) {
+      asc_resampler_process_interleaved_int(
+        resampler, (const int16_t *)input, (uint32_t *)&size,
+        (int16_t *)resampler->buffer, (uint32_t *)&resample_size);
+      pcm_data = resampler->buffer;
+    }
   }
 
   if (asc->layout == ASC_CHANNEL_LAYOUT_710 || asc->layout == ASC_CHANNEL_LAYOUT_712 || asc->layout == ASC_CHANNEL_LAYOUT_714)
