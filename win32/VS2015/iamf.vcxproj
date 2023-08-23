@@ -79,9 +79,9 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>..\..\include\;..\..\src\common\;..\..\dep_codecs\include\;..\..\src\iamf_enc\dmpd\asc\include\;..\..\src\iamf_enc\dmpd\heq\include\;..\..\src\iamf_dec\;..\..\src\iamf_enc\</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;CONFIG_OPUS_CODEC;CONFIG_AAC_CODEC;CONFIG_FLAC_CODEC;FLAC__NO_DLL</PreprocessorDefinitions>
-      <AdditionalOptions>%(AdditionalOptions) -O3 /D"IAMF_VERSION"=0000 /D"IAMF_PROFILE"=0100</AdditionalOptions>
+      <AdditionalIncludeDirectories>..\..\include\;..\..\src\common\;..\..\dep_codecs\include\;..\..\src\iamf_enc\dmpd\asc\include\;..\..\src\iamf_enc\dmpd\heq\include\;..\..\src\iamf_dec\;..\..\src\iamf_enc\;..\..\dep_external\include\</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;CONFIG_OPUS_CODEC;CONFIG_AAC_CODEC;CONFIG_FLAC_CODEC;FLAC__NO_DLL;SAMSUNG_TV</PreprocessorDefinitions>
+      <AdditionalOptions>%(AdditionalOptions) -O3</AdditionalOptions>
       <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
@@ -94,7 +94,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>..\..\include\;..\..\src\common\;..\..\dep_codecs\include\;..\..\src\iamf_enc\dmpd\asc\include\;..\..\src\iamf_enc\dmpd\heq\include\;..\..\src\iamf_dec\;..\..\src\iamf_enc\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\include\;..\..\src\common\;..\..\dep_codecs\include\;..\..\src\iamf_enc\dmpd\asc\include\;..\..\src\iamf_enc\dmpd\heq\include\;..\..\src\iamf_dec\;..\..\dep_external\include\</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;CONFIG_OPUS_CODEC;CONFIG_AAC_CODEC;CONFIG_FLAC_CODEC;FLAC__NO_DLL</PreprocessorDefinitions>
     </ClCompile>
     <Link>
@@ -130,24 +130,24 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\src\common\audio_true_peak_meter.c" />
-    <ClCompile Include="..\..\src\common\bitstreamrw.c" />
+    <ClCompile Include="..\..\dep_external\src\wav\dep_wavwriter.c" />
     <ClCompile Include="..\..\src\common\fixedp11_5.c" />
-    <ClCompile Include="..\..\src\common\wavreader2.c" />
-    <ClCompile Include="..\..\src\common\wavwriter2.c" />
     <ClCompile Include="..\..\src\iamf_dec\aac\aac_multistream_decoder.c" />
     <ClCompile Include="..\..\src\iamf_dec\aac\IAMF_aac_decoder.c" />
     <ClCompile Include="..\..\src\iamf_dec\audio_effect_peak_limiter.c" />
     <ClCompile Include="..\..\src\iamf_dec\bitstream.c" />
     <ClCompile Include="..\..\src\iamf_dec\demixer.c" />
+    <ClCompile Include="..\..\src\iamf_dec\downmix_renderer.c" />
     <ClCompile Include="..\..\src\iamf_dec\flac\flac_multistream_decoder.c" />
     <ClCompile Include="..\..\src\iamf_dec\flac\IAMF_flac_decoder.c" />
+    <ClCompile Include="..\..\src\iamf_dec\h2b_rdr.c" />
     <ClCompile Include="..\..\src\iamf_dec\h2m_rdr.c" />
     <ClCompile Include="..\..\src\iamf_dec\IAMF_core_decoder.c" />
     <ClCompile Include="..\..\src\iamf_dec\IAMF_debug_sr.c" />
     <ClCompile Include="..\..\src\iamf_dec\IAMF_decoder.c" />
     <ClCompile Include="..\..\src\iamf_dec\IAMF_OBU.c" />
     <ClCompile Include="..\..\src\iamf_dec\IAMF_utils.c" />
+    <ClCompile Include="..\..\src\iamf_dec\m2b_rdr.c" />
     <ClCompile Include="..\..\src\iamf_dec\m2m_rdr.c" />
     <ClCompile Include="..\..\src\iamf_dec\opus\IAMF_opus_decoder.c" />
     <ClCompile Include="..\..\src\iamf_dec\opus\opus_multistream2_decoder.c" />
@@ -155,39 +155,24 @@
     <ClCompile Include="..\..\src\iamf_dec\queue_t.c" />
     <ClCompile Include="..\..\src\iamf_dec\resample.c" />
     <ClCompile Include="..\..\src\iamf_dec\vlogging_tool_sr.c" />
-    <ClCompile Include="..\..\src\iamf_enc\audio_loud_meter.c" />
-    <ClCompile Include="..\..\src\iamf_enc\biquad.c" />
-    <ClCompile Include="..\..\src\iamf_enc\downmixer.c" />
-    <ClCompile Include="..\..\src\iamf_enc\gaindown.c" />
-    <ClCompile Include="..\..\src\iamf_enc\IAMF_core_encoder.c" />
-    <ClCompile Include="..\..\src\iamf_enc\IAMF_encoder.c" />
-    <ClCompile Include="..\..\src\iamf_enc\intermediate_file_context.c" />
-    <ClCompile Include="..\..\src\iamf_enc\obuwrite.c" />
-    <ClCompile Include="..\..\src\iamf_enc\obu_multiway_tree.c" />
-    <ClCompile Include="..\..\src\iamf_enc\pcmconvert.c" />
-    <ClCompile Include="..\..\src\iamf_enc\queue_plus.c" />
-    <ClCompile Include="..\..\src\iamf_enc\scalable_factor.c" />
-    <ClCompile Include="..\..\src\iamf_enc\scalable_format.c" />
-    <ClCompile Include="..\..\src\iamf_enc\upmixer.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\dep_external\include\bear\iamf_bear_api.h" />
+    <ClInclude Include="..\..\dep_external\include\resonance\iamf_resonance_api.h" />
+    <ClInclude Include="..\..\dep_external\include\wav\dep_wavwriter.h" />
     <ClInclude Include="..\..\include\IAMF_decoder.h" />
     <ClInclude Include="..\..\include\IAMF_defines.h" />
-    <ClInclude Include="..\..\include\IAMF_encoder.h" />
     <ClInclude Include="..\..\include\vlogging_tool_sr.h" />
     <ClInclude Include="..\..\src\common\audio_defines.h" />
-    <ClInclude Include="..\..\src\common\audio_true_peak_meter.h" />
-    <ClInclude Include="..\..\src\common\bitstreamrw.h" />
     <ClInclude Include="..\..\src\common\fixedp11_5.h" />
     <ClInclude Include="..\..\src\common\IAMF_debug.h" />
     <ClInclude Include="..\..\src\common\IAMF_debug_dev.h" />
-    <ClInclude Include="..\..\src\common\wavreader2.h" />
-    <ClInclude Include="..\..\src\common\wavwriter2.h" />
     <ClInclude Include="..\..\src\iamf_dec\aac\aac_multistream_decoder.h" />
     <ClInclude Include="..\..\src\iamf_dec\ae_rdr.h" />
     <ClInclude Include="..\..\src\iamf_dec\audio_effect_peak_limiter.h" />
     <ClInclude Include="..\..\src\iamf_dec\bitstream.h" />
     <ClInclude Include="..\..\src\iamf_dec\demixer.h" />
+    <ClInclude Include="..\..\src\iamf_dec\downmix_renderer.h" />
     <ClInclude Include="..\..\src\iamf_dec\flac\flac_multistream_decoder.h" />
     <ClInclude Include="..\..\src\iamf_dec\IAMF_codec.h" />
     <ClInclude Include="..\..\src\iamf_dec\IAMF_core_decoder.h" />
@@ -198,34 +183,7 @@
     <ClInclude Include="..\..\src\iamf_dec\opus\opus_multistream2_decoder.h" />
     <ClInclude Include="..\..\src\iamf_dec\queue_t.h" />
     <ClInclude Include="..\..\src\iamf_dec\speex_resampler.h" />
-    <ClInclude Include="..\..\src\iamf_enc\audio_loud_meter.h" />
-    <ClInclude Include="..\..\src\iamf_enc\biquad.h" />
     <ClInclude Include="..\..\src\iamf_enc\downmixer.h" />
-    <ClInclude Include="..\..\src\iamf_enc\gaindown.h" />
-    <ClInclude Include="..\..\src\iamf_enc\IAMF_encoder_private.h" />
-    <ClInclude Include="..\..\src\iamf_enc\intermediate_file_context.h" />
-    <ClInclude Include="..\..\src\iamf_enc\metadata_write.h" />
-    <ClInclude Include="..\..\src\iamf_enc\obuwrite.h" />
-    <ClInclude Include="..\..\src\iamf_enc\obu_multiway_tree.h" />
-    <ClInclude Include="..\..\src\iamf_enc\pcmconvert.h" />
-    <ClInclude Include="..\..\src\iamf_enc\queue_plus.h" />
-    <ClInclude Include="..\..\src\iamf_enc\scalable_factor.h" />
-    <ClInclude Include="..\..\src\iamf_enc\scalable_format.h" />
-    <ClInclude Include="..\..\src\iamf_enc\upmixer.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="asc\asc.vcxproj">
-      <Project>{81acc8cd-b461-45f5-85fe-9bb528a37c6c}</Project>
-    </ProjectReference>
-    <ProjectReference Include="decimate\decimate.vcxproj">
-      <Project>{6a777e34-be80-48f1-8258-46db5944560a}</Project>
-    </ProjectReference>
-    <ProjectReference Include="heq\heq.vcxproj">
-      <Project>{53b1d5df-4bd2-426d-bfce-6985d58ed59f}</Project>
-    </ProjectReference>
-    <ProjectReference Include="stft\stft.vcxproj">
-      <Project>{7d3a70e9-04f6-498b-b78b-e1aa6eaee644}</Project>
-    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

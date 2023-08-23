@@ -42,7 +42,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <string.h>
 
 #include "IAMF_OBU.h"
-#include "bitstreamrw.h"
+#include "IAMF_utils.h"
+#include "bitstream.h"
 #include "vlogging_tool_sr.h"
 
 #define LOG_BUFFER_SIZE 100000
@@ -72,9 +73,13 @@ static uint32_t get_4cc_codec_id(char a, char b, char c, char d) {
   return ((a) | (b << 8) | (c << 16) | (d << 24));
 }
 
-static uint32_t swapByteOrder(uint32_t x) {
+static uint32_t htonl(uint32_t x) {
   return (x >> 24) | ((x >> 8) & 0x0000FF00) | ((x << 8) & 0x00FF0000) |
          (x << 24);
+}
+
+static uint64_t htonll(uint64_t x) {
+  return ((((uint64_t)htonl(x)) << 32) + htonl(x >> 32));
 }
 
 int vlog_file_open(const char* log_file_name) {
@@ -290,16 +295,16 @@ int write_yaml_form(char* log, uint8_t indent, const char* format, ...) {
   return ret;
 }
 
-static void write_magic_code_log(uint64_t idx, void* obu, char* log) {
+static void write_sequence_header_log(uint64_t idx, void* obu, char* log) {
   IAMF_Version* mc_obu = (IAMF_Version*)obu;
 
   log += write_prefix(LOG_OBU, log);
-  log += write_yaml_form(log, 0, "MagicCodeOBU_%llu:", idx);
-  log += write_yaml_form(log, 0, "- ia_code: %u",
-                         swapByteOrder(mc_obu->iamf_code));
-  log += write_yaml_form(log, 1, "version: %u", mc_obu->version);
+  log += write_yaml_form(log, 0, "IaSequenceHeaderOBU_%llu:", idx);
+  log += write_yaml_form(log, 0, "- ia_code: %u", htonl(mc_obu->iamf_code));
   log +=
-      write_yaml_form(log, 1, "profile_version: %u", mc_obu->profile_version);
+      write_yaml_form(log, 1, "primary_profile: %u", mc_obu->primary_profile);
+  log += write_yaml_form(log, 1, "additional_profile: %u",
+                         mc_obu->additional_profile);
   write_postfix(LOG_OBU, log);
 }
 
@@ -311,25 +316,165 @@ static void write_codec_config_log(uint64_t idx, void* obu, char* log) {
   log +=
       write_yaml_form(log, 0, "- codec_config_id: %llu", cc_obu->codec_conf_id);
   log += write_yaml_form(log, 1, "codec_config:");
-  log +=
-      write_yaml_form(log, 2, "codec_id: %u", swapByteOrder(cc_obu->codec_id));
+  log += write_yaml_form(log, 2, "codec_id: %u", htonl(cc_obu->codec_id));
   log += write_yaml_form(log, 2, "num_samples_per_frame: %llu",
                          cc_obu->nb_samples_per_frame);
-  log += write_yaml_form(log, 2, "roll_distance: %d", cc_obu->roll_distance);
+  log +=
+      write_yaml_form(log, 2, "audio_roll_distance: %d", cc_obu->roll_distance);
 
   // NOTE: Self parsing
 
   if (cc_obu->codec_id == get_4cc_codec_id('m', 'p', '4', 'a') ||
       cc_obu->codec_id == get_4cc_codec_id('e', 's', 'd', 's')) {
-    // __KWON_TODO
+    log += write_yaml_form(log, 2, "decoder_config_aac:");
+
+    BitStream b;
+    bs(&b, cc_obu->decoder_conf, cc_obu->decoder_conf_size);
+
+    // decoder_config_descriptor_tag
+    // object_type_indication
+    // stream_type
+    // upstream
+    // reserved
+    // buffer_size_db
+    // max_bitrate
+    // average_bit_rate
+    // decoder_specific_info
+    //    - decoder_specific_info_descriptor_tag
+    //    - audio_object_type
+    //    - sample_frequency_index
+    //    - sampleing_frequency
+    //    - channel_configuration
+    // ga_specific_config
+    //    - frame_length_flag
+    //    - depends_on_core_coder
+    //    - extension_flag
+
+    log += write_yaml_form(log, 3, "decoder_config_descriptor_tag: %u",
+                           bs_get32b(&b, 8));
+    log +=
+        write_yaml_form(log, 3, "object_type_indication: %u", bs_get32b(&b, 8));
+    log += write_yaml_form(log, 3, "stream_type: %u", bs_get32b(&b, 6));
+    log += write_yaml_form(log, 3, "upstream: %u", bs_get32b(&b, 1));
+    bs_skip(&b, 1);  // reserved
+
+    bs_get32b(&b, 24);  // buffer_size_db
+    bs_get32b(&b, 32);  // max_bitrate
+    bs_get32b(&b, 32);  // average_bit_rate
+
+    log += write_yaml_form(log, 3, "decoder_specific_info:");
+    log += write_yaml_form(log, 4, "decoder_specific_info_descriptor_tag: %u",
+                           bs_get32b(&b, 8));
+    log += write_yaml_form(log, 4, "audio_object_type: %u", bs_get32b(&b, 5));
+    uint8_t sample_frequency_index =
+        bs_get32b(&b, 4);  // sample_frequency_index
+    if (sample_frequency_index == 0xf) {
+      bs_get32b(&b, 24);  // sampling_frequency
+    }
+    log +=
+        write_yaml_form(log, 4, "channel_configuration: %u", bs_get32b(&b, 4));
+
+    log += write_yaml_form(log, 3, "ga_specific_config:");
+    log += write_yaml_form(log, 4, "frame_length_flag: %u", bs_get32b(&b, 1));
+    log +=
+        write_yaml_form(log, 4, "depends_on_core_coder: %u", bs_get32b(&b, 1));
+    log += write_yaml_form(log, 4, "extension_flag: %u", bs_get32b(&b, 1));
+  } else if (cc_obu->codec_id == get_4cc_codec_id('f', 'L', 'a', 'C')) {
+    // "fLaC", METADATA_BLOCK
+
+    log += write_yaml_form(log, 2, "decoder_config_flac:");
+    log += write_yaml_form(log, 3, "metadata_blocks:");
+
+    BitStream b;
+    bs(&b, cc_obu->decoder_conf, cc_obu->decoder_conf_size);
+
+    uint8_t last_metadata_block_flag = 0;
+    uint8_t block_type = 0;
+    uint32_t metadata_data_block_length = 0;
+
+    do {
+      last_metadata_block_flag = bs_get32b(&b, 1);
+      block_type = bs_get32b(&b, 7);
+      metadata_data_block_length = bs_get32b(&b, 24);
+
+      log += write_yaml_form(log, 4, "- header:");
+      log += write_yaml_form(log, 6, "last_metadata_block_flag: %u",
+                             last_metadata_block_flag);
+      log += write_yaml_form(log, 6, "block_type: %u", block_type);
+      log += write_yaml_form(log, 6, "metadata_data_block_length: %lu",
+                             metadata_data_block_length);
+
+      // STREAM_INFO
+      if (block_type == 0) {
+        // <16>
+        // <16>
+        // <24>
+        // <24>
+        // <20>
+        // <3>
+        // <5>
+        // <36>
+        // <128>
+
+        uint16_t minimum_block_size = bs_get32b(&b, 16);
+        uint16_t maximum_block_size = bs_get32b(&b, 16);
+        uint32_t minumum_frame_size = bs_get32b(&b, 24);
+        uint32_t maximum_frame_size = bs_get32b(&b, 24);
+        uint32_t sample_rate = bs_get32b(&b, 20);
+        ;
+        uint8_t number_of_channels = bs_get32b(&b, 3);
+        uint8_t bits_per_sample = bs_get32b(&b, 5);
+        uint64_t total_samples_in_stream = 0;
+        uint8_t md5_signature[16] = {
+            0,
+        };
+
+        uint64_t be_value = 0;  // uint8_t be_value[8] = { 0, };
+        bs_read(&b, (uint8_t*)&be_value, 4);
+        be_value <<= 32;
+
+        // htonll
+        total_samples_in_stream = htonll(be_value);
+
+        bs_read(&b, (uint8_t*)md5_signature, 16);
+
+        log += write_yaml_form(log, 5, "stream_info:");
+
+        log += write_yaml_form(log, 6, "minimum_block_size: %u",
+                               minimum_block_size);
+        log += write_yaml_form(log, 6, "maximum_block_size: %u",
+                               maximum_block_size);
+        log += write_yaml_form(log, 6, "minimum_frame_size: %lu",
+                               minumum_frame_size);
+        log += write_yaml_form(log, 6, "maximum_frame_size: %lu",
+                               maximum_frame_size);
+        log += write_yaml_form(log, 6, "sample_rate: %lu", sample_rate);
+        log += write_yaml_form(log, 6, "number_of_channels: %u",
+                               number_of_channels);
+        log += write_yaml_form(log, 6, "bits_per_sample: %u", bits_per_sample);
+        log += write_yaml_form(log, 6, "total_samples_in_stream: %llu",
+                               total_samples_in_stream);
+
+        char hex_string[20] = {
+            0,
+        };
+        int pos = 0;
+        for (int j = 0; j < 16; ++j) {
+          pos += sprintf(hex_string + pos, "%X", md5_signature[j]);
+        }
+        log += write_yaml_form(log, 6, "md5_signature: %s", hex_string);
+      }
+
+    } while (!last_metadata_block_flag);
+
   } else if (cc_obu->codec_id == get_4cc_codec_id('O', 'p', 'u', 's') ||
              cc_obu->codec_id == get_4cc_codec_id('d', 'O', 'p', 's')) {
-    uint8_t version = get_uint8(cc_obu->decoder_conf, 0);
-    uint8_t output_channel_count = get_uint8(cc_obu->decoder_conf, 1);
-    uint16_t pre_skip = get_uint16be(cc_obu->decoder_conf, 2);
-    uint32_t input_sample_rate = get_uint32be(cc_obu->decoder_conf, 4);
-    uint16_t output_gain = get_uint16be(cc_obu->decoder_conf, 8);
-    uint8_t channel_mapping_family = get_uint8(cc_obu->decoder_conf, 10);
+    uint8_t version = readu8(cc_obu->decoder_conf, 0);
+    uint8_t output_channel_count = readu8(cc_obu->decoder_conf, 1);
+    uint16_t pre_skip = readu16be(cc_obu->decoder_conf, 2);
+    uint32_t input_sample_rate = readu32be(cc_obu->decoder_conf, 4);
+    uint16_t output_gain = readu16be(cc_obu->decoder_conf, 8);
+    uint8_t channel_mapping_family = readu8(cc_obu->decoder_conf, 10);
 
     log += write_yaml_form(log, 2, "decoder_config_opus:");
     log += write_yaml_form(log, 3, "version: %u", version);
@@ -341,9 +486,9 @@ static void write_codec_config_log(uint64_t idx, void* obu, char* log) {
     log +=
         write_yaml_form(log, 3, "mapping_family: %u", channel_mapping_family);
   } else if (cc_obu->codec_id == get_4cc_codec_id('i', 'p', 'c', 'm')) {
-    uint8_t sample_format_flags = get_uint8(cc_obu->decoder_conf, 0);
-    uint8_t sample_size = get_uint8(cc_obu->decoder_conf, 1);
-    uint32_t sample_rate = get_uint32be(cc_obu->decoder_conf, 2);
+    uint8_t sample_format_flags = readu8(cc_obu->decoder_conf, 0);
+    uint8_t sample_size = readu8(cc_obu->decoder_conf, 1);
+    uint32_t sample_rate = readu32be(cc_obu->decoder_conf, 2);
 
     log += write_yaml_form(log, 2, "decoder_config_lpcm:");
     log +=
@@ -372,6 +517,67 @@ static void write_audio_element_log(uint64_t idx, void* obu, char* log) {
     log += write_yaml_form(log, 1, "- %llu", ae_obu->substream_ids[i]);
   }
   log += write_yaml_form(log, 1, "num_parameters: %llu", ae_obu->nb_parameters);
+  if (ae_obu->nb_parameters) {
+    log += write_yaml_form(log, 1, "audio_element_params:");
+    for (uint64_t i = 0; i < ae_obu->nb_parameters; ++i) {
+      ParameterBase* param = ae_obu->parameters[i];
+      log +=
+          write_yaml_form(log, 1, "- param_definition_type: %llu", param->type);
+
+      if (param->type == IAMF_PARAMETER_TYPE_DEMIXING) {
+        DemixingParameter* dp = (DemixingParameter*)param;
+        log += write_yaml_form(log, 2, "demixing_param:");
+
+        log += write_yaml_form(log, 3, "param_definition:");
+        log += write_yaml_form(log, 4, "parameter_id: %llu", dp->base.id);
+        log += write_yaml_form(log, 4, "parameter_rate: %llu", dp->base.rate);
+        log +=
+            write_yaml_form(log, 4, "param_definition_mode: %u", dp->base.mode);
+        if (dp->base.mode == 0) {
+          log += write_yaml_form(log, 4, "duration: %llu", dp->base.duration);
+          log += write_yaml_form(log, 4, "num_subblocks: %llu",
+                                 dp->base.nb_segments);
+          log += write_yaml_form(log, 4, "constant_subblock_duration: %llu",
+                                 dp->base.constant_segment_interval);
+          if (dp->base.constant_segment_interval == 0) {
+            log += write_yaml_form(log, 4, "subblock_durations:");
+            for (uint64_t j = 0; j < dp->base.nb_segments; ++j) {
+              log += write_yaml_form(log, 4, "- %llu",
+                                     dp->base.segments[j].segment_interval);
+            }
+          }
+        }
+        log += write_yaml_form(log, 3, "default_demixing_info_parameter_data:");
+        log += write_yaml_form(log, 4, "dmixp_mode: %lu", dp->mode);
+
+        log += write_yaml_form(log, 3, "default_w: %lu", dp->w);
+      } else if (param->type == IAMF_PARAMETER_TYPE_RECON_GAIN) {
+        ReconGainParameter* rp = (ReconGainParameter*)param;
+        log += write_yaml_form(log, 2, "recon_gain_param:");
+
+        log += write_yaml_form(log, 3, "param_definition:");
+        log += write_yaml_form(log, 4, "parameter_id: %llu", rp->base.id);
+        log += write_yaml_form(log, 4, "parameter_rate: %llu", rp->base.rate);
+        log +=
+            write_yaml_form(log, 4, "param_definition_mode: %u", rp->base.mode);
+        if (rp->base.mode == 0) {
+          log += write_yaml_form(log, 4, "duration: %llu", rp->base.duration);
+          log += write_yaml_form(log, 4, "num_subblocks: %llu",
+                                 rp->base.nb_segments);
+          log += write_yaml_form(log, 4, "constant_subblock_duration: %llu",
+                                 rp->base.constant_segment_interval);
+          if (rp->base.constant_segment_interval == 0) {
+            log += write_yaml_form(log, 4, "subblock_durations:");
+            for (uint64_t j = 0; j < rp->base.nb_segments; ++j) {
+              log += write_yaml_form(log, 4, "- %llu",
+                                     rp->base.segments[j].segment_interval);
+            }
+          }
+        }
+      }
+    }
+  }
+
   if (ae_obu->element_type == AUDIO_ELEMENT_TYPE_CHANNEL_BASED) {
     log += write_yaml_form(log, 1, "scalable_channel_layout_config:");
     log += write_yaml_form(log, 2, "num_layers: %u",
@@ -389,6 +595,12 @@ static void write_audio_element_log(uint64_t idx, void* obu, char* log) {
                              layer_conf->nb_substreams);
       log += write_yaml_form(log, 3, "coupled_substream_count: %u",
                              layer_conf->nb_coupled_substreams);
+      if (layer_conf->output_gain_flag) {
+        log += write_yaml_form(log, 3, "output_gain_flag: %u",
+                               layer_conf->output_gain_info->output_gain_flag);
+        log += write_yaml_form(log, 3, "output_gain: %d",
+                               layer_conf->output_gain_info->output_gain);
+      }
     }
   } else if (ae_obu->element_type == AUDIO_ELEMENT_TYPE_SCENE_BASED) {
     // log += write_yaml_form(log, 0, "- scene_based:");
@@ -435,9 +647,17 @@ static void write_mix_presentation_log(uint64_t idx, void* obu, char* log) {
   log += write_yaml_form(log, 0, "MixPresentationOBU_%llu:", idx);
   log += write_yaml_form(log, 0, "- mix_presentation_id: %llu",
                          mp_obu->mix_presentation_id);
-  log += write_yaml_form(log, 1, "mix_presentation_annotations:");
-  log += write_yaml_form(log, 2, "mix_presentation_friendly_label: \"%s\"",
-                         mp_obu->mix_presentation_friendly_label);
+  log += write_yaml_form(log, 1, "count_label: %llu", mp_obu->num_labels);
+  log += write_yaml_form(log, 1, "language_labels:");
+  for (uint64_t i = 0; i < mp_obu->num_labels; ++i) {
+    log += write_yaml_form(log, 1, "- \"%s\"", mp_obu->language[i]);
+  }
+  log += write_yaml_form(log, 1, "mix_presentation_annotations_array:");
+  for (uint64_t i = 0; i < mp_obu->num_labels; ++i) {
+    log += write_yaml_form(log, 1, "- mix_presentation_annotations:");
+    log += write_yaml_form(log, 2, "mix_presentation_friendly_label: \"%s\"",
+                           mp_obu->mix_presentation_friendly_label[i]);
+  }
   log += write_yaml_form(log, 1, "num_sub_mixes: %llu", mp_obu->num_sub_mixes);
   log += write_yaml_form(log, 1, "sub_mixes:");
   for (uint64_t i = 0; i < mp_obu->num_sub_mixes; ++i) {
@@ -446,14 +666,23 @@ static void write_mix_presentation_log(uint64_t idx, void* obu, char* log) {
                            submix->nb_elements);
     log += write_yaml_form(log, 2, "audio_elements:");
     for (uint64_t j = 0; j < submix->nb_elements; ++j) {
-      ElementMixRenderConf* conf_s = &submix->conf_s[j];
+      ElementConf* conf_s = &submix->conf_s[j];
       log += write_yaml_form(log, 2, "- audio_element_id: %llu",
                              conf_s->element_id);
-      log += write_yaml_form(log, 3, "mix_presentation_element_annotations:");
-      log += write_yaml_form(log, 4, "audio_element_friendly_label: \"%s\"",
-                             conf_s->audio_element_friendly_label);
+      log += write_yaml_form(log, 3,
+                             "mix_presentation_element_annotations_array:");
+      for (uint64_t k = 0; k < mp_obu->num_labels; ++k) {
+        log +=
+            write_yaml_form(log, 3, "- mix_presentation_element_annotations:");
+        log += write_yaml_form(log, 4, "audio_element_friendly_label: \"%s\"",
+                               conf_s->audio_element_friendly_label[k]);
+      }
 
-      // log += write_yaml_form(log, 2, "- rendering_config:");
+      log += write_yaml_form(log, 3, "rendering_config:");
+      log += write_yaml_form(log, 4, "headphones_rendering_mode: %u",
+                             conf_s->conf_r.headphones_rendering_mode);
+      log += write_yaml_form(log, 4, "rendering_config_extension_size: %u",
+                             conf_s->conf_r.rendering_config_extension_size);
 
       log += write_yaml_form(log, 3, "element_mix_config:");
       log += write_yaml_form(log, 4, "mix_gain:");
@@ -477,7 +706,7 @@ static void write_mix_presentation_log(uint64_t idx, void* obu, char* log) {
           for (uint64_t k = 0; k < conf_s->conf_m.gain.base.nb_segments; ++k) {
             log += write_yaml_form(
                 log, 6, "- %llu",
-                conf_s->conf_m.gain.base.segments->segment_interval);
+                conf_s->conf_m.gain.base.segments[k].segment_interval);
           }
         }
       }
@@ -496,20 +725,20 @@ static void write_mix_presentation_log(uint64_t idx, void* obu, char* log) {
     log += write_yaml_form(log, 5, "param_definition_mode: %u",
                            output_mix_config->gain.base.mode);
     if (output_mix_config->gain.base.mode == 0) {
-      log += write_yaml_form(log, 6, "duration: %llu",
+      log += write_yaml_form(log, 5, "duration: %llu",
                              output_mix_config->gain.base.duration);
-      log += write_yaml_form(log, 6, "num_subblocks: %llu",
+      log += write_yaml_form(log, 5, "num_subblocks: %llu",
                              output_mix_config->gain.base.nb_segments);
       log += write_yaml_form(
-          log, 6, "constant_subblock_duration: %llu",
+          log, 5, "constant_subblock_duration: %llu",
           output_mix_config->gain.base.constant_segment_interval);
       if (output_mix_config->gain.base.constant_segment_interval == 0) {
-        log += write_yaml_form(log, 6, "subblock_durations:");
+        log += write_yaml_form(log, 5, "subblock_durations:");
         for (uint64_t k = 0; k < output_mix_config->gain.base.nb_segments;
              ++k) {
           log += write_yaml_form(
-              log, 6, "- %llu",
-              output_mix_config->gain.base.segments->segment_interval);
+              log, 5, "- %llu",
+              output_mix_config->gain.base.segments[k].segment_interval);
         }
       }
     }
@@ -526,18 +755,7 @@ static void write_mix_presentation_log(uint64_t idx, void* obu, char* log) {
       uint32_t layout_type = submix->layouts[j]->type;
       log += write_yaml_form(log, 4, "layout_type: %lu", layout_type);
 
-      if (layout_type == IAMF_LAYOUT_TYPE_LOUDSPEAKERS_SP_LABEL) {
-        log += write_yaml_form(log, 4, "sp_layout:");
-
-        SP_Label_Layout* sp = SP_LABEL_LAYOUT(submix->layouts[j]);
-        log += write_yaml_form(log, 5, "num_loudspeakers: %lu",
-                               sp->nb_loudspeakers);
-        log += write_yaml_form(log, 5, "sp_labels:");
-        for (uint8_t k = 0; k < sp->nb_loudspeakers; ++k) {
-          log += write_yaml_form(log, 5, "- %u", sp->sp_labels[k]);
-        }
-        // __KWON_TODO
-      } else if (layout_type == IAMF_LAYOUT_TYPE_LOUDSPEAKERS_SS_CONVENTION) {
+      if (layout_type == IAMF_LAYOUT_TYPE_LOUDSPEAKERS_SS_CONVENTION) {
         log += write_yaml_form(log, 4, "ss_layout:");
 
         SoundSystemLayout* ss = SOUND_SYSTEM_LAYOUT(submix->layouts[j]);
@@ -552,6 +770,29 @@ static void write_mix_presentation_log(uint64_t idx, void* obu, char* log) {
                              submix->loudness[j].integrated_loudness);
       log += write_yaml_form(log, 4, "digital_peak: %d",
                              submix->loudness[j].digital_peak);
+      if (submix->loudness[j].info_type & 1) {
+        log += write_yaml_form(log, 4, "true_peak: %d",
+                               submix->loudness[j].true_peak);
+      }
+
+      if (submix->loudness[j].info_type & 2) {
+        log += write_yaml_form(log, 4, "anchored_loudness:");
+        log += write_yaml_form(log, 5, "num_anchored_loudness: %u",
+                               submix->loudness[j].num_anchor_loudness);
+
+        if (submix->loudness[j].num_anchor_loudness) {
+          log += write_yaml_form(log, 5, "anchor_elements:");
+          for (uint8_t k = 0; k < submix->loudness[j].num_anchor_loudness;
+               ++k) {
+            anchor_loudness_t anchor_loudness_info =
+                submix->loudness[j].anchor_loudness[k];
+            log += write_yaml_form(log, 5, "- anchor_element: %u",
+                                   anchor_loudness_info.anchor_element);
+            log += write_yaml_form(log, 6, "anchored_loudness: %d",
+                                   anchor_loudness_info.anchored_loudness);
+          }
+        }
+      }
     }
   }
   write_postfix(LOG_OBU, log);
@@ -603,9 +844,54 @@ static void write_parameter_block_log(uint64_t idx, void* obu, char* log) {
                              mode->seg.segment_interval);
       log += write_yaml_form(log, 3, "dmixp_mode: %lu", mode->demixing_mode);
     } else if (para->type == IAMF_PARAMETER_TYPE_RECON_GAIN) {
-      log += write_yaml_form(log, 1, "- recon_gain_parameter_data:");
-      // log += write_yaml_form(log, 3, "subblock_duration: %llu",
-      // ->seg->segment_interval); KWON_TODO
+      ReconGainSegment* mode = (ReconGainSegment*)para->segments[i];
+      log += write_yaml_form(log, 1, "- recon_gain_info_parameter_data:");
+      for (uint64_t j = 0; j < mode->list.count; ++j) {
+        log += write_yaml_form(log, 3, "recon_gains_for_layer:");
+        ReconGain recon_gain = mode->list.recon[j];
+        int channels = bit1_count(recon_gain.flags);
+        if (channels > 0) {
+          // leb128
+          // read 2 bytes
+          uint8_t cur_channel = 0;
+
+          uint32_t recon_channel = recon_gain.flags & 0xFFFF;
+          if (recon_channel & 0x8000) {
+            uint32_t ch = ((recon_channel & 0xFF00) >> 8);
+            for (uint8_t k = 0; k < 7; ++k) {
+              if (ch & 0x01) {
+                log += write_yaml_form(log, 4, "recon_gain:");
+                log += write_yaml_form(log, 5, "key: %u", k);
+                log += write_yaml_form(log, 5, "value: %d",
+                                       recon_gain.recon_gain[cur_channel++]);
+              }
+              ch >>= 1;
+            }
+
+            ch = (recon_channel & 0x00FF);
+            for (uint8_t k = 7; k < 12; ++k) {
+              if (ch & 0x01) {
+                log += write_yaml_form(log, 4, "recon_gain:");
+                log += write_yaml_form(log, 5, "key: %u", k);
+                log += write_yaml_form(log, 5, "value: %d",
+                                       recon_gain.recon_gain[cur_channel++]);
+              }
+              ch >>= 1;
+            }
+          } else {
+            uint32_t ch = recon_channel & 0xFF;
+            for (uint8_t k = 0; k < 7; ++k) {
+              if (ch & 0x01) {
+                log += write_yaml_form(log, 4, "recon_gain:");
+                log += write_yaml_form(log, 5, "key: %u", k);
+                log += write_yaml_form(log, 5, "value: %d",
+                                       recon_gain.recon_gain[cur_channel++]);
+              }
+              ch >>= 1;
+            }
+          }
+        }
+      }
     }
   }
 
@@ -624,7 +910,7 @@ static void write_audio_frame_log(uint64_t idx, void* obu, char* log,
                          num_samples_to_trim_at_start);
   log += write_yaml_form(log, 1, "num_samples_to_trim_at_end: %llu",
                          num_samples_to_trim_at_end);
-  log += write_yaml_form(log, 1, "size_of(audio_frame): %u", af_obu->size);
+  log += write_yaml_form(log, 1, "size_of_audio_frame: %u", af_obu->size);
   write_postfix(LOG_OBU, log);
 }
 
@@ -635,6 +921,7 @@ static void write_temporal_delimiter_block_log(uint64_t idx, void* obu,
   write_postfix(LOG_OBU, log);
 }
 
+#ifdef SYNC_OBU
 static void write_sync_log(uint64_t idx, void* obu, char* log) {
   IAMF_Sync* sc_obu = (IAMF_Sync*)obu;
 
@@ -656,6 +943,7 @@ static void write_sync_log(uint64_t idx, void* obu, char* log) {
   }
   write_postfix(LOG_OBU, log);
 }
+#endif
 
 int vlog_obu(uint32_t obu_type, void* obu,
              uint64_t num_samples_to_trim_at_start,
@@ -685,15 +973,17 @@ int vlog_obu(uint32_t obu_type, void* obu,
     case IAMF_OBU_TEMPORAL_DELIMITER:
       write_temporal_delimiter_block_log(obu_count++, obu, log);
       break;
+#ifdef SYNC_OBU
     case IAMF_OBU_SYNC:
       write_sync_log(obu_count++, obu, log);
       break;
-    case IAMF_OBU_MAGIC_CODE:
-      write_magic_code_log(obu_count++, obu, log);
+#endif
+    case IAMF_OBU_SEQUENCE_HEADER:
+      write_sequence_header_log(obu_count++, obu, log);
       break;
     default:
       if (obu_type >= IAMF_OBU_AUDIO_FRAME &&
-          obu_type <= IAMF_OBU_AUDIO_FRAME_ID21) {
+          obu_type <= IAMF_OBU_AUDIO_FRAME_ID17) {
         write_audio_frame_log(obu_count++, obu, log,
                               num_samples_to_trim_at_start,
                               num_samples_to_trim_at_end);

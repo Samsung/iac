@@ -3,20 +3,39 @@ cmake_minimum_required(VERSION 3.5.1)
 project (iamf)
 message(STATUS "start build iamf")
 
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3") 
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")
 SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(BUILD_SHARED_LIBS "Build shared library" ON)
 
-add_definitions(-DIAMF_PROFILE=0100)
-add_definitions(-DIAMF_VERSION=0000)
+add_definitions(-DIAMF_RIMARY_PROFILE=001)
+add_definitions(-DIAMF_ADDITIONAL_PROFILE=001)
+
+option(SAMSUNG_TV "For samsung tv."  ON)
+option(IAMF_DEBUG "Debug iamf."  OFF)
+
+if (SAMSUNG_TV)
+  add_definitions(-DSAMSUNG_TV)
+endif()
+
+if (IAMF_DEBUG)
+  add_definitions(-DIA_DBG -DIA_DEV)
+endif()
 
 set(CODEC_LIB_DIR  "${PROJECT_SOURCE_DIR}/dep_codecs/lib")
 set(CODEC_INCLUDE_DIR  "${PROJECT_SOURCE_DIR}/dep_codecs/include")
-set(EXTER_LIB_DIR  "${PROJECT_SOURCE_DIR}/dep_external/lib")
-set(DMPD_LIB_DIR  "${PROJECT_SOURCE_DIR}/src/iamf_enc/dmpd")
+
+set(EXTER_INCLUDE_DIR  "${PROJECT_SOURCE_DIR}/dep_external/include")
+
+option(SUPPORT_VERIFIER "Output vlogging file" OFF)
+if (SUPPORT_VERIFIER)
+  message(STATUS "Output vlogging file")
+  add_definitions(-DSUPPORT_VERIFIER=1)
+endif()
 
 option(CODEC_CAP "Codec capability check" ON)
+option(BINAURALIZER "Enable binaural rendering" OFF)
+
 if(CODEC_CAP)
   unset(find_opus CACHE)
   find_library(find_opus NAMES opus PATHS ${CODEC_LIB_DIR} NO_DEFAULT_PATH)
@@ -33,7 +52,7 @@ if(CODEC_CAP)
   else()
       add_definitions(-DCONFIG_AAC_CODEC)
   endif()
-  
+
   unset(find_flac CACHE)
   find_library(find_flac NAMES FLAC PATHS ${CODEC_LIB_DIR} NO_DEFAULT_PATH)
   if(${find_flac} STREQUAL "find_flac-NOTFOUND")
@@ -44,6 +63,7 @@ if(CODEC_CAP)
 endif()
 
 include_directories (include)
+aux_source_directory (dep_external/src/wav DIR_DEP_EXTERNAL_WAV)
 aux_source_directory (src/common DIR_IAMF_COMMON)
 aux_source_directory (src/iamf_dec DIR_IAMF_DEC)
 if(NOT ${find_opus} STREQUAL "find_opus-NOTFOUND")
@@ -56,60 +76,48 @@ if(NOT ${find_flac} STREQUAL "find_flac-NOTFOUND")
   aux_source_directory (src/iamf_dec/flac DIR_IAMF_DEC_FLAC)
 endif()
 aux_source_directory (src/iamf_dec/pcm DIR_IAMF_DEC_PCM)
-aux_source_directory (src/iamf_enc DIR_IAMF_ENC)
 
 
 
 include_directories(
     ${CODEC_INCLUDE_DIR}
+    ${EXTER_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/src/common
     ${PROJECT_SOURCE_DIR}/src/iamf_dec
     ${PROJECT_SOURCE_DIR}/src/iamf_dec/opus
     ${PROJECT_SOURCE_DIR}/src/iamf_dec/aac
     ${PROJECT_SOURCE_DIR}/src/iamf_dec/flac
-    ${PROJECT_SOURCE_DIR}/src/iamf_enc
-    ${DMPD_LIB_DIR}/asc/include
-    ${DMPD_LIB_DIR}/heq/include
 )
 link_directories (
     ${CODEC_LIB_DIR}
-    ${EXTER_LIB_DIR}
-    ${DMPD_LIB_DIR}/asc
-    ${DMPD_LIB_DIR}/asc/3rdparty/decimate
-    ${DMPD_LIB_DIR}/asc/3rdparty/stft
-    ${DMPD_LIB_DIR}/heq
 )
 
 if(BUILD_SHARED_LIBS)
-  add_library(${PROJECT_NAME} SHARED ${DIR_IAMF_COMMON} ${DIR_IAMF_ENC}
+  add_library(${PROJECT_NAME} SHARED ${DIR_DEP_EXTERNAL_WAV} ${DIR_IAMF_COMMON}
     ${DIR_IAMF_DEC_OPUS} ${DIR_IAMF_DEC_AAC} ${DIR_IAMF_DEC_FLAC} ${DIR_IAMF_DEC_PCM} ${DIR_IAMF_DEC})
-  target_link_libraries (${PROJECT_NAME} asc heq flatccrt decimate stft fftw3f )
-  
+
   if(NOT ${find_opus} STREQUAL "find_opus-NOTFOUND")
     target_link_libraries (${PROJECT_NAME} opus)
   endif()
-  
+
   if(NOT ${find_aac} STREQUAL "find_aac-NOTFOUND")
     target_link_libraries (${PROJECT_NAME} fdk-aac)
   endif()
-  
+
   if(NOT ${find_flac} STREQUAL "find_flac-NOTFOUND")
     target_link_libraries (${PROJECT_NAME} FLAC)
   endif()
-  
-  add_subdirectory(src/iamf_enc/dmpd)
+
 else()
-  add_library(${PROJECT_NAME} STATIC ${DIR_IAMF_COMMON} ${DIR_IAMF_ENC}
+  add_library(${PROJECT_NAME} STATIC ${DIR_DEP_EXTERNAL_WAV} ${DIR_IAMF_COMMON}
     ${DIR_IAMF_DEC_OPUS} ${DIR_IAMF_DEC_AAC} ${DIR_IAMF_DEC_PCM}
     ${DIR_IAMF_DEC_FLAC} ${DIR_IAMF_DEC})
-  add_subdirectory(src/iamf_enc/dmpd)
 endif()
 
 
 
 set(IAMF_PUBLIC_HEADER
     ${CMAKE_CURRENT_SOURCE_DIR}/include/IAMF_decoder.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/IAMF_encoder.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/IAMF_defines.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/vlogging_tool_sr.h
     )
@@ -122,14 +130,14 @@ set(libdir ${CMAKE_INSTALL_PREFIX}/lib)
 set(includedir ${CMAKE_INSTALL_PREFIX}/include)
 configure_file(iamf.pc.in iamf.pc)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/iamf.pc
-        DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/pkgconfig) 
-                                 
+        DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/pkgconfig)
+
 if(BUILD_SHARED_LIBS)
-  install(TARGETS ${PROJECT_NAME}  
+  install(TARGETS ${PROJECT_NAME}
     LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
     PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_PREFIX}/include/iamf)
 else()
-  install(TARGETS ${PROJECT_NAME}  
+  install(TARGETS ${PROJECT_NAME}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
     PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_PREFIX}/include/iamf)
 endif()

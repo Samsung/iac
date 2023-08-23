@@ -42,10 +42,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "IAMF_defines.h"
 #include "IAMF_types.h"
 
-#define IA_CH_CATE_SURROUND 0x100
-#define IA_CH_CATE_WEIGHT 0X200
-#define IA_CH_CATE_TOP 0X400
-
 #define IAMF_MALLOC(type, n) ((type *)malloc(sizeof(type) * (n)))
 #define IAMF_REALLOC(type, p, n) ((type *)realloc(p, sizeof(type) * (n)))
 #define IAMF_MALLOCZ(type, n) ((type *)calloc(n, sizeof(type)))
@@ -55,8 +51,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   }
 #define IAMF_FREEP(p) iamf_freep((void **)p)
 
+#define RSHIFT(a) (1 << (a))
+
 void iamf_freep(void **p);
 
+IAMF_CodecID iamf_codec_4cc_get_codecID(uint32_t id);
 int iamf_codec_check(IAMF_CodecID cid);
 const char *iamf_codec_name(IAMF_CodecID cid);
 
@@ -75,5 +74,8 @@ int ia_audio_layer_get_channels(IAChannelLayoutType type, IAChannel *channels,
 const char *ia_channel_name(IAChannel ch);
 
 int bit1_count(uint32_t value);
+
+int iamf_valid_mix_mode(int mode);
+const MixFactors *iamf_get_mix_factors(int mode);
 
 #endif /* IAMF_UITLS_H */

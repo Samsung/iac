@@ -79,7 +79,7 @@ uint32_t bs_get32b(BitStream *b, int n) {
 
   ret >>= INT32_BITS - nn - b->b8p;
   if (nn < INT32_BITS) {
-    ret &= ~((~0) << nn);
+    ret &= ~((~0U) << nn);
   }
   b->b8p += nn;
   b->b8sp += (b->b8p / INT8_BITS);
@@ -108,6 +108,8 @@ void bs_align(BitStream *b) {
     b->b8p = 0;
   }
 }
+
+int32_t bs_skipABytes(BitStream *b, int n) { return bs_read(b, 0, n); }
 
 uint32_t bs_getA8b(BitStream *b) {
   uint32_t ret;
@@ -139,7 +141,10 @@ uint64_t bs_getAleb128(BitStream *b) {
 
   bs_align(b);
 
+  if (b->b8sp >= b->size) return 0;
+
   for (i = 0; i < 8; i++) {
+    if (b->b8sp + i >= b->size) break;
     byte = b->data[b->b8sp + i];
     ret |= (((uint64_t)byte & 0x7f) << (i * 7));
     if (!(byte & 0x80)) {
@@ -151,86 +156,71 @@ uint64_t bs_getAleb128(BitStream *b) {
   return ret;
 }
 
-int64_t bs_getAsleb128(BitStream *b) {
-  int64_t ret = 0, val;
-  int i = 0;
-  uint8_t byte;
-
-  bs_align(b);
-
-  for (; i < 8; i++) {
-    if (b->b8sp + i >= b->size) {
-      ret = UINT64_MAX;
-      break;
-    }
-    byte = b->data[b->b8sp + i];
-    ret |= ((byte & 0x7f) << (i * 7));
-    if (!(byte & 0x80)) {
-      val = ret << (57 - i * 7) >> (57 - i * 7);
-      break;
-    }
-  }
-  ++i;
-  b->b8sp += i;
-  return val;
-}
-
 int32_t bs_read(BitStream *b, uint8_t *data, int n) {
   bs_align(b);
-  memcpy(data, &b->data[b->b8sp], n);
+  if (data) memcpy(data, &b->data[b->b8sp], n);
   b->b8sp += n;
   return n;
 }
 
 int32_t bs_readString(BitStream *b, char *data, int n) {
-  int len = 0;
+  int len = 0, rlen = 0;
   bs_align(b);
   len = strlen((char *)&b->data[b->b8sp]) + 1;
-  memcpy(data, &b->data[b->b8sp], len);
+  rlen = len;
+  if (rlen > n) rlen = n;
+  memcpy(data, &b->data[b->b8sp], rlen - 1);
+  data[rlen - 1] = '\0';
   b->b8sp += len;
   return len;
 }
 
 uint32_t bs_tell(BitStream *b) { return b->b8p ? b->b8sp + 1 : b->b8sp; }
 
+uint8_t readu8(uint8_t *data, int offset) { return data[offset]; }
+
 uint32_t readu16be(uint8_t *data, int offset) {
   return data[offset] << 8 | data[offset + 1];
 }
 
-int readi16be(uint8_t *data, int offset) {
-  int ret = readu16be(data, offset);
-  return ret << 16 >> 16;
+int reads16be(uint8_t *data, int offset) {
+  short ret = readu16be(data, offset);
+  return ret;
 }
 
-int readi16le(uint8_t *data, int offset) {
-  int ret = data[offset] | data[offset + 1] << 8;
-  return ret << 16 >> 16;
+uint32_t readu16le(uint8_t *data, int offset) {
+  return data[offset] | data[offset + 1] << 8;
+}
+
+int reads16le(uint8_t *data, int offset) {
+  short ret = (short)readu16le(data, offset);
+  return ret;
 }
 
 uint32_t readu24be(uint8_t *data, int offset) {
-  return data[offset] << 16 | data[offset + 1] << 8 | data[offset + 2];
+  return readu16be(data, offset) << 8 | data[offset + 2];
 }
 
-int readi24be(uint8_t *data, int offset) {
-  int ret = readi24be(data, offset);
-  return ret << 8 >> 8;
+int reads24be(uint8_t *data, int offset) {
+  uint32_t ret = readu16le(data, offset) << 8 | data[offset + 2];
+  int iret = ret << 8;
+  return (iret >> 8);
 }
 
-int readi24le(uint8_t *data, int offset) {
-  int ret = data[offset] | data[offset + 1] << 8 | data[offset + 2] << 16;
-  return ret << 8 >> 8;
-}
-
-int readi32be(uint8_t *data, int offset) {
-  return data[offset] << 24 | data[offset + 1] << 16 | data[offset + 2] << 8 |
-         data[offset + 3];
+int reads24le(uint8_t *data, int offset) {
+  uint32_t ret = readu16le(data, offset) | data[offset + 2] << 16;
+  int iret = (int)(ret << 8);
+  return (iret >> 8);
 }
 
 uint32_t readu32be(uint8_t *data, int offset) {
-  return readi32be(data, offset);
+  return readu16be(data, offset) << 16 | readu16be(data, offset + 2);
 }
 
-int readi32le(uint8_t *data, int offset) {
-  return data[offset] | data[offset + 1] << 8 | data[offset + 2] << 16 |
-         data[offset + 3] << 24;
+int reads32be(uint8_t *data, int offset) {
+  return (int)readu32be(data, offset);
+}
+
+int reads32le(uint8_t *data, int offset) {
+  return readu16le(data, offset) | readu16le(data, offset + 2) << 16;
 }

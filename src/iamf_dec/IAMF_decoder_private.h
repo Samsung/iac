@@ -44,11 +44,18 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "ae_rdr.h"
 #include "audio_effect_peak_limiter.h"
 #include "demixer.h"
+#include "downmix_renderer.h"
 #include "queue_t.h"
 #include "speex_resampler.h"
 
-#define IAMF_FLAGS_MAGIC_CODE 0x01
-#define IAMF_FLAGS_CONFIG 0x02
+#define IAMF_FLAG_MAGIC_CODE 0x01
+#define IAMF_FLAG_CODEC_CONFIG 0x02
+#define IAMF_FLAG_AUDIO_ELEMENT 0x04
+#define IAMF_FLAG_MIX_PRESENTATION 0x08
+#define IAMF_FLAG_CONFIG 0x10
+#define IAMF_FLAG_DESCRIPTORS                                                \
+  (IAMF_FLAG_MAGIC_CODE | IAMF_FLAG_CODEC_CONFIG | IAMF_FLAG_AUDIO_ELEMENT | \
+   IAMF_FLAG_MIX_PRESENTATION)
 
 #define DEC_BUF_CNT 3
 
@@ -115,7 +122,6 @@ typedef struct ParameterItem {
 } ParameterItem;
 
 typedef struct ElementItem {
-  uint64_t timestamp;
   uint64_t id;
 
   IAMF_CodecConf *codecConf;
@@ -127,12 +133,6 @@ typedef struct ElementItem {
 
 } ElementItem;
 
-typedef struct SyncItem {
-  uint64_t id;
-  uint64_t start;
-  int type;
-} SyncItem;
-
 typedef void (*free_tp)(void *);
 
 typedef struct Viewer {
@@ -143,7 +143,6 @@ typedef struct Viewer {
 
 typedef struct IAMF_DataBase {
   IAMF_Object *version;
-  IAMF_Object *sync;
 
   ObjectSet *codecConf;
   ObjectSet *element;
@@ -151,8 +150,6 @@ typedef struct IAMF_DataBase {
 
   Viewer eViewer;
   Viewer pViewer;
-  Viewer sViewer;
-  uint64_t sync_time;
 } IAMF_DataBase;
 
 /* <<<<<<<<<<<<<<<<<< DATABASE <<<<<<<<<<<<<<<<<< */
@@ -195,7 +192,8 @@ typedef struct ChannelLayerContext {
   IAChannel channels_order[IA_CH_LAYOUT_MAX_CHANNELS];
 
   int dmx_mode;
-  int recon_gain_flags;
+  int dmx_default_mode;
+  int dmx_default_w_idx;
 } ChannelLayerContext;
 
 typedef struct AmbisonicsContext {
@@ -224,12 +222,12 @@ typedef struct IAMF_Stream {
   uint64_t trimming_start;
   uint64_t trimming_end;
 
+  uint32_t max_frame_size;
 } IAMF_Stream;
 
 typedef struct ScalableChannelDecoder {
   int nb_layers;
   IAMF_CoreDecoder **sub_decoders;
-  int frame_offset;
   Demixer *demixer;
 } ScalableChannelDecoder;
 
@@ -246,7 +244,6 @@ typedef struct Packet {
   uint32_t *sub_packet_sizes;
   uint32_t nb_sub_packets;
   uint32_t count;
-  uint64_t dts;
 } Packet;
 
 typedef struct Frame {
@@ -255,8 +252,6 @@ typedef struct Frame {
   uint32_t samples;
   uint64_t strim;
   uint64_t etrim;
-  uint32_t mask;
-  uint32_t flags;
   int channels;
 
   float *data;
@@ -275,9 +270,25 @@ typedef struct IAMF_StreamDecoder {
   Frame frame;
 
   uint32_t frame_size;
+  int frame_padding;
   int delay;
 
 } IAMF_StreamDecoder;
+
+typedef struct IAMF_StreamRenderer {
+  IAMF_Stream *stream;
+  DMRenderer *downmixer;
+  uint32_t offset;
+  uint32_t frame_size;
+  uint8_t headphones_rendering_mode;
+  struct {
+    IAMF_SP_LAYOUT *layout;
+    union {
+      struct m2m_rdr_t mr;
+      struct h2m_rdr_t hr;
+    };
+  } renderer;
+} IAMF_StreamRenderer;
 
 typedef struct IAMF_Mixer {
   uint64_t *element_ids;
@@ -291,6 +302,7 @@ typedef struct IAMF_Presentation {
   IAMF_Stream **streams;
   uint32_t nb_streams;
   IAMF_StreamDecoder **decoders;
+  IAMF_StreamRenderer **renderers;
   SpeexResamplerState *resampler;
   IAMF_Mixer mixer;
   uint64_t output_gain_id;
@@ -302,27 +314,26 @@ typedef struct IAMF_DecoderContext {
   uint32_t flags;
   IAMF_DecoderStatus status;
 
+  IAMF_Layout layout;
   LayoutInfo *output_layout;
   int sampling_rate;
 
+  uint64_t mix_presentation_id;
   IAMF_Presentation *presentation;
-  char *mix_presentation_label;
 
   float loudness;
   float normalization_loudness;
   uint32_t bit_depth;
   float threshold_db;
+  IAMF_StreamInfo info;
 
   uint32_t need_configure;
 
   // PTS
-  uint32_t duration;
+  uint64_t duration;
   int64_t pts;
   uint32_t pts_time_base;
   uint32_t last_frame_size;
-
-  uint64_t global_time;
-  uint32_t time_precision;
 
   IAMF_extradata metadata;
 

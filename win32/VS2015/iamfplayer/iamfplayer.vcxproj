@@ -74,8 +74,8 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>..\..\..\include\;..\..\..\test\tools\iamfplayer\include\</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\..\include\;..\..\..\test\tools\iamfplayer\include\;..\..\..\dep_external\include\wav\</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;SAMSUNG_TV</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -90,7 +90,7 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\..\include\;..\..\..\test\tools\iamfplayer\include\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\..\include\;..\..\..\test\tools\iamfplayer\include\;..\..\..\dep_external\include\wav\</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -130,24 +130,20 @@
   <ItemGroup>
     <ClCompile Include="..\..\..\test\tools\iamfplayer\player\iamfplayer.c" />
     <ClCompile Include="..\..\..\test\tools\iamfplayer\src\atom.c" />
-    <ClCompile Include="..\..\..\test\tools\iamfplayer\src\bitstreamrw.c" />
     <ClCompile Include="..\..\..\test\tools\iamfplayer\src\dmemory.c" />
     <ClCompile Include="..\..\..\test\tools\iamfplayer\src\iamf_header.c" />
     <ClCompile Include="..\..\..\test\tools\iamfplayer\src\mp4demux.c" />
     <ClCompile Include="..\..\..\test\tools\iamfplayer\src\mp4iamfpar.c" />
     <ClCompile Include="..\..\..\test\tools\iamfplayer\src\vlogging_iamfmp4_sr.c" />
-    <ClCompile Include="..\..\..\test\tools\iamfplayer\src\wavwriter.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\test\tools\iamfplayer\include\a2b_endian.h" />
     <ClInclude Include="..\..\..\test\tools\iamfplayer\include\atom.h" />
-    <ClInclude Include="..\..\..\test\tools\iamfplayer\include\bitstreamrw.h" />
     <ClInclude Include="..\..\..\test\tools\iamfplayer\include\dmemory.h" />
     <ClInclude Include="..\..\..\test\tools\iamfplayer\include\iamf_header.h" />
     <ClInclude Include="..\..\..\test\tools\iamfplayer\include\mp4demux.h" />
     <ClInclude Include="..\..\..\test\tools\iamfplayer\include\mp4iamfpar.h" />
     <ClInclude Include="..\..\..\test\tools\iamfplayer\include\vlogging_iamfmp4_sr.h" />
-    <ClInclude Include="..\..\..\test\tools\iamfplayer\include\wavwriter.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\iamf.vcxproj">

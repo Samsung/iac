@@ -55,8 +55,7 @@ typedef enum AmbisonicsMode {
 
 typedef enum IAMF_LayoutType {
   IAMF_LAYOUT_TYPE_NOT_DEFINED = 0,
-  IAMF_LAYOUT_TYPE_LOUDSPEAKERS_SP_LABEL,
-  IAMF_LAYOUT_TYPE_LOUDSPEAKERS_SS_CONVENTION,
+  IAMF_LAYOUT_TYPE_LOUDSPEAKERS_SS_CONVENTION = 2,
   IAMF_LAYOUT_TYPE_BINAURAL,
 } IAMF_LayoutType;
 
@@ -74,6 +73,8 @@ typedef enum IAMF_SoundSystem {
   SOUND_SYSTEM_J,        // 4+7+0, 1
   SOUND_SYSTEM_EXT_712,  // 2+7+0, 1
   SOUND_SYSTEM_EXT_312,  // 2+3+0, 1
+  SOUND_SYSTEM_MONO,     // 0+1+0, 1
+  SOUND_SYSTEM_END
 } IAMF_SoundSystem;
 
 typedef enum IAMF_ParameterType {
@@ -94,12 +95,7 @@ typedef enum IAMF_AnimationType {
  *  class layout() {
  *    unsigned int (2) layout_type;
  *
- *    if (layout_type == LOUDSPEAKERS_SP_LABEL) {
- *      unsigned int (6) num_loudspeakers;
- *      for (i = 0; i < num_loudspeakers; i++) {
- *        unsigned int (8) sp_label;
- *      }
- *    } else if (layout_type == LOUDSPEAKERS_SS_CONVENTION) {
+ *    if (layout_type == LOUDSPEAKERS_SS_CONVENTION) {
  *      unsigned int (4) sound_system;
  *      unsigned int (2) reserved;
  *    } else if (layout_type == BINAURAL or NOT_DEFINED) {
@@ -110,12 +106,6 @@ typedef enum IAMF_AnimationType {
  * */
 typedef struct IAMF_Layout {
   union {
-    struct {
-      uint8_t num_loudspeakers : 6;
-      uint8_t type : 2;
-      uint8_t *sp_label;
-    } sp_labels;
-
     struct {
       uint8_t reserved : 2;
       uint8_t sound_system : 4;
@@ -146,14 +136,30 @@ typedef struct IAMF_Layout {
  *    if (info_type & 1) {
  *      signed int (16) true_peak;
  *    }
+ *
+ *    if (info_type & 2) {
+ *      unsigned int (8) num_anchored_loudness;
+ *      for (i = 0; i < num_anchored_loudness; i++) {
+ *        unsigned int (8) anchor_element;
+ *        signed int (16) anchored_loudness;
+ *      }
+ *    }
  *  }
  *
  * */
+
+typedef struct _anchor_loudness_t {
+  uint8_t anchor_element;
+  int16_t anchored_loudness;
+} anchor_loudness_t;
+
 typedef struct IAMF_LoudnessInfo {
   uint8_t info_type;
   int16_t integrated_loudness;
   int16_t digital_peak;
   int16_t true_peak;
+  uint8_t num_anchor_loudness;
+  anchor_loudness_t *anchor_loudness;
 } IAMF_LoudnessInfo;
 
 /**
@@ -181,7 +187,6 @@ enum {
   IAMF_ERR_INVALID_STATE = -5,
   IAMF_ERR_UNIMPLEMENTED = -6,
   IAMF_ERR_ALLOC_FAIL = -7,
-  IAMF_ERR_NEED_MORE_DATA = -8,
 };
 
 /**
@@ -203,43 +208,8 @@ typedef enum {
   IA_CHANNEL_LAYOUT_COUNT
 } IAChannelLayoutType;
 
-////////////////////////// OPUS and AAC codec
-/// control/////////////////////////////////////
-#define __ia_check_int(x) (((void)((x) == (int32_t)0)), (int32_t)(x))
-#define __ia_check_int_ptr(ptr) ((ptr) + ((ptr) - (int32_t *)(ptr)))
-//#define __ia_check_void_ptr(ptr) ((ptr) + ((ptr) - (void*)(ptr)))
-//#define __ia_check_void_ptr(ptr) (void*)(ptr)
-
-#define IA_BANDWIDTH_FULLBAND 1105 /**<20 kHz bandpass @hideinitializer*/
-
-#define IA_APPLICATION_AUDIO 2049
-
-#define IA_SET_BITRATE_REQUEST 4002
-#define IA_SET_BANDWIDTH_REQUEST 4008
-#define IA_SET_VBR_REQUEST 4006
-#define IA_SET_COMPLEXITY_REQUEST 4010
-#define IA_GET_LOOKAHEAD_REQUEST 4027
-
-#define IA_SET_RECON_GAIN_FLAG_REQUEST 3000
-#define IA_SET_OUTPUT_GAIN_FLAG_REQUEST 3001
-#define IA_SET_SCALE_FACTOR_MODE_REQUEST 3002
-#define IA_SET_STANDALONE_REPRESENTATION_REQUEST 3003
-#define IA_SET_IAMF_PROFILE_REQUEST 3004
-
-#define IA_SET_BITRATE(x) IA_SET_BITRATE_REQUEST, __ia_check_int(x)
-#define IA_SET_BANDWIDTH(x) IA_SET_BANDWIDTH_REQUEST, __ia_check_int(x)
-#define IA_SET_VBR(x) IA_SET_VBR_REQUEST, __ia_check_int(x)
-#define IA_SET_COMPLEXITY(x) IA_SET_COMPLEXITY_REQUEST, __ia_check_int(x)
-#define IA_GET_LOOKAHEAD(x) IA_GET_LOOKAHEAD_REQUEST, __ia_check_int_ptr(x)
-
-#define IA_SET_RECON_GAIN_FLAG(x) \
-  IA_SET_RECON_GAIN_FLAG_REQUEST, __ia_check_int(x)
-#define IA_SET_OUTPUT_GAIN_FLAG(x) \
-  IA_SET_OUTPUT_GAIN_FLAG_REQUEST, __ia_check_int(x)
-#define IA_SET_SCALE_FACTOR_MODE(x) \
-  IA_SET_SCALE_FACTOR_MODE_REQUEST, __ia_check_int(x)
-#define IA_SET_STANDALONE_REPRESENTATION(x) \
-  IA_SET_STANDALONE_REPRESENTATION_REQUEST, __ia_check_int(x)
-#define IA_SET_IAMF_PROFILE(x) IA_SET_IAMF_PROFILE_REQUEST, __ia_check_int(x)
+#ifdef SAMSUNG_TV
+#define SAMSUNG_SPECIFIC_CHANNELS 12
+#endif
 
 #endif /* IAMF_DEFINES_H */

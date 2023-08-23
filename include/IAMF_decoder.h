@@ -43,16 +43,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern "C" {
 #endif
 
+typedef struct IAMF_StreamInfo {
+  uint32_t max_frame_size;
+} IAMF_StreamInfo;
+
 /**@}*/
 /**\name Immersive audio decoder functions */
 /**@{*/
 
 typedef struct IAMF_Decoder *IAMF_DecoderHandle;
-
-typedef struct {
-  int count;
-  char **labels;
-} IAMF_Labels;
 
 /**
  * @brief     Open an iamf decoder.
@@ -74,8 +73,10 @@ int IAMF_decoder_close(IAMF_DecoderHandle handle);
  * @param     [in] handle : iamf decoder handle.
  * @param     [in] data : the bitstream.
  * @param     [in] size : the size in bytes of bitstream.
- * @param     [out] rsize : the size in bytes of bitstream that has been
- * consumed.
+ * @param     [in & out] rsize : the size in bytes of bitstream that has been
+ *                               consumed.
+ *                               if is null, it means the data is the complete
+ *                               configuration OBUs.
  * @return    @ref IAErrCode.
  */
 int IAMF_decoder_configure(IAMF_DecoderHandle handle, const uint8_t *data,
@@ -84,10 +85,14 @@ int IAMF_decoder_configure(IAMF_DecoderHandle handle, const uint8_t *data,
 /**
  * @brief     Decode bitstream.
  * @param     [in] handle : iamf decoder handle.
- * @param     [in] data : the bitstream.
+ * @param     [in] data : the OBUs in bitstream.
+ *                        if is null, the output is delay signal.
  * @param     [in] size : the size in bytes of bitstream.
- * @param     [out] rsize : the size in bytes of bitstream that has been
- * consumed.
+ * @param     [in & out] rsize : the size in bytes of bitstream that has been
+ *                               consumed.
+ *                               if is null, it means the data is a complete
+ *                               access unit which includes all OBUs of
+ *                               substream frames and parameters.
  * @param     [out] pcm : output signal.
  * @return    the number of decoded samples or @ref IAErrCode.
  */
@@ -95,22 +100,14 @@ int IAMF_decoder_decode(IAMF_DecoderHandle handle, const uint8_t *data,
                         int32_t size, uint32_t *rsize, void *pcm);
 
 /**
- * @brief     Get mix presentation labels.
- * @param     [in] handle : iamf decoder handle.
- * @return    @ref IAMF_Labels or 0.
- */
-IAMF_Labels *IAMF_decoder_get_mix_presentation_labels(
-    IAMF_DecoderHandle handle);
-
-/**
  * @brief     Set a mix presentation label.
  * @param     [in] handle : iamf decoder handle.
- * @param     [in] label : a human-friendly label (@ref
- * IAMF_decoder_get_mix_presentation_labels) to describe mix presentation.
+ * @param     [in] id : an identifier for a Mix Presentation.
  * @return    @ref IAErrCode.
  */
-int IAMF_decoder_set_mix_presentation_label(IAMF_DecoderHandle handle,
-                                            const char *label);
+int IAMF_decoder_set_mix_presentation_id(IAMF_DecoderHandle handle,
+                                         uint64_t id);
+
 /**
  * @brief     Set sound system output layout.
  * @param     [in] handle : iamf decoder handle.
@@ -164,6 +161,16 @@ int IAMF_decoder_set_normalization_loudness(IAMF_DecoderHandle handle,
 int IAMF_decoder_set_bit_depth(IAMF_DecoderHandle handle, uint32_t bit_depth);
 
 /**
+ * @brief     Enable peak limiter. In the decoder, the peak limiter is enabled
+ *            by default.
+ * @param     [in] handle : iamf decoder handle.
+ * @param     [in] enable : 1 indicates enabled, and 0 indicates disable.
+ * @return    @ref IAErrCode.
+ */
+int IAMF_decoder_peak_limiter_enable(IAMF_DecoderHandle handle,
+                                     uint32_t enable);
+
+/**
  * @brief     Set peak threshold value to limiter.
  * @param     [in] handle : iamf decoder handle.
  * @param     [in] db : peak threshold in dB.
@@ -186,6 +193,13 @@ float IAMF_decoder_peak_limiter_get_threshold(IAMF_DecoderHandle handle);
  * @return    @ref IAErrCode.
  */
 int IAMF_decoder_set_sampling_rate(IAMF_DecoderHandle handle, uint32_t rate);
+
+/**
+ * @brief     Get stream info.Must be used after decoder configuration.
+ * @param     [in] handle : iamf decoder handle.
+ * @return    @stream info.
+ */
+IAMF_StreamInfo *IAMF_decoder_get_stream_info(IAMF_DecoderHandle handle);
 
 // only for tizen
 

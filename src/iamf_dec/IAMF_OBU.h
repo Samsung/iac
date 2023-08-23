@@ -51,11 +51,10 @@ typedef enum IAMF_OBU_Type {
   IAMF_OBU_MIX_PRESENTATION,
   IAMF_OBU_PARAMETER_BLOCK,
   IAMF_OBU_TEMPORAL_DELIMITER,
-  IAMF_OBU_SYNC,
-  IAMF_OBU_AUDIO_FRAME = 8,
-  IAMF_OBU_AUDIO_FRAME_ID0 = 9,
-  IAMF_OBU_AUDIO_FRAME_ID21 = 30,
-  IAMF_OBU_MAGIC_CODE = 31
+  IAMF_OBU_AUDIO_FRAME,
+  IAMF_OBU_AUDIO_FRAME_ID0,
+  IAMF_OBU_AUDIO_FRAME_ID17 = 23,
+  IAMF_OBU_SEQUENCE_HEADER = 31
 } IAMF_OBU_Type;
 
 typedef enum IAMF_OBU_Flag {
@@ -121,30 +120,19 @@ typedef struct IAMF_ParameterParam {
   IAMF_ObjectParameter base;
   ParameterBase *param_base;
   int nb_layers;
+  uint32_t recon_gain_present_flags;
 } IAMF_ParameterParam;
 
 /**
- * Version Object (Magic Code OBU).
+ * Version Object (Sequence Header OBU).
  * */
 
 typedef struct IAMF_Version {
   IAMF_Object obj;
 
   uint32_t iamf_code;
-  union {
-    uint8_t version;
-    struct {
-      uint8_t version_minor : 4;
-      uint8_t version_major : 4;
-    };
-  };
-  union {
-    uint8_t profile_version;
-    struct {
-      uint8_t profile_minor : 4;
-      uint8_t profile_major : 4;
-    };
-  };
+  uint8_t primary_profile;
+  uint8_t additional_profile;
 } IAMF_Version;
 
 /**
@@ -214,6 +202,8 @@ struct ParameterBase {
 
 struct DemixingParameter {
   ParameterBase base;
+  uint8_t mode;
+  uint8_t w;
 };
 
 struct ReconGainParameter {
@@ -255,15 +245,15 @@ struct AmbisonicsConf {
 typedef struct SubMixPresentation SubMixPresentation;
 
 #define TARGET_LAYOUT(a) ((TargetLayout *)(a))
-#define SP_LABEL_LAYOUT(a) ((SP_Label_Layout *)(a))
 #define SOUND_SYSTEM_LAYOUT(a) ((SoundSystemLayout *)(a))
 
 typedef struct IAMF_MixPresentation {
   IAMF_Object obj;
 
   uint64_t mix_presentation_id;
-  char *mix_presentation_friendly_label;
-  uint32_t label_size;
+  uint64_t num_labels;
+  char **language;
+  char **mix_presentation_friendly_label;
 
   uint64_t num_sub_mixes;
   SubMixPresentation *sub_mixes;
@@ -272,12 +262,6 @@ typedef struct IAMF_MixPresentation {
 typedef struct TargetLayout {
   uint32_t type;
 } TargetLayout;
-
-typedef struct SP_Label_Layout {
-  TargetLayout base;
-  uint32_t nb_loudspeakers;
-  uint32_t *sp_labels;
-} SP_Label_Layout;
 
 typedef struct SoundSystemLayout {
   TargetLayout base;
@@ -293,16 +277,21 @@ typedef struct MixGainParameter {
   short mix_gain;
 } MixGainParameter;
 
+typedef struct ElementRenderingConf {
+  uint8_t headphones_rendering_mode;
+  uint32_t rendering_config_extension_size;
+} ElementRenderingConf;
+
 typedef struct ElementMixConf {
   MixGainParameter gain;
 } ElementMixConf;
 
-typedef struct ElementMixRenderConf {
+typedef struct ElementConf {
   uint64_t element_id;
-  char *audio_element_friendly_label;
-  uint32_t label_size;
+  char **audio_element_friendly_label;
+  ElementRenderingConf conf_r;
   ElementMixConf conf_m;
-} ElementMixRenderConf;
+} ElementConf;
 
 typedef struct OutputMixConf {
   MixGainParameter gain;
@@ -310,7 +299,7 @@ typedef struct OutputMixConf {
 
 struct SubMixPresentation {
   uint64_t nb_elements;
-  ElementMixRenderConf *conf_s;
+  ElementConf *conf_s;
 
   OutputMixConf output_mix_config;
 

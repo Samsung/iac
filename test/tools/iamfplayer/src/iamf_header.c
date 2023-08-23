@@ -40,7 +40,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <string.h>
 
 #include "atom.h"
-#include "bitstreamrw.h"
 #include "dmemory.h"
 #include "iamf_header.h"
 
@@ -127,16 +126,16 @@ static uint32_t read_tag_size(ROPacket *p) {
   return size;
 }
 
-int iamf_header_read_description_OBUs(IAMFHeader *h, unsigned char *dst,
-                                      int size) {
-  if (size) {
-    if (h->description) {
-      if (h->description_length <= size)
-        memcpy(dst, h->description, h->description_length);
-      else
-        memcpy(dst, h->description, size);
-      return h->description_length;
-    }
+int iamf_header_read_description_OBUs(IAMFHeader *h, uint8_t **dst,
+                                      uint32_t *size) {
+  uint8_t *dsc = 0;
+
+  dsc = (uint8_t *)malloc(h->description_length);
+  if (dsc) {
+    memcpy(dsc, h->description, h->description_length);
+    *dst = dsc;
+    *size = h->description_length;
+    return h->description_length;
   }
   return 0;
 }

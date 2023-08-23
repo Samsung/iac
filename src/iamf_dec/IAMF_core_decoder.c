@@ -108,7 +108,7 @@ static int iamf_core_decoder_convert_mono(IAMF_CoreDecoder *ths, float *out,
 
   memset(out, 0, sizeof(float) * frame_size * ths->ctx->channels);
   for (int i = 0; i < ths->ctx->channels; ++i) {
-    memcpy(&out[frame_size * map[i]], &in[frame_size * i],
+    memcpy(&out[frame_size * i], &in[frame_size * map[i]],
         frame_size * sizeof(float));
   }
   return IAMF_OK;
@@ -122,7 +122,7 @@ static int iamf_core_decoder_convert_projection(IAMF_CoreDecoder *ths,
       out[r * frame_size + s] = .0f;
       for (int l = 0; l < matrix->column; ++l) {
         out[r * frame_size + s] +=
-            in[l * frame_size + s] * matrix->matrix[r * matrix->column + l];
+            in[l * frame_size + s] * matrix->matrix[l * matrix->row + r];
       }
     }
   }
