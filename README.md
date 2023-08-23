@@ -10,86 +10,25 @@ as described here:
 Please see the examples in the "test/tools" directory. If you're already building this project.
 
 ### Compiling
-There are 2 parts to build: iamf(iamf_dec&iamf_enc) tools(iamfpackager&iamfplayer).
+There are 2 parts to build: iamf(common&iamf_dec) tool(iamfplayer).
 
-"build_x86.sh" is an example to build, you can run it directly at your side.
+"build.sh" is an example to build, you can run it directly at your side.
 
 1. build iamf in "src" directory.
 ```sh
 % BUILD_LIBS=$PWD/build_libs
 % cmake ./ -DCMAKE_INSTALL_PREFIX=${BUILD_LIBS}
-% make
+% make 
 % make install
 ```
 
-2. build tools in "test/tools/iamfpackager" and "test/tools/iamfplayer" directory separately
+2. build tool in "test/tools/iamfplayer" directory
 ```sh
-% cmake ./-DCMAKE_INSTALL_PREFIX=${BUILD_LIBS}
-% make
+% cmake ./ -DCMAKE_INSTALL_PREFIX=${BUILD_LIBS}
+% make 
 ```
 
 Remark: please ensure that they have same CMAKE_INSTALL_PREFIX.
-
-
-### Tools(iamfpackager)
-This tool aims to encode PCM data to IA bitstream and encapsulate to Mp4/Fmp4
-
-```sh
--profile   : <0/1(simpe/base)>
--codec     : <codec name/frame size(opus,aac,flac,pcm/1024)>
--i         : <input wav file>
--config    : <iamf config file(simple profile: iamf_config_s.json, base profile: iamf_config_b.json)>
--o         : <0/1/2(bitstream/mp4/fmp4)> <output file>
-Example:
-iamfpackager -profile 0 -codec opus -i input.wav -config iamf_config_s.json -o 0 simple_profile.iamf
-or
-iamfpackager -profile 1 -codec opus -i input1.wav -i input2.wav -config iamf_config_b.json -o 1 base_profile.mp4
-
-Before exacuting, please modify iamf_config_s.json or iamf_config_b.json to set user input config information.
-```
-
-1. encode channel-based audio for simple profile.
-```sh
-Example:
-./iamfpackager -profile 0 -codec opus -i input.wav -config iamf_config_s.json -o 0 simple_profile.iamf
-```
-`You may need to modify iamf_config_s.json`
-```sh
-  - audio_element_type: AUDIO_ELEMENT_CHANNEL_BASED
-  - mode: input layout/scalable layout combinations   
-  - demix:
-      - set_mode: 0: Both default and PBO, 1:Only default demix, 2:No demix
-      - default_mode: 0~2, 4~6
-      - default_weight: 0~10
-```
-`Remark: "estimator_model.tflite" and "feature_model.tflite" are required in exacuting directory.`
-
-2. encode scene-based audio for simple profile.
-```sh
-Example:
-./iamfpackager -profile 0 -codec opus -i input.wav -config iamf_config_s.json -o 1 simple_profile.mp4
-```
-`You may need to modify iamf_config_s.json`
-```sh
-  - audio_element_type: AUDIO_ELEMENT_SCENE_BASED
-  - ambisonics_mode: AMBISONICS_MODE_MONO/AMBISONICS_MODE_PROJECTION
-  - ambisonics_mono_config:
-      - output_channel_count:
-      - substream_count: 
-      - channel_mapping: 
-  - ambisonics_projection_config:
-      - output_channel_count:
-      - substream_count: 
-      - coupled_substream_count       
-      - demixing_matrix:           
-```
-
-3. encode for base profile.
-```sh
-Example:  
-./iamfpackager -profile 1 -codec opus -i input1.wav -i input2.wav -config iamf_config_b.json -o 1 base_profile.mp4
-```
-`You may need to modify iamf_config_b.json`
 
 
 ### Tools(iamfplayer)
@@ -122,6 +61,8 @@ options:
 -d [bit]     : Bit depth of pcm output.
 -mp [id]     : Set mix presentation id.
 -m           : Generate a metadata file with the suffix .met.
+-disable_limiter
+             : Disable peak limiter.
 
 Example:  ./iamfplayer -o2 -s9 simple_profile.iamf
           ./iamfplayer -i1 -o2 -s9 simple_profile.mp4
@@ -135,15 +76,6 @@ Example:  ./iamfplayer -o2 -s9 simple_profile.iamf
 
 2) Building this project requires opus or aac or flac library, please ensure that there are library in "dep_codecs/lib",
 and there are headers in "dep_codecs/include" already. If not, please build(patch_script.sh) and install in advance.
-
-3) "src/dmpd" part building relys on 3rd part libs("dep_external/lib": libfftw3f,libflatccrt)
-They have been provided already in "dep_external/lib", if meet target link issue, please download the opensource code,
-and build at your side. After building, please replace them.
-[fftw](http://www.fftw.org/).
-[flatcc](https://github.com/dvidelabs/flatcc).
-   (Remark: please add compile options:-fPIC when compiling fftw&flatcc)
-
-
 
 ## License
 

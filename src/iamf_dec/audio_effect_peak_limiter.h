@@ -62,7 +62,6 @@ typedef struct AudioEffectPeakLimiter {
   float peakData[MAX_DELAYSIZE + 1];
   int entryIndex;
   int delaySize;
-  int delayBufferSize;
 
 #ifndef OLD_CODE
   int peak_pos;
@@ -78,6 +77,7 @@ void audio_effect_peak_limiter_init(AudioEffectPeakLimiter*,
                                     float threashold_db, int sample_rate,
                                     int num_channels, float atk_sec,
                                     float rel_sec, int delay_size);
+int audio_effect_peak_limiter_get_delay(AudioEffectPeakLimiter*);
 int audio_effect_peak_limiter_process_block(AudioEffectPeakLimiter*,
                                             float* inblock, float* outblock,
                                             int frame_size);

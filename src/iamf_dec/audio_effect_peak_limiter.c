@@ -48,7 +48,7 @@ static float compute_target_gain(AudioEffectPeakLimiter*, float);
 inline static float curve_accel(float x);
 
 AudioEffectPeakLimiter* audio_effect_peak_limiter_create(void) {
-  return (AudioEffectPeakLimiter* )calloc(1, sizeof(AudioEffectPeakLimiter));
+  return (AudioEffectPeakLimiter*)calloc(1, sizeof(AudioEffectPeakLimiter));
 }
 
 void audio_effect_peak_limiter_uninit(AudioEffectPeakLimiter* ths) {
@@ -83,7 +83,6 @@ void audio_effect_peak_limiter_init(AudioEffectPeakLimiter* ths,
   ths->numChannels = num_channels;
 
   ths->delaySize = delay_size;
-  ths->delayBufferSize = delay_size;
   ths->padsize = delay_size;
 
   for (int channel = 0; channel < num_channels; channel++) {
@@ -110,7 +109,7 @@ int audio_effect_peak_limiter_process_block(AudioEffectPeakLimiter* ths,
 
   if (!inblock) return (0);
 
-#define DB_IDX(i) ((i) % ths->delayBufferSize)
+#define DB_IDX(i) ((i) % ths->delaySize)
 
   for (k = 0; k < frame_size; k++) {
     peak = 0.0f;
@@ -196,6 +195,7 @@ int audio_effect_peak_limiter_process_block(AudioEffectPeakLimiter* ths,
         }
       }
       frame_size -= ths->padsize;
+      ths->padsize = 0;
       ths->init = 1;
     }
   }
@@ -203,34 +203,35 @@ int audio_effect_peak_limiter_process_block(AudioEffectPeakLimiter* ths,
   return (frame_size);
 }
 
+int audio_effect_peak_limiter_get_delay(AudioEffectPeakLimiter* ths) {
+  if (ths) return ths->delaySize - ths->padsize;
+  return 0;
+}
+
 int init_default(AudioEffectPeakLimiter* ths) {
-  int ret = -1;
-  if (ths) {
-    audio_effect_peak_limiter_uninit(ths);
-    memset(ths, 0x00, sizeof(AudioEffectPeakLimiter));
+  if (!ths) return -1;
 
-    ths->currentGain = 1.0;
-    ths->targetStartGain = -1.0;
-    ths->targetEndGain = -1.0;
-    ths->attackSec = -1.0;
-    ths->releaseSec = -1.0;
-    ths->currentTC = -1.0;
-    ths->entryIndex = 0;
-    ths->incTC = 0;
+  audio_effect_peak_limiter_uninit(ths);
+  memset(ths, 0x00, sizeof(AudioEffectPeakLimiter));
 
-    for (int i = 0; i < MAX_DELAYSIZE + 1; i++) ths->peakData[i] = 0.0f;
+  ths->currentGain = 1.0;
+  ths->targetStartGain = -1.0;
+  ths->targetEndGain = -1.0;
+  ths->attackSec = -1.0;
+  ths->releaseSec = -1.0;
+  ths->currentTC = -1.0;
+
 #ifndef OLD_CODE
-    ths->peak_pos = -1;
+  ths->peak_pos = -1;
 #endif
 
 #if USE_TRUEPEAK
-    for (int c = 0; c < MAX_OUTPUT_CHANNELS; ++c) {
-      audio_true_peak_meter_init(&ths->truePeakMeters[c]);
-    }
-#endif
-    ret = 0;
+  for (int c = 0; c < MAX_OUTPUT_CHANNELS; ++c) {
+    audio_true_peak_meter_init(&ths->truePeakMeters[c]);
   }
-  return ret;
+#endif
+
+  return 0;
 }
 
 float compute_target_gain(AudioEffectPeakLimiter* ths, float peak) {

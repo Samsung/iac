@@ -43,6 +43,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern "C" {
 #endif
 
+typedef struct IAMF_StreamInfo {
+  uint32_t max_frame_size;
+} IAMF_StreamInfo;
+
 /**@}*/
 /**\name Immersive audio decoder functions */
 /**@{*/
@@ -157,6 +161,16 @@ int IAMF_decoder_set_normalization_loudness(IAMF_DecoderHandle handle,
 int IAMF_decoder_set_bit_depth(IAMF_DecoderHandle handle, uint32_t bit_depth);
 
 /**
+ * @brief     Enable peak limiter. In the decoder, the peak limiter is enabled
+ *            by default.
+ * @param     [in] handle : iamf decoder handle.
+ * @param     [in] enable : 1 indicates enabled, and 0 indicates disable.
+ * @return    @ref IAErrCode.
+ */
+int IAMF_decoder_peak_limiter_enable(IAMF_DecoderHandle handle,
+                                     uint32_t enable);
+
+/**
  * @brief     Set peak threshold value to limiter.
  * @param     [in] handle : iamf decoder handle.
  * @param     [in] db : peak threshold in dB.
@@ -179,6 +193,13 @@ float IAMF_decoder_peak_limiter_get_threshold(IAMF_DecoderHandle handle);
  * @return    @ref IAErrCode.
  */
 int IAMF_decoder_set_sampling_rate(IAMF_DecoderHandle handle, uint32_t rate);
+
+/**
+ * @brief     Get stream info.Must be used after decoder configuration.
+ * @param     [in] handle : iamf decoder handle.
+ * @return    @stream info.
+ */
+IAMF_StreamInfo *IAMF_decoder_get_stream_info(IAMF_DecoderHandle handle);
 
 // only for tizen
 

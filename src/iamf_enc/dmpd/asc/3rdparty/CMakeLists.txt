@@ -1,2 +1,0 @@
-add_subdirectory(decimate)
-add_subdirectory(stft)

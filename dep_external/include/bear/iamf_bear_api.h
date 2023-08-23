@@ -26,34 +26,48 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 /**
- * @file vlogging_tool_sr.h
- * @brief verification log generator.
+ * @file iamf_bear_api.h
+ * @brief API header for IAMF decoder to BEAR renderer Interface.
  * @version 0.1
- * @date Created 03/29/2023
+ * @date Created 03/03/2023
  **/
 
-#include <stdarg.h>
+#ifndef IANF_BEAR_API_H_
+#define IANF_BEAR_API_H_
 
-#ifndef _VLOGGING_TOOL_SR_H_
-#define _VLOGGING_TOOL_SR_H_
+#include <stddef.h>
+#include <stdint.h>
 
-typedef enum LOG_TYPE {
-  LOG_OBU = 0,
-  LOG_MP4BOX = 1,
-  LOG_DECOP = 2,
-  MAX_LOG_TYPE
-} LOG_TYPE;
+#ifdef __linux__
+#define EXPORT_API
+#elif _WIN32
+// EXPORT_API can be used to define the dllimport storage-class attribute.
+#ifdef DLL_EXPORTS
+#define EXPORT_API __declspec(dllexport)
+#else
+#define EXPORT_API __declspec(dllimport)
+#endif
+#endif
 
-int vlog_file_open(const char* log_file_name);
-int vlog_print(LOG_TYPE type, uint64_t key, const char* format, ...);
-int vlog_obu(uint32_t obu_type, void* obu,
-             uint64_t num_samples_to_trim_at_start,
-             uint64_t num_samples_to_trim_at_end);
-int vlog_file_close();
-int is_vlog_file_open();
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-int write_prefix(LOG_TYPE type, char* buf);
-int write_postfix(LOG_TYPE type, char* buf);
-int write_yaml_form(char* log, uint8_t indent, const char* format, ...);
+EXPORT_API void* CreateBearAPI(char* tf_data_path);
+EXPORT_API void DestoryBearAPI(void* pv_thiz);
+EXPORT_API int ConfigureBearDirectSpeakerChannel(void* pv_thiz, int layout,
+                                                 size_t nsample_per_frame,
+                                                 int sample_rate);
+EXPORT_API int SetBearDirectSpeakerChannel(void* pv_thiz, int source_id,
+                                           float** in);
+// EXPORT_API int ConfigureBearObjectChannel(...);
+// EXPORT_API void SetBearObjectChannel(...);
+// EXPORT_API int ConfigureBearHOAChannel(...);
+// EXPORT_API void SetBearHOAChannel(...);
+EXPORT_API void DestoryBearChannel(void* pv_thiz, int source_id);
+EXPORT_API int GetBearRenderedAudio(void* pv_thiz, int source_id, float** out);
 
+#ifdef __cplusplus
+}
+#endif
 #endif

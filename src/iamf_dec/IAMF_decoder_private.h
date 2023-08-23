@@ -222,6 +222,7 @@ typedef struct IAMF_Stream {
   uint64_t trimming_start;
   uint64_t trimming_end;
 
+  uint32_t max_frame_size;
 } IAMF_Stream;
 
 typedef struct ScalableChannelDecoder {
@@ -269,6 +270,7 @@ typedef struct IAMF_StreamDecoder {
   Frame frame;
 
   uint32_t frame_size;
+  int frame_padding;
   int delay;
 
 } IAMF_StreamDecoder;
@@ -277,6 +279,15 @@ typedef struct IAMF_StreamRenderer {
   IAMF_Stream *stream;
   DMRenderer *downmixer;
   uint32_t offset;
+  uint32_t frame_size;
+  uint8_t headphones_rendering_mode;
+  struct {
+    IAMF_SP_LAYOUT *layout;
+    union {
+      struct m2m_rdr_t mr;
+      struct h2m_rdr_t hr;
+    };
+  } renderer;
 } IAMF_StreamRenderer;
 
 typedef struct IAMF_Mixer {
@@ -303,6 +314,7 @@ typedef struct IAMF_DecoderContext {
   uint32_t flags;
   IAMF_DecoderStatus status;
 
+  IAMF_Layout layout;
   LayoutInfo *output_layout;
   int sampling_rate;
 
@@ -313,15 +325,15 @@ typedef struct IAMF_DecoderContext {
   float normalization_loudness;
   uint32_t bit_depth;
   float threshold_db;
+  IAMF_StreamInfo info;
 
   uint32_t need_configure;
 
   // PTS
-  uint32_t duration;
+  uint64_t duration;
   int64_t pts;
   uint32_t pts_time_base;
   uint32_t last_frame_size;
-  uint32_t time_precision;
 
   IAMF_extradata metadata;
 
