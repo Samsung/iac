@@ -3190,8 +3190,8 @@ static int iamf_decoder_enable_mix_presentation(IAMF_DecoderHandle handle,
   if (old) {
     resampler = iamf_presentation_take_resampler(old);
   }
-  if (!resampler) {
-    IAMF_Stream *stream = pst->streams[0];
+  IAMF_Stream *stream = pst->streams[0];
+  if (!resampler && stream->sampling_rate != ctx->sampling_rate) {
     resampler = iamf_stream_resampler_open(stream, ctx->sampling_rate,
                                            SPEEX_RESAMPLER_QUALITY);
     if (!resampler) return IAMF_ERR_INTERNAL;
@@ -3226,11 +3226,11 @@ static int iamf_resample(SpeexResamplerState *resampler, float *in, float *out,
       frame_size * (resampler->out_rate / resampler->in_rate + 1);
   ia_logt("input samples %d", frame_size);
   if (resampler->rest_flag == 2) {
-    resample_size =
-        resampler->rest_size * (resampler->out_rate / resampler->in_rate);
+    resample_size = speex_resampler_get_output_latency(resampler);
+    int input_size = speex_resampler_get_input_latency(resampler);
     speex_resampler_process_interleaved_float(
-        resampler, (const float *)NULL, (uint32_t *)&resampler->rest_size,
-        (float *)in, (uint32_t *)&resample_size);
+        resampler, (const float *)NULL, (uint32_t *)&input_size, (float *)in,
+        (uint32_t *)&resample_size);
   } else {
     ia_decoder_plane2stride_out_float(resampler->buffer, in, frame_size,
                                       resampler->nb_channels);
@@ -3239,8 +3239,6 @@ static int iamf_resample(SpeexResamplerState *resampler, float *in, float *out,
         (float *)in, (uint32_t *)&resample_size);
   }
   if (!resampler->rest_flag) {
-    resampler->rest_size =
-        frame_size - resample_size * resampler->in_rate / resampler->out_rate;
     resampler->rest_flag = 1;
   }
   ia_decoder_stride2plane_out_float(out, in, resample_size,
@@ -3270,7 +3268,7 @@ static int iamf_delay_buffer_handle(IAMF_DecoderHandle handle, void *pcm) {
     return IAMF_ERR_ALLOC_FAIL;
   }
 
-  if (resampler->in_rate != resampler->out_rate) {
+  if (resampler) {
     pst->resampler->rest_flag = 2;
     int resample_size = iamf_resample(pst->resampler, in, out, 0);
     frame_size += resample_size;
@@ -3473,7 +3471,7 @@ static int iamf_decoder_internal_decode(IAMF_DecoderHandle handle,
     iamf_database_parameters_time_elapse(db, real_frame_size,
                                          pst->streams[0]->sampling_rate);
 
-    if (resampler->in_rate != resampler->out_rate) {
+    if (resampler) {
       real_frame_size =
           iamf_resample(pst->resampler, f->data, out, real_frame_size);
       swap((void **)&f->data, (void **)&out);
@@ -3847,18 +3845,18 @@ int iamf_decoder_internal_configure(IAMF_DecoderHandle handle,
             iamf_layout_channels_count(&ctx->output_layout->layout),
             LIMITER_AttackSec, LIMITER_ReleaseSec, LIMITER_LookAhead);
       }
+      SpeexResamplerState *resampler = ctx->presentation->resampler;
+      if (resampler && resampler->rest_flag) {
+        int delay = speex_resampler_get_output_latency(resampler);
+        ctx->duration += delay;
+        ctx->last_frame_size += delay;
+      }
 
 #ifdef SAMSUNG_TV
       if (ctx->need_configure == IAMF_DECODER_CONFIG_OUTPUT_LAYOUT) {
         IAMF_Presentation *pst = ctx->presentation;
         IAMF_Stream *s = pst->streams[0];
         IAMF_StreamRenderer *sr;
-        if (ctx->presentation->resampler) {
-          iamf_stream_resampler_close(ctx->presentation->resampler);
-          ctx->presentation->resampler = iamf_stream_resampler_open(
-              s, ctx->sampling_rate, SPEEX_RESAMPLER_QUALITY);
-          if (!ctx->presentation->resampler) return IAMF_ERR_INTERNAL;
-        }
 
         for (int i = 0; i < pst->nb_streams; ++i) {
           s = pst->streams[i];
@@ -3869,6 +3867,13 @@ int iamf_decoder_internal_configure(IAMF_DecoderHandle handle,
             sr->downmixer = 0;
             iamf_stream_renderer_enable_downmix(sr);
           }
+        }
+        s = pst->streams[0];
+        if (ctx->presentation->resampler) {
+          iamf_stream_resampler_close(ctx->presentation->resampler);
+          ctx->presentation->resampler = iamf_stream_resampler_open(
+              s, ctx->sampling_rate, SPEEX_RESAMPLER_QUALITY);
+          if (!ctx->presentation->resampler) return IAMF_ERR_INTERNAL;
         }
 
         ctx->need_configure = 0;
